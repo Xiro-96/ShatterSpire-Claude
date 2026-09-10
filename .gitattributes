@@ -1,0 +1,97 @@
+# ─────────────────────────────────────────────────────────────
+#  Line endings
+#  Unity serialises its YAML with LF. Without this, every file
+#  touched on Windows shows up as a full-file diff.
+# ─────────────────────────────────────────────────────────────
+* text=auto eol=lf
+
+# ─────────────────────────────────────────────────────────────
+#  Unity YAML — text, so diffs and merges are readable
+#  (Serialization Mode is Force Text, verified in EditorSettings)
+#
+#  Optional but recommended once per machine, wires up Unity's
+#  own YAML merge tool so scene/prefab conflicts are resolvable:
+#    git config merge.unityyamlmerge.driver \
+#      '"<Unity>/Editor/Data/Tools/UnityYAMLMerge.exe" merge -p %O %A %B %A'
+#  Until that is configured git falls back to its normal merge.
+# ─────────────────────────────────────────────────────────────
+*.unity      text eol=lf merge=unityyamlmerge
+*.prefab     text eol=lf merge=unityyamlmerge
+*.asset      text eol=lf merge=unityyamlmerge
+*.mat        text eol=lf merge=unityyamlmerge
+*.anim       text eol=lf merge=unityyamlmerge
+*.controller text eol=lf merge=unityyamlmerge
+*.overrideController text eol=lf merge=unityyamlmerge
+*.physicMaterial     text eol=lf merge=unityyamlmerge
+*.playable   text eol=lf merge=unityyamlmerge
+*.mask       text eol=lf merge=unityyamlmerge
+*.terrainlayer       text eol=lf merge=unityyamlmerge
+*.meta       text eol=lf merge=unityyamlmerge
+
+# Plain text
+*.cs         text eol=lf diff=csharp
+*.asmdef     text eol=lf
+*.json       text eol=lf
+*.md         text eol=lf
+*.txt        text eol=lf
+*.yml        text eol=lf
+*.shader     text eol=lf
+*.hlsl       text eol=lf
+*.cginc      text eol=lf
+*.compute    text eol=lf
+
+# ─────────────────────────────────────────────────────────────
+#  Git LFS — binaries. Set up now while the repo is 32 MB,
+#  because audio (Etage 4) and art will multiply that.
+# ─────────────────────────────────────────────────────────────
+
+# 3D
+*.fbx    filter=lfs diff=lfs merge=lfs -text
+*.blend  filter=lfs diff=lfs merge=lfs -text
+*.obj    filter=lfs diff=lfs merge=lfs -text
+*.dae    filter=lfs diff=lfs merge=lfs -text
+*.glb    filter=lfs diff=lfs merge=lfs -text
+*.gltf   filter=lfs diff=lfs merge=lfs -text
+
+# Textures
+*.png    filter=lfs diff=lfs merge=lfs -text
+*.jpg    filter=lfs diff=lfs merge=lfs -text
+*.jpeg   filter=lfs diff=lfs merge=lfs -text
+*.tga    filter=lfs diff=lfs merge=lfs -text
+*.tif    filter=lfs diff=lfs merge=lfs -text
+*.tiff   filter=lfs diff=lfs merge=lfs -text
+*.psd    filter=lfs diff=lfs merge=lfs -text
+*.exr    filter=lfs diff=lfs merge=lfs -text
+*.hdr    filter=lfs diff=lfs merge=lfs -text
+*.bmp    filter=lfs diff=lfs merge=lfs -text
+*.gif    filter=lfs diff=lfs merge=lfs -text
+
+# Audio — Etage 4
+*.wav    filter=lfs diff=lfs merge=lfs -text
+*.mp3    filter=lfs diff=lfs merge=lfs -text
+*.ogg    filter=lfs diff=lfs merge=lfs -text
+*.aif    filter=lfs diff=lfs merge=lfs -text
+*.aiff   filter=lfs diff=lfs merge=lfs -text
+*.flac   filter=lfs diff=lfs merge=lfs -text
+
+# Video
+*.mp4    filter=lfs diff=lfs merge=lfs -text
+*.mov    filter=lfs diff=lfs merge=lfs -text
+*.webm   filter=lfs diff=lfs merge=lfs -text
+
+# Fonts
+*.ttf    filter=lfs diff=lfs merge=lfs -text
+*.otf    filter=lfs diff=lfs merge=lfs -text
+
+# Native libraries
+*.dll    filter=lfs diff=lfs merge=lfs -text
+*.so     filter=lfs diff=lfs merge=lfs -text
+*.dylib  filter=lfs diff=lfs merge=lfs -text
+*.a      filter=lfs diff=lfs merge=lfs -text
+*.aar    filter=lfs diff=lfs merge=lfs -text
+*.jar    filter=lfs diff=lfs merge=lfs -text
+
+# Archives
+*.zip    filter=lfs diff=lfs merge=lfs -text
+*.7z     filter=lfs diff=lfs merge=lfs -text
+*.unitypackage filter=lfs diff=lfs merge=lfs -text

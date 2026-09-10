@@ -1,0 +1,9 @@
+KayKit Adventurers Character Pack 2.0
+Created by Kay Lousberg — https://kaylousberg.com
+
+License: Creative Commons Zero (CC0 1.0)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+The source pack states that the content may be used in personal,
+educational, and commercial projects. This notice is retained in the
+project even though attribution is not required.

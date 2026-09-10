@@ -1,0 +1,120 @@
+using UnityEngine;
+
+namespace Shatterspire
+{
+    public static class Targeting
+    {
+        public static Health FindClosest(Vector3 point, float radius, TeamId team, Health exclude = null)
+        {
+            Health best = null;
+            var bestDistance = float.MaxValue;
+            var active = Health.Active;
+            for (var i = 0; i < active.Count; i++)
+            {
+                var candidate = active[i];
+                if (!candidate || candidate == exclude || !candidate.IsAlive || candidate.Team != team) continue;
+                var distance = (candidate.transform.position - point).sqrMagnitude;
+                if (distance > radius * radius) continue;
+                if (distance < bestDistance) { best = candidate; bestDistance = distance; }
+            }
+            return best;
+        }
+
+        public static Health FindBestAutoAim(Vector3 point, Vector3 forward, float radius, TeamId team)
+        {
+            Health best = null;
+            var bestScore = float.MaxValue;
+            var active = Health.Active;
+            for (var i = 0; i < active.Count; i++)
+            {
+                var candidate = active[i];
+                if (!candidate || !candidate.IsAlive || candidate.Team != team) continue;
+                var delta = candidate.transform.position - point;
+                delta.y = 0f;
+                var distance = delta.magnitude;
+                if (distance > radius) continue;
+                var facingPenalty = delta.sqrMagnitude > 0.01f ? Vector3.Angle(forward, delta) * 0.055f : 0f;
+                var agent = candidate.GetComponent<EnemyAgent>();
+                var priority = agent && agent.Kind == EnemyKind.IronWarden ? -7f
+                    : agent && agent.Kind == EnemyKind.Elite ? -3.5f : 0f;
+                var score = distance + facingPenalty + priority;
+                if (score >= bestScore) continue;
+                bestScore = score;
+                best = candidate;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Action-RPG target selection with a little stickiness. Attacks snap to a
+        /// readable nearby enemy, but do not jump away from an already useful target.
+        /// This is intentionally shared by touch, mouse, controller and later netcode.
+        /// </summary>
+        public static Health FindActionTarget(Vector3 point, Vector3 desiredDirection, float radius,
+            TeamId team, Health current = null)
+        {
+            desiredDirection.y = 0f;
+            if (desiredDirection.sqrMagnitude < 0.01f) desiredDirection = Vector3.forward;
+            desiredDirection.Normalize();
+
+            if (current && current.IsAlive && current.Team == team)
+            {
+                var stickyDelta = current.transform.position - point;
+                stickyDelta.y = 0f;
+                if (stickyDelta.sqrMagnitude <= radius * radius && Vector3.Angle(desiredDirection, stickyDelta) <= 72f)
+                    return current;
+            }
+
+            Health best = null;
+            var bestScore = float.MaxValue;
+            var active = Health.Active;
+            for (var i = 0; i < active.Count; i++)
+            {
+                var candidate = active[i];
+                if (!candidate || !candidate.IsAlive || candidate.Team != team) continue;
+                var delta = candidate.transform.position - point;
+                delta.y = 0f;
+                if (delta.sqrMagnitude < 0.01f) return candidate;
+
+                var distance = delta.magnitude;
+                if (distance > radius) continue;
+                var angle = Vector3.Angle(desiredDirection, delta);
+                var enemy = candidate.GetComponent<EnemyAgent>();
+                var threatBonus = enemy && enemy.Kind == EnemyKind.IronWarden ? -2.2f
+                    : enemy && enemy.Kind == EnemyKind.Elite ? -1.1f : 0f;
+                var score = distance + angle * 0.035f + threatBonus;
+                if (score >= bestScore) continue;
+                bestScore = score;
+                best = candidate;
+            }
+            return best;
+        }
+    }
+
+    public static class CombatUtility
+    {
+        public static void Explode(Vector3 point, float radius, float damage, TeamId targetTeam, DamageType type, GameObject source)
+        {
+            PrototypeVfx.SpawnExplosion(point, radius, PrototypeVfx.ElementColor(type));
+            var active = Health.Active;
+            for (var i = active.Count - 1; i >= 0; i--)
+            {
+                var health = active[i];
+                if (!health || !health.IsAlive || health.Team != targetTeam) continue;
+                var offset = health.transform.position - point;
+                offset.y = 0f;
+                if (offset.sqrMagnitude > radius * radius) continue;
+                var force = offset.sqrMagnitude > 0.001f ? offset.normalized * 4f : Vector3.zero;
+                health.TakeDamage(new DamageInfo(damage, type, source, point, force));
+                var status = health.GetComponent<StatusReceiver>();
+                if (!status) continue;
+                switch (type)
+                {
+                    case DamageType.Fire: status.ApplyBurn(damage * 0.16f, 2.6f, source); break;
+                    case DamageType.Ice: status.ApplySlow(0.62f, 1.8f); break;
+                    case DamageType.Poison: status.ApplyPoison(damage * 0.2f, 3.2f, source); break;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,39 @@
+SHATTERSPIRE – TOWER FOUNDATIONS
+
+1. Projekt im Unity Hub öffnen.
+2. Kurz warten, bis Unity alle Scripts kompiliert hat.
+3. Oben SHATTERSPIRE > Rebuild Prototype Scene anklicken.
+4. Play drücken. Das Spiel startet jetzt im Hauptmenü.
+
+NEU IN DIESER VERSION
+- Hauptmenü und Run-Vorbereitung
+- Standard Spire (15 Floors) und Endless Tower
+- Drei spielbare Klassen: Rex, Brax, Orion
+- Sechs Relics, maximal drei pro Run
+- Permanente Meta-Forge mit Vitalität, Schaden und Bewegung
+- Drei Zonen: Forgotten Court, Ember Foundry, Astral Archive
+- Ascend/Extract nach jedem fünften Floor
+- Sichtbare Pfeilgeschosse für Rex statt Laser
+- Neue klassenpassende Embleme und Ability-Symbole
+- Weiter herausgezoomte Kamera
+
+STEUERUNG
+- WASD: Bewegung
+- Maus: Zielen
+- Linksklick: Light Combo
+- Rechtsklick halten/loslassen: Heavy
+- Q: Klassenskill
+- E: Klassen-Ultimate (lädt sich durch Treffer)
+- Space: Dash
+- In Menüs funktionieren Maus oder Zahlentasten.
+
+KLASSEN
+- REX: Fernkampf mit Rift-Pfeilen, Piercing Draw und Arrow Storm
+- BRAX: Nahkampf mit Hammer-Combo, Ground Breaker und Bull Rush
+- ORION: Magier mit Arc Bolts, Gravity Burst und Black Star
+
+RUN-STRUKTUR
+- Jeder fünfte Floor ist ein Boss-Floor.
+- Danach: EXTRACT sichert alles; ASCEND erhöht Risiko und Belohnung.
+- Standard endet spätestens nach Floor 15.
+- Endless Tower skaliert ohne festes Ende weiter.

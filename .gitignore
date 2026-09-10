@@ -1,0 +1,91 @@
+# ─────────────────────────────────────────────────────────────
+#  Unity generated — never commit, always rebuildable
+# ─────────────────────────────────────────────────────────────
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Asset meta data for files that were deleted outside of Unity
+/[Aa]ssets/**/*.meta.orig
+
+# Never ignore .meta files — Unity needs them to keep asset GUIDs stable.
+# A missing .meta breaks every reference to that asset in every scene.
+!*.meta
+
+# ─────────────────────────────────────────────────────────────
+#  Unity3D generated files
+# ─────────────────────────────────────────────────────────────
+/[Aa]ssets/AssetStoreTools*
+/[Aa]ssets/Plugins/Editor/JetBrains*
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+sysinfo.txt
+crashlytics-build.properties
+/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# Addressables (from Etage 7 onward) — build output only, keep the settings
+/[Ss]erver[Dd]ata/
+/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
+/[Aa]ddressable[Aa]ssets[Dd]ata/**/link.xml
+
+# ─────────────────────────────────────────────────────────────
+#  Visual Studio / Rider / VS Code
+# ─────────────────────────────────────────────────────────────
+/.vs/
+/.idea/
+/.vscode/
+/.gradle/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+ExportedObj/
+.consulo/
+
+# ─────────────────────────────────────────────────────────────
+#  Builds
+# ─────────────────────────────────────────────────────────────
+*.apk
+*.aab
+*.unitypackage
+*.app
+*.exe
+*.x86
+*.x86_64
+*.dmg
+*.ipa
+
+# ─────────────────────────────────────────────────────────────
+#  OS noise
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ─────────────────────────────────────────────────────────────
+#  Project local
+# ─────────────────────────────────────────────────────────────
+/.claude/settings.local.json
