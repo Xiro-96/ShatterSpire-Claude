@@ -178,6 +178,9 @@ namespace Shatterspire
             PrototypeVfx.SpawnExplosion(transform.position + direction * 1.1f + Vector3.up * 0.3f,
                 perfect ? 2f : 1.2f, perfect ? new Color(1f, 0.78f, 0.12f) : HeroCatalog.Accent(heroClass));
             CameraController.Impulse(perfect ? 0.2f : 0.1f);
+            // Das Perfect-Fenster ist die praeziseste Eingabe im ganzen Spiel und
+            // hatte bisher kein eigenes Feedback ausser dem Schaden.
+            Hitstop.Freeze(perfect ? 0.095f : 0.05f, perfect ? 0.04f : 0.09f);
             motion?.PulseAttack(perfect ? 1.5f : 1.05f);
             heavyMeter = 0f;
             heavyCharge = 0f;

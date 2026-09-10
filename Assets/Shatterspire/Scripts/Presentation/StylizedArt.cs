@@ -325,9 +325,11 @@ namespace Shatterspire
     {
         private Transform model;
         private Vector3 modelOrigin;
+        private Vector3 modelBaseScale = Vector3.one;
         private Vector3 previousPosition;
         private float stepFrequency;
         private float recoil;
+        private Vector2 lean;
         private ChampionAnimationDriver authoredAnimation;
         private bool authored;
 
@@ -335,20 +337,22 @@ namespace Shatterspire
         {
             model = visual;
             modelOrigin = visual.localPosition;
+            modelBaseScale = visual.localScale;
             stepFrequency = frequency;
             previousPosition = transform.position;
         }
 
-        public void ConfigureAuthored(Transform visual, Animator animator)
+        public void ConfigureAuthored(Transform visual, Animator animator, float topSpeed = 6f)
         {
             model = visual;
             modelOrigin = visual.localPosition;
+            modelBaseScale = visual.localScale;
             previousPosition = transform.position;
             authored = true;
             if (animator)
             {
                 authoredAnimation = gameObject.AddComponent<ChampionAnimationDriver>();
-                authoredAnimation.Configure(animator);
+                authoredAnimation.Configure(animator, topSpeed);
             }
         }
 
@@ -372,8 +376,29 @@ namespace Shatterspire
             recoil = Mathf.MoveTowards(recoil, 0f, 7f * Time.deltaTime);
             if (authored)
             {
-                model.localPosition = modelOrigin + new Vector3(0f, 0f, -recoil * 0.055f);
-                model.localRotation = Quaternion.Euler(recoil * -3.5f, 0f, 0f);
+                // Vorher 0,055 Einheiten Versatz und 3,5 Grad Neigung - das lag
+                // unter der Wahrnehmungsschwelle, der Effekt war praktisch
+                // unsichtbar. Jetzt mit echtem Squash: beim Schlag kurz tiefer
+                // und breiter, Volumen bleibt dabei etwa erhalten.
+                var squash = 1f - recoil * 0.11f;
+                var stretch = 1f + recoil * 0.07f;
+
+                // Neigung in die Laufrichtung. Kostet nichts und ist der
+                // Unterschied zwischen "gleitet" und "laeuft".
+                var local = transform.InverseTransformDirection(
+                    new Vector3(delta.x, 0f, delta.z) / Mathf.Max(0.0001f, Time.deltaTime));
+                var desiredLean = new Vector2(
+                    Mathf.Clamp(local.z / 7f, -1f, 1f),
+                    Mathf.Clamp(local.x / 7f, -1f, 1f));
+                lean = Vector2.Lerp(lean, desiredLean, 1f - Mathf.Exp(-9f * Time.deltaTime));
+
+                model.localPosition = modelOrigin + new Vector3(0f, 0f, -recoil * 0.17f);
+                model.localRotation = Quaternion.Euler(
+                    recoil * -11f + lean.x * 5.5f, 0f, lean.y * -5.5f);
+                model.localScale = new Vector3(
+                    modelBaseScale.x * stretch,
+                    modelBaseScale.y * squash,
+                    modelBaseScale.z * stretch);
                 return;
             }
             var bob = Mathf.Abs(Mathf.Sin(Time.time * stepFrequency)) * 0.075f * movement;

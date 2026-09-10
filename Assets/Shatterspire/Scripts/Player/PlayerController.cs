@@ -10,6 +10,11 @@ namespace Shatterspire
         private const float RollDuration = 0.22f;
         private const float ChargeCooldown = 2.4f;
         private const float ArenaRadius = 14.75f;
+        // Antritt kuerzer als Auslauf: die Steuerung bleibt direkt, der Stopp
+        // bekommt Gewicht. Vorher ging roher Input direkt in die Geschwindigkeit,
+        // also Vollgas aus dem Stand und Vollstopp beim Loslassen.
+        private const float AccelerationSeconds = 0.075f;
+        private const float BrakingSeconds = 0.125f;
         private CharacterController motor;
         private PlayerInputRouter input;
         private PlayerBuild build;
@@ -18,6 +23,8 @@ namespace Shatterspire
         private float nextRecharge;
         private bool rolling;
         private Vector3 rollDirection;
+        private Vector3 velocity;
+        private Vector3 acceleration;
         private HeroClassId heroClass;
         public int DashCharges => dashCharges;
         public float DashRechargeNormalized => dashCharges >= MaxCharges ? 1f : 1f - Mathf.Clamp01((nextRecharge - Time.time) / ChargeCooldown);
@@ -48,8 +55,12 @@ namespace Shatterspire
 
         private void MoveAndAim()
         {
-            var move = new Vector3(input.Move.x, 0f, input.Move.y);
-            motor.Move(move * (HeroCatalog.BaseSpeed(heroClass) * build.MoveSpeedMultiplier * Time.deltaTime));
+            var stick = Vector3.ClampMagnitude(new Vector3(input.Move.x, 0f, input.Move.y), 1f);
+            var topSpeed = HeroCatalog.BaseSpeed(heroClass) * build.MoveSpeedMultiplier;
+            var desired = stick * topSpeed;
+            var smoothing = desired.sqrMagnitude > velocity.sqrMagnitude ? AccelerationSeconds : BrakingSeconds;
+            velocity = Vector3.SmoothDamp(velocity, desired, ref acceleration, smoothing);
+            motor.Move(velocity * Time.deltaTime);
             var aim = input.AimPoint - transform.position;
             aim.y = 0f;
             if (aim.sqrMagnitude > 0.1f)
@@ -84,6 +95,11 @@ namespace Shatterspire
             }
             if (build.Has(PerkId.DashExplosion))
                 CombatUtility.Explode(transform.position, 3f, 24f * build.DamageMultiplier, TeamId.Enemy, DamageType.Lightning, gameObject);
+            // Mit der Dash-Richtung als Startgeschwindigkeit weiterlaufen, sonst
+            // greift SmoothDamp nach dem Roll noch den alten Wert von davor auf
+            // und der Uebergang ruckt.
+            velocity = rollDirection * (HeroCatalog.BaseSpeed(heroClass) * build.MoveSpeedMultiplier);
+            acceleration = Vector3.zero;
             rolling = false;
         }
 

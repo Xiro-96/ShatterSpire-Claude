@@ -123,7 +123,7 @@ namespace Shatterspire
             StylizeHumanoidProportions(animator, 1.1f, 1.08f);
 
             var motion = root.gameObject.AddComponent<StylizedCharacterMotion>();
-            motion.ConfigureAuthored(model.transform, animator);
+            motion.ConfigureAuthored(model.transform, animator, HeroCatalog.BaseSpeed(HeroClassId.Ranger));
 
             CreateGroundShadow(root, 1.42f);
             CreateSelectionRing(root, 1.46f, new Color(0.06f, 0.92f, 0.96f));
@@ -140,7 +140,8 @@ namespace Shatterspire
         {
             if (hero == HeroClassId.Ranger) return TryBuildRex(root, out muzzle);
             var role = hero == HeroClassId.Guardian ? CompanionRole.Guardian : CompanionRole.Support;
-            if (!TryBuildCompanion(root, role, HeroCatalog.Accent(hero), out muzzle)) return false;
+            if (!TryBuildCompanion(root, role, HeroCatalog.Accent(hero), out muzzle,
+                    HeroCatalog.BaseSpeed(hero))) return false;
             var model = root.childCount > 0 ? root.GetChild(0) : null;
             if (model) model.name = HeroCatalog.Name(hero) + " · " + HeroCatalog.Role(hero);
             return true;
@@ -180,7 +181,8 @@ namespace Shatterspire
             if (Camera.main) Camera.main.backgroundColor = RenderSettings.fogColor;
         }
 
-        public static bool TryBuildCompanion(Transform root, CompanionRole role, Color accent, out Transform muzzle)
+        public static bool TryBuildCompanion(Transform root, CompanionRole role, Color accent,
+            out Transform muzzle, float topSpeed = 6.5f)
         {
             muzzle = null;
             var resource = role switch
@@ -210,7 +212,7 @@ namespace Shatterspire
             StylizeHumanoidProportions(animator, role == CompanionRole.Guardian ? 1.08f : 1.12f, 1.08f);
 
             var motion = root.gameObject.AddComponent<StylizedCharacterMotion>();
-            motion.ConfigureAuthored(model.transform, animator);
+            motion.ConfigureAuthored(model.transform, animator, topSpeed);
             CreateGroundShadow(root, role == CompanionRole.Guardian ? 1.72f : 1.34f);
             CreateSelectionRing(root, role == CompanionRole.Guardian ? 1.76f : 1.38f, accent);
 
@@ -297,7 +299,7 @@ namespace Shatterspire
                 : kind is EnemyKind.Brute or EnemyKind.Elite ? 1.18f : 0.78f;
             CreateGroundShadow(root, footprint);
             CreateSelectionRing(root, footprint * 1.08f, Color.Lerp(primary, new Color(0.3f, 0.02f, 0.04f), 0.24f));
-            if (animator) motion.ConfigureAuthored(visualRig, animator);
+            if (animator) motion.ConfigureAuthored(visualRig, animator, EnemyBalance.For(kind).Speed);
             else motion.Configure(visualRig, kind == EnemyKind.IronWarden ? 4.2f : 7.5f);
             return true;
         }
@@ -1371,10 +1373,31 @@ namespace Shatterspire
     /// </summary>
     public sealed class ChampionAnimationDriver : MonoBehaviour
     {
+        // Blendzeiten. Kurz genug, dass die Steuerung direkt bleibt, lang genug,
+        // dass kein Schnitt mehr sichtbar ist.
+        private const float LocomotionBlendSeconds = 0.16f;
+        private const float ActionFadeInSeconds = 0.07f;
+        private const float ActionFadeOutSeconds = 0.17f;
+
         private Animator animator;
         private PlayableGraph graph;
         private AnimationPlayableOutput output;
-        private AnimationClipPlayable playable;
+
+        // Aufbau des Graphen:
+        //   output -> topMixer [0] locomotion [0] idle  [1] move
+        //                      [1] Action-Slot A
+        //                      [2] Action-Slot B
+        // Zwei Action-Slots, weil sonst ein Combo-Schlag in den naechsten
+        // schneiden wuerde statt hinueberzublenden.
+        private AnimationMixerPlayable topMixer;
+        private AnimationMixerPlayable locomotion;
+        private AnimationClipPlayable idlePlayable;
+        private AnimationClipPlayable movePlayable;
+        private readonly AnimationClipPlayable[] actionPlayables = new AnimationClipPlayable[2];
+        private readonly float[] actionWeights = new float[2];
+        private int activeSlot = -1;
+        private float actionHoldUntil;
+
         private AnimationClip idle;
         private AnimationClip move;
         private AnimationClip attack;
@@ -1382,13 +1405,14 @@ namespace Shatterspire
         private AnimationClip ultimate;
         private AnimationClip hit;
         private Vector3 previousPosition;
-        private string currentState;
-        private bool loopCurrent;
-        private float actionLockedUntil;
+        private float moveBlend;
+        private float referenceSpeed = 6f;
+        private bool ready;
 
-        public void Configure(Animator target)
+        public void Configure(Animator target, float topSpeed = 6f)
         {
             animator = target;
+            referenceSpeed = Mathf.Max(0.5f, topSpeed);
             if (!animator || !animator.avatar || !animator.avatar.isValid) return;
 
             var clipList = new List<AnimationClip>();
@@ -1406,46 +1430,130 @@ namespace Shatterspire
 
             animator.applyRootMotion = false;
             animator.cullingMode = AnimatorCullingMode.CullUpdateTransforms;
-            graph = PlayableGraph.Create("Rex Humanoid Animation");
+            graph = PlayableGraph.Create("Shatterspire Humanoid Animation");
             graph.SetTimeUpdateMode(DirectorUpdateMode.GameTime);
-            output = AnimationPlayableOutput.Create(graph, "Rex Pose", animator);
+            output = AnimationPlayableOutput.Create(graph, "Pose", animator);
+
+            idlePlayable = CreateLoop(idle);
+            movePlayable = CreateLoop(move ? move : idle);
+            locomotion = AnimationMixerPlayable.Create(graph, 2);
+            graph.Connect(idlePlayable, 0, locomotion, 0);
+            graph.Connect(movePlayable, 0, locomotion, 1);
+            locomotion.SetInputWeight(0, 1f);
+            locomotion.SetInputWeight(1, 0f);
+
+            topMixer = AnimationMixerPlayable.Create(graph, 3);
+            graph.Connect(locomotion, 0, topMixer, 0);
+            topMixer.SetInputWeight(0, 1f);
+            topMixer.SetInputWeight(1, 0f);
+            topMixer.SetInputWeight(2, 0f);
+
+            output.SetSourcePlayable(topMixer);
             graph.Play();
             previousPosition = transform.position;
-            Play(idle, "Idle", true, 0f, 1f);
+            ready = true;
         }
 
-        public void PulseAttack(float strength) => Play(attack, "Attack", false, 0.28f + strength * 0.08f, 1.15f);
-        public void PulseDash() => Play(roll, "Roll", false, 0.34f, 1.45f);
-        public void PulseUltimate() => Play(ultimate, "Ultimate", false, 0.72f, 1.05f);
-        public void PulseHit() => Play(hit, "Hit", false, 0.2f, 1.4f);
+        public void PulseAttack(float strength) => PlayAction(attack, 0.28f + strength * 0.08f, 1.15f);
+        public void PulseDash() => PlayAction(roll, 0.34f, 1.45f);
+        public void PulseUltimate() => PlayAction(ultimate, 0.72f, 1.05f);
+        public void PulseHit() => PlayAction(hit, 0.2f, 1.4f);
 
         private void Update()
         {
-            if (!graph.IsValid() || !playable.IsValid()) return;
-            if (loopCurrent && playable.GetTime() >= playable.GetAnimationClip().length)
-                playable.SetTime(0d);
+            if (!ready || !graph.IsValid()) return;
+            var delta = Time.deltaTime;
 
             var displacement = transform.position - previousPosition;
+            displacement.y = 0f;
             previousPosition = transform.position;
-            if (Time.time < actionLockedUntil) return;
+            var speed = delta > 0f ? displacement.magnitude / delta : 0f;
 
-            var moving = Time.deltaTime > 0f && displacement.sqrMagnitude / (Time.deltaTime * Time.deltaTime) > 0.06f;
-            if (moving && currentState != "Move") Play(move ? move : idle, "Move", true, 0f, 1.1f);
-            else if (!moving && currentState != "Idle") Play(idle, "Idle", true, 0f, 1f);
+            // Locomotion ist ein kontinuierlicher Blend, kein Schalter: bei halbem
+            // Stick sieht die Figur auch halb so schnell aus.
+            var desired = Mathf.Clamp01(speed / referenceSpeed);
+            moveBlend = Mathf.MoveTowards(moveBlend, desired, delta / LocomotionBlendSeconds);
+            locomotion.SetInputWeight(0, 1f - moveBlend);
+            locomotion.SetInputWeight(1, moveBlend);
+            // Clip-Tempo mitziehen, sonst rutschen die Fuesse ueber den Boden.
+            movePlayable.SetSpeed(Mathf.Lerp(0.75f, 1.35f, moveBlend));
+
+            WrapLoop(idlePlayable);
+            WrapLoop(movePlayable);
+
+            if (activeSlot >= 0 && Time.time >= actionHoldUntil) activeSlot = -1;
+
+            for (var slot = 0; slot < actionWeights.Length; slot++)
+            {
+                var rising = slot == activeSlot;
+                var seconds = rising ? ActionFadeInSeconds : ActionFadeOutSeconds;
+                actionWeights[slot] = Mathf.MoveTowards(actionWeights[slot], rising ? 1f : 0f, delta / seconds);
+                if (!rising && actionWeights[slot] <= 0f) ReleaseSlot(slot);
+            }
+
+            // Explizit normalisieren: der Mixer rechnet Gewichte nicht selbst auf
+            // eins, und beim schnellen Combo-Wechsel koennte die Summe kurz
+            // darueber liegen.
+            var first = actionWeights[0];
+            var second = actionWeights[1];
+            var total = first + second;
+            if (total > 1f)
+            {
+                first /= total;
+                second /= total;
+                total = 1f;
+            }
+            topMixer.SetInputWeight(0, 1f - total);
+            topMixer.SetInputWeight(1, first);
+            topMixer.SetInputWeight(2, second);
         }
 
-        private void Play(AnimationClip clip, string state, bool loop, float lockSeconds, float speed)
+        private void PlayAction(AnimationClip clip, float holdSeconds, float speed)
         {
-            if (!clip || !graph.IsValid()) return;
-            if (playable.IsValid()) playable.Destroy();
-            playable = AnimationClipPlayable.Create(graph, clip);
-            playable.SetApplyFootIK(true);
+            if (!ready || !clip || !graph.IsValid()) return;
+            // In den jeweils anderen Slot legen, damit der laufende Schlag
+            // ausblenden kann statt abgeschnitten zu werden.
+            var slot = activeSlot == 0 ? 1 : 0;
+            ReleaseSlot(slot);
+            var playable = AnimationClipPlayable.Create(graph, clip);
+            playable.SetApplyFootIK(false);
             playable.SetApplyPlayableIK(false);
             playable.SetSpeed(speed);
-            output.SetSourcePlayable(playable);
-            currentState = state;
-            loopCurrent = loop;
-            actionLockedUntil = Time.time + lockSeconds;
+            graph.Connect(playable, 0, topMixer, slot + 1);
+            actionPlayables[slot] = playable;
+            activeSlot = slot;
+            actionHoldUntil = Time.time + Mathf.Max(0.05f, holdSeconds);
+        }
+
+        private void ReleaseSlot(int slot)
+        {
+            if (!actionPlayables[slot].IsValid()) return;
+            if (graph.IsValid())
+            {
+                graph.Disconnect(topMixer, slot + 1);
+                topMixer.SetInputWeight(slot + 1, 0f);
+            }
+            actionPlayables[slot].Destroy();
+            actionPlayables[slot] = default;
+            actionWeights[slot] = 0f;
+        }
+
+        private AnimationClipPlayable CreateLoop(AnimationClip clip)
+        {
+            var playable = AnimationClipPlayable.Create(graph, clip);
+            playable.SetApplyFootIK(true);
+            playable.SetApplyPlayableIK(false);
+            return playable;
+        }
+
+        private static void WrapLoop(AnimationClipPlayable playable)
+        {
+            if (!playable.IsValid()) return;
+            var clip = playable.GetAnimationClip();
+            if (!clip || clip.length <= 0f) return;
+            var time = playable.GetTime();
+            // Modulo statt auf null setzen, damit an der Naht kein Frame verloren geht.
+            if (time >= clip.length) playable.SetTime(time % clip.length);
         }
 
         private static AnimationClip FindClip(AnimationClip[] clips, params string[] candidates)
