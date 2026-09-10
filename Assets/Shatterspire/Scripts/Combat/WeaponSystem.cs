@@ -28,18 +28,8 @@ namespace Shatterspire
         private Health lockedTarget;
         private TargetLockIndicator targetIndicator;
 
-        private float BaseDamage => heroClass switch
-        {
-            HeroClassId.Guardian => 17f,
-            HeroClassId.Arcanist => 12.5f,
-            _ => 11.5f
-        };
-        private float SkillCooldown => heroClass switch
-        {
-            HeroClassId.Guardian => 6.5f,
-            HeroClassId.Arcanist => 8f,
-            _ => 7f
-        };
+        private float BaseDamage => HeroCatalog.BaseDamage(heroClass);
+        private float SkillCooldown => HeroCatalog.SkillCooldown(heroClass);
         public float SkillNormalized => Mathf.Clamp01(1f - (skillReadyAt - Time.time) / SkillCooldown);
         public float HeavyMeterNormalized => heavyMeter / HeavyMeterMaximum;
         public float HeavyChargeNormalized => Mathf.Clamp01(heavyCharge / HeavyChargeSeconds);
@@ -47,9 +37,9 @@ namespace Shatterspire
         public bool ChargingHeavy => chargingHeavy;
         public bool HeavyPerfect => chargingHeavy && HeavyChargeNormalized >= PerfectStart && HeavyChargeNormalized <= PerfectEnd;
         public HeroClassId HeroClass => heroClass;
-        public string LightName => heroClass switch { HeroClassId.Guardian => "HAMMER", HeroClassId.Arcanist => "ARC BOLT", _ => "RIFT ARROW" };
-        public string HeavyName => heroClass switch { HeroClassId.Guardian => "GROUND BREAKER", HeroClassId.Arcanist => "GRAVITY BURST", _ => "PIERCING DRAW" };
-        public string SkillName => heroClass switch { HeroClassId.Guardian => "BULL RUSH", HeroClassId.Arcanist => "BLACK STAR", _ => "ARROW STORM" };
+        public string LightName => HeroCatalog.LightAttackName(heroClass);
+        public string HeavyName => HeroCatalog.HeavyAttackName(heroClass);
+        public string SkillName => HeroCatalog.SkillName(heroClass);
         public float UltimateNormalized => ultimateMeter / 100f;
         public bool OverdriveActive => ultimateActive;
 

@@ -87,6 +87,41 @@ namespace Shatterspire
             HeroClassId.Arcanist => 5.8f,
             _ => 6.25f
         };
+
+        public static float BaseDamage(HeroClassId hero) => hero switch
+        {
+            HeroClassId.Guardian => 17f,
+            HeroClassId.Arcanist => 12.5f,
+            _ => 11.5f
+        };
+
+        public static float SkillCooldown(HeroClassId hero) => hero switch
+        {
+            HeroClassId.Guardian => 6.5f,
+            HeroClassId.Arcanist => 8f,
+            _ => 7f
+        };
+
+        public static string LightAttackName(HeroClassId hero) => hero switch
+        {
+            HeroClassId.Guardian => "HAMMER",
+            HeroClassId.Arcanist => "ARC BOLT",
+            _ => "RIFT ARROW"
+        };
+
+        public static string HeavyAttackName(HeroClassId hero) => hero switch
+        {
+            HeroClassId.Guardian => "GROUND BREAKER",
+            HeroClassId.Arcanist => "GRAVITY BURST",
+            _ => "PIERCING DRAW"
+        };
+
+        public static string SkillName(HeroClassId hero) => hero switch
+        {
+            HeroClassId.Guardian => "BULL RUSH",
+            HeroClassId.Arcanist => "BLACK STAR",
+            _ => "ARROW STORM"
+        };
     }
 
     public static class FloorCatalog
