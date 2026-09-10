@@ -378,7 +378,25 @@ namespace Shatterspire
             hpTargetValue = value.Normalized;
             if (hpTargetValue > hpChipValue) hpChipValue = hpTargetValue;
             hpFill.fillAmount = hpTargetValue;
+            hpFill.color = HealthColor(hpTargetValue);
             hpText.text = $"{Mathf.CeilToInt(value.Current)} / {Mathf.CeilToInt(value.Maximum)}";
+        }
+
+        /// <summary>
+        /// Der Balken war vorher konstant rot, auch bei 87 % Leben — damit sah der
+        /// Spieler dauernd aus wie kurz vor dem Tod und echte Gefahr fiel nicht auf.
+        /// Rot ist jetzt dem unteren Drittel vorbehalten.
+        /// </summary>
+        private static Color HealthColor(float normalized)
+        {
+            var low = new Color(0.95f, 0.16f, 0.2f);
+            var mid = new Color(1f, 0.72f, 0.16f);
+            var high = new Color(0.2f, 0.86f, 0.52f);
+            if (normalized <= 0.3f) return low;
+            if (normalized >= 0.6f) return high;
+            return normalized < 0.45f
+                ? Color.Lerp(low, mid, (normalized - 0.3f) / 0.15f)
+                : Color.Lerp(mid, high, (normalized - 0.45f) / 0.15f);
         }
 
         private void RefreshObjective(int current, int required, string instruction)
