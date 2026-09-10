@@ -1420,12 +1420,18 @@ namespace Shatterspire
             clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/KayKit/Animations/Rig_Medium_MovementBasic"));
             clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/Animations/UAL2_Standard"));
             var clips = clipList.ToArray();
-            idle = FindClip(clips, "Idle_A", "Idle_B", "NinjaJump_Idle_Loop", "Idle_Rail_Loop");
-            move = FindClip(clips, "Running_A", "Running_B", "Walking_A", "Walk_Carry_Loop");
-            attack = FindClip(clips, "Melee_Hook", "OverhandThrow");
-            roll = FindClip(clips, "Slide_Start", "Sword_Dash", "Shield_Dash");
-            ultimate = FindClip(clips, "OverhandThrow", "Shield_OneShot");
-            hit = FindClip(clips, "Hit_Knockback");
+            // Die Namen muessen exakt zu den AnimStacks in den FBX passen. Die
+            // vorherige Liste suchte nach Melee_Hook, OverhandThrow, Slide_Start,
+            // Sword_Dash und Shield_OneShot - keiner dieser Clips existiert im
+            // Projekt. Angriff, Dash und Ultimate waren dadurch seit jeher stumm,
+            // ohne dass irgendwo eine Meldung aufgetaucht waere.
+            idle = FindClip(clips, "Idle_A", "Idle_B", "Idle_No_Loop");
+            move = FindClip(clips, "Running_A", "Running_B", "Walking_A");
+            attack = FindClip(clips, "Throw", "Use_Item", "Interact");
+            roll = FindClip(clips, "Jump_Start", "Jump_Full_Short", "Jump_Full_Long");
+            ultimate = FindClip(clips, "Spawn_Ground", "Spawn_Air", "Throw");
+            hit = FindClip(clips, "Hit_A", "Hit_B", "Hit_Knockback");
+            WarnAboutMissingClips();
             if (!idle) return;
 
             animator.applyRootMotion = false;
@@ -1554,6 +1560,25 @@ namespace Shatterspire
             var time = playable.GetTime();
             // Modulo statt auf null setzen, damit an der Naht kein Frame verloren geht.
             if (time >= clip.length) playable.SetTime(time % clip.length);
+        }
+
+        /// <summary>
+        /// Ein fehlender Clip macht die betroffene Aktion stumm, ohne dass irgendwo
+        /// etwas auffaellt — genau so waren Angriff, Dash und Ultimate lange Zeit
+        /// unbemerkt tot. Deshalb wird das Fehlen jetzt einmal pro Figur gemeldet.
+        /// </summary>
+        private void WarnAboutMissingClips()
+        {
+            var missing = new List<string>();
+            if (!idle) missing.Add("Idle");
+            if (!move) missing.Add("Laufen");
+            if (!attack) missing.Add("Angriff");
+            if (!roll) missing.Add("Dash");
+            if (!ultimate) missing.Add("Ultimate");
+            if (!hit) missing.Add("Trefferreaktion");
+            if (missing.Count == 0) return;
+            Debug.LogWarning($"ChampionAnimationDriver auf '{name}': kein Clip für " +
+                             string.Join(", ", missing) + ". Diese Aktionen bleiben unanimiert.", this);
         }
 
         private static AnimationClip FindClip(AnimationClip[] clips, params string[] candidates)
