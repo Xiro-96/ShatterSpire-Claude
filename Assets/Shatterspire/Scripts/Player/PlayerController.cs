@@ -60,7 +60,14 @@ namespace Shatterspire
             var desired = stick * topSpeed;
             var smoothing = desired.sqrMagnitude > velocity.sqrMagnitude ? AccelerationSeconds : BrakingSeconds;
             velocity = Vector3.SmoothDamp(velocity, desired, ref acceleration, smoothing);
-            motor.Move(velocity * Time.deltaTime);
+            // SmoothDamp laeuft nur asymptotisch gegen null. Ohne diese Schwelle
+            // bliebe ein Rest stehen und die Figur wuerde ewig weiterkriechen.
+            if (desired.sqrMagnitude < 0.0001f && velocity.sqrMagnitude < 0.04f)
+            {
+                velocity = Vector3.zero;
+                acceleration = Vector3.zero;
+            }
+            if (velocity.sqrMagnitude > 0f) motor.Move(velocity * Time.deltaTime);
             var aim = input.AimPoint - transform.position;
             aim.y = 0f;
             if (aim.sqrMagnitude > 0.1f)

@@ -48,10 +48,22 @@ namespace Shatterspire
             var fill = fillGo.AddComponent<Light>();
             fill.type = LightType.Directional;
             fill.color = new Color(0.45f, 0.7f, 1f);
-            fill.intensity = 0.2f;
+            fill.intensity = 0.32f;
             fill.shadows = LightShadows.None;
             fillGo.transform.rotation = Quaternion.Euler(58f, 142f, 0f);
 
+            // Kantenlicht von schraeg hinten. Das ist der Unterschied zwischen
+            // "Figur steht auf dem Boden" und "Figur klebt am Boden": aus der
+            // Distanz trennt erst die helle Kante die Silhouette vom Untergrund.
+            var rimGo = new GameObject("Rim Light");
+            var rim = rimGo.AddComponent<Light>();
+            rim.type = LightType.Directional;
+            rim.color = new Color(0.62f, 0.82f, 1f);
+            rim.intensity = 0.85f;
+            rim.shadows = LightShadows.None;
+            rimGo.transform.rotation = Quaternion.Euler(14f, 196f, 0f);
+
+            PostFx.Build();
         }
 
         public static void ConfigureCamera(Camera camera)
@@ -60,13 +72,16 @@ namespace Shatterspire
             // Keep the whole combat formation readable on a 16:9 display. The
             // previous framing made the hero attractive in screenshots, but hid
             // incoming waves and made the arena feel smaller than it really is.
-            camera.orthographicSize = 7.4f;
+            // Naeher heran. Bei 7,4 lag im Spielbild rund ein Viertel der Flaeche
+            // ausserhalb der Arena und damit schwarz brach.
+            camera.orthographicSize = 6.35f;
             camera.fieldOfView = 36f;
             camera.nearClipPlane = 0.1f;
             camera.farClipPlane = 110f;
             camera.backgroundColor = new Color(0.022f, 0.035f, 0.09f);
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.allowHDR = true;
+            PostFx.EnableOn(camera);
         }
 
         public static void BuildArena()

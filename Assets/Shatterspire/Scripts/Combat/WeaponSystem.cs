@@ -124,7 +124,10 @@ namespace Shatterspire
                     CombatUtility.Explode(point + direction * 1.25f, meleeRadius * 0.82f, meleeDamage * 0.62f,
                         TeamId.Enemy, ResolveDamageType(), gameObject);
                 NotifyLightHit();
-                GetComponent<PlayerController>()?.CombatStep(direction, finisher ? 0.42f : 0.2f);
+                // Nur noch auf dem Abschluss. Vorher schob jeder einzelne Schlag
+                // nach vorn, was bei gehaltenem Angriff zu stetigem Kriechen ohne
+                // Eingabe fuehrte - die Figur lief scheinbar von allein.
+                if (finisher) GetComponent<PlayerController>()?.CombatStep(direction, 0.42f);
                 motion?.PulseAttack(finisher ? 1.35f : 0.92f);
                 if (finisher) CameraController.Impulse(0.085f);
                 return;
@@ -136,7 +139,7 @@ namespace Shatterspire
             FireProjectile(direction, damage, true, build.Pierces, build.Ricochets,
                 finisher ? 1.25f : 1f, finisher ? 0.75f : 0f,
                 finisher ? BaseDamage * build.DamageMultiplier * 0.36f : 0f);
-            GetComponent<PlayerController>()?.CombatStep(direction, finisher ? 0.17f : 0.08f);
+            if (finisher) GetComponent<PlayerController>()?.CombatStep(direction, 0.17f);
             PulseShot();
             if (finisher) CameraController.Impulse(0.055f);
         }
