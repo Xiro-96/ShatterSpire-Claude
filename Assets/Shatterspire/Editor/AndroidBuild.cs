@@ -76,5 +76,25 @@ namespace Shatterspire.Editor
             Debug.Log($"SHATTERSPIRE APK created: {Path.GetFullPath(OutputPath)} ({report.summary.totalSize / 1048576f:0.0} MB)" );
             EditorUtility.RevealInFinder(OutputPath);
         }
+
+        /// <summary>
+        /// Windows-Build nur fuer automatische Bildkontrollen mit CaptureDemo, nicht zum Verteilen.
+        /// Aufruf: Shatterspire.exe -shatterspire-capture Ordner
+        /// </summary>
+        public static void BuildWindowsCapture()
+        {
+            var scenes = EditorBuildSettings.scenes.Where(scene => scene.enabled).Select(scene => scene.path).ToArray();
+            if (scenes.Length == 0) throw new BuildFailedException("No enabled scene found in Build Settings.");
+            var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = scenes,
+                locationPathName = "Builds/WindowsCapture/Shatterspire.exe",
+                target = BuildTarget.StandaloneWindows64,
+                options = BuildOptions.None
+            });
+            if (report.summary.result != BuildResult.Succeeded)
+                throw new BuildFailedException($"Windows capture build failed: {report.summary.result} ({report.summary.totalErrors} errors).");
+            Debug.Log("SHATTERSPIRE Windows capture build ready.");
+        }
     }
 }

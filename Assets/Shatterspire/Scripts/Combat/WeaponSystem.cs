@@ -207,6 +207,8 @@ namespace Shatterspire
             var reach = build.Pierces * 0.28f;
             var hit = BaseDamage * build.DamageMultiplier;
             var accent = HeroCatalog.Accent(heroClass);
+            // Ring statt Explosionsscheibe: die tuerkise Scheibe wirkte beim Hammer wie eine Plattform aus dem Boden.
+            var ring = type == DamageType.Physical ? accent : PrototypeVfx.ElementColor(type);
             comboExpiresAt = Time.time + 1.1f;
 
             if (lightComboStep == 1)
@@ -216,8 +218,9 @@ namespace Shatterspire
                 StartCoroutine(MeleeImpact(0.15f, () =>
                 {
                     var point = transform.position + direction * 1.25f;
-                    Strike(point, 1.35f + reach, hit, type);
-                    if (build.ProjectileCount > 1) Strike(point + direction * 1.2f, 1.1f, hit * 0.6f, type);
+                    Strike(point, 1.35f + reach, hit, type, flash: false);
+                    PrototypeVfx.SpawnShockwave(point, 1.6f + reach, ring);
+                    if (build.ProjectileCount > 1) Strike(point + direction * 1.2f, 1.1f, hit * 0.6f, type, flash: false);
                 }));
                 return;
             }
@@ -229,9 +232,9 @@ namespace Shatterspire
                 StartCoroutine(MeleeImpact(0.2f, () =>
                 {
                     var point = transform.position + direction * 1.55f;
-                    Strike(point, 1.7f + reach, hit * 1.4f, type, 7f);
-                    PrototypeVfx.SpawnShockwave(point, 2.1f, accent);
-                    if (build.ProjectileCount > 1) Strike(point + direction * 1.25f, 1.3f, hit * 0.8f, type);
+                    Strike(point, 1.7f + reach, hit * 1.4f, type, 7f, flash: false);
+                    PrototypeVfx.SpawnShockwave(point, 2.1f, ring);
+                    if (build.ProjectileCount > 1) Strike(point + direction * 1.25f, 1.3f, hit * 0.8f, type, flash: false);
                     controller?.CombatStep(direction, 0.25f);
                     CameraController.Impulse(0.06f);
                 }));
@@ -243,8 +246,8 @@ namespace Shatterspire
             StartCoroutine(MeleeImpact(0.17f, () =>
             {
                 var radius = 2.6f + reach;
-                Strike(transform.position, radius, hit * 1.75f, type, 8f);
-                PrototypeVfx.SpawnShockwave(transform.position, radius + 0.4f, accent);
+                Strike(transform.position, radius, hit * 1.75f, type, 8f, flash: false);
+                PrototypeVfx.SpawnShockwave(transform.position, radius + 0.4f, ring);
                 CameraController.Impulse(0.09f);
                 Hitstop.Freeze(0.04f, 0.1f);
                 if (build.Ricochets > 0) StartCoroutine(DelayedBlast(transform.position, radius * 0.85f, hit * 0.6f, type, 0.22f));
@@ -489,11 +492,12 @@ namespace Shatterspire
         /// Flaechentreffer des Spielers. Anders als CombatUtility.Explode wirken hier Krit, Finisher,
         /// Lebensraub und Elemente, und der Schaden laedt die Ultimate. pull zieht Gegner zur Mitte.
         /// </summary>
-        private void Strike(Vector3 point, float radius, float damage, DamageType type, float knockback = 4f, bool pull = false)
+        private void Strike(Vector3 point, float radius, float damage, DamageType type, float knockback = 4f, bool pull = false,
+            bool flash = true)
         {
             var critical = Random.value < build.CritChance;
             var amount = damage * (critical ? build.CritMultiplier : 1f);
-            PrototypeVfx.SpawnExplosion(point, radius, PrototypeVfx.ElementColor(type));
+            if (flash) PrototypeVfx.SpawnExplosion(point, radius, PrototypeVfx.ElementColor(type));
             strikeTargets.Clear();
             foreach (var candidate in Health.Active)
             {

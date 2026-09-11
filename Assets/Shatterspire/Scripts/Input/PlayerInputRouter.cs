@@ -30,6 +30,10 @@ namespace Shatterspire
         public bool SkillPressed { get; private set; }
         public bool DashPressed { get; private set; }
         public bool UltimatePressed { get; private set; }
+        /// <summary>Nur fuer automatische Vorfuehrungen (CaptureDemo): haelt den Angriff gedrueckt.</summary>
+        public bool ScriptedAttack { get; set; }
+        /// <summary>Nur fuer automatische Vorfuehrungen: feste Blickrichtung statt Maus.</summary>
+        public Vector3? ScriptedAim { get; set; }
 
         private void Start()
         {
@@ -41,10 +45,13 @@ namespace Shatterspire
         {
             var keyboard = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
             Move = Vector2.ClampMagnitude(keyboard + MobileInput.Move, 1f);
-            AttackHeld = Input.GetMouseButton(0) || MobileInput.Attack;
-            HeavyPressed = Input.GetMouseButtonDown(1) || MobileInput.ConsumeHeavyPressed();
-            HeavyReleased = Input.GetMouseButtonUp(1) || MobileInput.ConsumeHeavyReleased();
-            HeavyHeld = Input.GetMouseButton(1) || MobileInput.Heavy;
+            // Auf dem Telefon meldet Unity jede Beruehrung zusaetzlich als linke Maustaste. Wer den Stick
+            // hielt, griff dadurch dauernd an. Mit Touch zaehlen nur noch die Aktionsknoepfe.
+            var mouse = !Application.isMobilePlatform && Input.touchCount == 0;
+            AttackHeld = (mouse && Input.GetMouseButton(0)) || MobileInput.Attack || ScriptedAttack;
+            HeavyPressed = (mouse && Input.GetMouseButtonDown(1)) || MobileInput.ConsumeHeavyPressed();
+            HeavyReleased = (mouse && Input.GetMouseButtonUp(1)) || MobileInput.ConsumeHeavyReleased();
+            HeavyHeld = (mouse && Input.GetMouseButton(1)) || MobileInput.Heavy;
             SkillPressed = Input.GetKeyDown(KeyCode.Q) || MobileInput.ConsumeSkill();
             DashPressed = Input.GetKeyDown(KeyCode.Space) || MobileInput.ConsumeDash();
             UltimatePressed = Input.GetKeyDown(KeyCode.R) || MobileInput.ConsumeUltimate();
@@ -59,6 +66,7 @@ namespace Shatterspire
                 var target = Targeting.FindBestAutoAim(transform.position, transform.forward, 18f, TeamId.Enemy);
                 AimPoint = target ? target.transform.position : transform.position + transform.forward * 10f;
             }
+            if (ScriptedAim.HasValue) AimPoint = transform.position + ScriptedAim.Value;
         }
     }
 

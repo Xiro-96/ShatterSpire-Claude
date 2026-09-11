@@ -805,21 +805,53 @@ namespace Shatterspire
                 new Vector3(0.15f, 0.46f, 0.07f), new Vector3(18f, -8f, 16f), new Color(0.86f, 0.2f, 0.04f), false, 0.12f);
         }
 
+        /// <summary>
+        /// Brax' Streithammer am Waffenhalter-Knochen der KayKit-Figur (handslot.r). Dort sitzen Waffen ohne
+        /// geschaetzte Winkel, der Griff zeigt entlang der lokalen Y-Achse. Masse in Welt-Einheiten: die Figur ist
+        /// skaliert, und Groessen in Knochen-Einheiten liessen den Kopf riesig werden.
+        /// Vorher hing der Hammer am Handknochen, steckte in Ruhe im Koerper und ragte beim Schlag als Klotz
+        /// zur Seite - die Kampfclips sahen dadurch aus wie "nur so tun".
+        /// </summary>
         private static void AttachGuardianHammer(Animator animator, Transform fallback, Color accent)
         {
-            var hand = animator && animator.isHuman
-                ? animator.GetBoneTransform(HumanBodyBones.RightHand)
-                : fallback;
-            if (!hand) return;
-            var iron = new Color(0.12f, 0.14f, 0.16f);
-            GearPart(hand, PrimitiveType.Cylinder, "Brax Hammer Shaft", new Vector3(0f, 0.02f, 0.63f),
-                new Vector3(0.11f, 0.68f, 0.11f), new Vector3(90f, 0f, 0f), iron, false, 0.2f, 0.42f);
-            GearPart(hand, PrimitiveType.Cube, "Brax Hammer Head", new Vector3(0f, 0.02f, 1.31f),
-                new Vector3(0.88f, 0.52f, 0.58f), new Vector3(0f, 0f, 2f), new Color(0.34f, 0.28f, 0.2f), false, 0.16f, 0.26f);
-            GearPart(hand, PrimitiveType.Cube, "Brax Hammer Amber Face", new Vector3(0f, -0.01f, 1.62f),
-                new Vector3(0.52f, 0.29f, 0.08f), Vector3.zero, accent, true, 0.34f, 0.12f);
-            GearPart(hand, PrimitiveType.Cube, "Brax Hammer Rune", new Vector3(0f, 0.02f, 1.67f),
-                new Vector3(0.16f, 0.16f, 0.055f), new Vector3(0f, 0f, 45f), Color.Lerp(accent, Color.white, 0.35f), true, 0.38f);
+            var slot = FindNamedBone(animator ? animator.transform : fallback, "handslot.r");
+            if (!slot) slot = animator && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.RightHand) : fallback;
+            if (!slot) return;
+
+            var hammer = new GameObject("Brax War Hammer").transform;
+            hammer.SetParent(slot, false);
+            hammer.localPosition = Vector3.zero;
+            hammer.localRotation = Quaternion.identity;
+            var boneScale = Mathf.Max(0.0001f, slot.lossyScale.x);
+            hammer.localScale = Vector3.one / boneScale;
+
+            var wood = new Color(0.36f, 0.22f, 0.12f);
+            var iron = new Color(0.3f, 0.32f, 0.36f);
+            // Stiel ueber und unter der Hand, damit auch die zweite Hand greifen kann. Zylinder sind 2 Einheiten hoch.
+            GearPart(hammer, PrimitiveType.Cylinder, "Brax Hammer Shaft", new Vector3(0f, 0.36f, 0f),
+                new Vector3(0.085f, 0.63f, 0.085f), Vector3.zero, wood, false, 0.15f, 0f);
+            GearPart(hammer, PrimitiveType.Sphere, "Brax Hammer Pommel", new Vector3(0f, -0.29f, 0f),
+                new Vector3(0.14f, 0.12f, 0.14f), Vector3.zero, iron, false, 0.3f, 0.5f);
+            GearPart(hammer, PrimitiveType.Cube, "Brax Hammer Head", new Vector3(0f, 1.06f, 0f),
+                new Vector3(0.56f, 0.32f, 0.32f), Vector3.zero, iron, false, 0.28f, 0.55f);
+            GearPart(hammer, PrimitiveType.Cube, "Brax Hammer Band", new Vector3(0f, 1.06f, 0f),
+                new Vector3(0.2f, 0.36f, 0.36f), Vector3.zero, new Color(0.55f, 0.36f, 0.14f), false, 0.3f, 0.4f);
+            GearPart(hammer, PrimitiveType.Cube, "Brax Hammer Amber Face L", new Vector3(-0.29f, 1.06f, 0f),
+                new Vector3(0.04f, 0.24f, 0.24f), Vector3.zero, accent, true, 0.34f, 0.12f);
+            GearPart(hammer, PrimitiveType.Cube, "Brax Hammer Amber Face R", new Vector3(0.29f, 1.06f, 0f),
+                new Vector3(0.04f, 0.24f, 0.24f), Vector3.zero, accent, true, 0.34f, 0.12f);
+        }
+
+        private static Transform FindNamedBone(Transform root, string boneName)
+        {
+            if (!root) return null;
+            if (root.name == boneName) return root;
+            for (var i = 0; i < root.childCount; i++)
+            {
+                var found = FindNamedBone(root.GetChild(i), boneName);
+                if (found) return found;
+            }
+            return null;
         }
 
         private static void AttachSupportFocus(Animator animator, Transform fallback, Color accent)
@@ -1437,6 +1469,7 @@ namespace Shatterspire
         private readonly float[] actionWeights = new float[2];
         private int activeSlot = -1;
         private float actionHoldUntil;
+        private bool actionIsAttack;
 
         private AnimationClip idle;
         private AnimationClip move;
@@ -1598,6 +1631,7 @@ namespace Shatterspire
             };
             var span = clip.length * (to - from);
             PlayAction(clip, duration, Mathf.Clamp(span / Mathf.Max(0.05f, duration), 0.5f, 2.8f), clip.length * from);
+            actionIsAttack = true;
         }
 
         /// <summary>Ausweichschritt passend zur Richtung relativ zur Blickrichtung: vor, zurueck oder seitlich.</summary>
@@ -1649,7 +1683,13 @@ namespace Shatterspire
 
         public void PulseDash() => PlayAction(roll, 0.34f, 1.45f);
         public void PulseUltimate() => PlayAction(ultimate, 0.72f, 1.05f);
-        public void PulseHit() => PlayAction(hit, 0.2f, 1.4f);
+        public void PulseHit()
+        {
+            // Ein eingesteckter Treffer bricht keinen laufenden Angriff ab. Im Nahkampf wird Brax staendig
+            // getroffen - vorher kam sein Schwung dadurch nie zu Ende.
+            if (actionIsAttack && activeSlot >= 0 && Time.time < actionHoldUntil) return;
+            PlayAction(hit, 0.2f, 1.4f);
+        }
 
         private void Update()
         {
@@ -1703,6 +1743,7 @@ namespace Shatterspire
         private void PlayAction(AnimationClip clip, float holdSeconds, float speed, float startTime = 0f)
         {
             if (!ready || !clip || !graph.IsValid()) return;
+            actionIsAttack = false;
             // In den jeweils anderen Slot legen, damit der laufende Schlag
             // ausblenden kann statt abgeschnitten zu werden.
             var slot = activeSlot == 0 ? 1 : 0;

@@ -73,8 +73,15 @@ namespace Shatterspire
             Time.timeScale = 1f;
             Application.targetFrameRate = 60;
             QualitySettings.vSyncCount = 0;
+            // Beruehrungen nicht zusaetzlich als Mausklick melden. Sonst loeste ein Tipp im Menue und in der
+            // Upgrade-Wahl doppelt aus, und das Halten des Sticks galt als gehaltener Angriff.
+            if (Application.isMobilePlatform) Input.simulateMouseWithTouches = false;
             MobileInput.Reset();
             StylizedArt.ConfigureWorld();
+
+            // Automatische Bildkontrolle (-shatterspire-capture): ohne Menue direkt in einen Aufstieg mit Brax.
+            if (CaptureDemo.Requested && !RunLaunchSettings.HasPendingRun)
+                RunLaunchSettings.Prepare(new RunConfig { Hero = HeroClassId.Guardian, Mode = RunMode.Brave });
 
             if (!RunLaunchSettings.HasPendingRun)
             {
@@ -113,6 +120,7 @@ namespace Shatterspire
 #if UNITY_EDITOR
             EditorCaptureAgent.Attach(systems, "run", true, 3f, 12f);
 #endif
+            if (CaptureDemo.Requested) systems.AddComponent<CaptureDemo>().Configure(player, runCamera);
         }
 
         private static GameObject CreatePlayer(RunConfig config)
