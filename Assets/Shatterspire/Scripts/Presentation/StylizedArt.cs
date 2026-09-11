@@ -25,9 +25,10 @@ namespace Shatterspire
         public static void ConfigureWorld()
         {
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.22f, 0.3f, 0.46f);
-            RenderSettings.ambientEquatorColor = new Color(0.12f, 0.18f, 0.3f);
-            RenderSettings.ambientGroundColor = new Color(0.035f, 0.045f, 0.08f);
+            // Heller und kuehler als vorher: Schatten sollen blau werden, nicht schwarz.
+            RenderSettings.ambientSkyColor = new Color(0.4f, 0.48f, 0.66f);
+            RenderSettings.ambientEquatorColor = new Color(0.3f, 0.3f, 0.36f);
+            RenderSettings.ambientGroundColor = new Color(0.16f, 0.13f, 0.12f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogColor = new Color(0.035f, 0.055f, 0.12f);
@@ -38,8 +39,10 @@ namespace Shatterspire
             var keyGo = new GameObject("Warm Spire Sun");
             var key = keyGo.AddComponent<Light>();
             key.type = LightType.Directional;
-            key.color = new Color(1f, 0.9f, 0.76f);
-            key.intensity = 1.08f;
+            // Goldene Sonne als klares Hauptlicht. Warm gegen die kuehlen Schatten aus dem
+            // Umgebungslicht - der Kontrast, auf dem der Clash-Look beruht.
+            key.color = new Color(1f, 0.87f, 0.68f);
+            key.intensity = 1.25f;
             key.shadows = LightShadows.Soft;
             key.shadowResolution = LightShadowResolution.Medium;
             keyGo.transform.rotation = Quaternion.Euler(51f, -34f, 0f);
@@ -48,7 +51,7 @@ namespace Shatterspire
             var fill = fillGo.AddComponent<Light>();
             fill.type = LightType.Directional;
             fill.color = new Color(0.45f, 0.7f, 1f);
-            fill.intensity = 0.32f;
+            fill.intensity = 0.22f;
             fill.shadows = LightShadows.None;
             fillGo.transform.rotation = Quaternion.Euler(58f, 142f, 0f);
 

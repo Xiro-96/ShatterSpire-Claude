@@ -72,7 +72,8 @@ namespace Shatterspire
             grading.contrast.overrideState = true;
             grading.contrast.value = 16f;
             grading.saturation.overrideState = true;
-            grading.saturation.value = 6f;
+            // Mit warmer Palette statt Blau darf die Saettigung mehr tragen.
+            grading.saturation.value = 12f;
             grading.colorFilter.overrideState = true;
             grading.colorFilter.value = new Color(1f, 0.98f, 0.95f);
 

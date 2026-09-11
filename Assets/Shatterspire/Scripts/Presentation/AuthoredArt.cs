@@ -41,10 +41,14 @@ namespace Shatterspire
         private static Color CourtTileTint(int x, int z)
         {
             var distanceFromCenter = Mathf.Max(Mathf.Abs(x - 3), Mathf.Abs(z - 3));
-            var tint = distanceFromCenter <= 1 ? new Color(0.72f, 0.79f, 0.9f)
-                : distanceFromCenter == 2 ? new Color(0.55f, 0.66f, 0.82f)
-                : new Color(0.34f, 0.43f, 0.62f);
-            if ((x + z) % 4 == 0) tint = Color.Lerp(tint, new Color(0.48f, 0.4f, 0.72f), 0.22f);
+            // Warm und nah an Weiss: die KayKit-Modelle sind auf ihre eigenen Atlasfarben
+            // ausgelegt - Sandstein, Terrakotta, Holz. Kuehles Einfaerben hat die ganze
+            // Szene in einen einzigen Blauton gedrueckt. Stimmung kommt jetzt aus dem Licht.
+            var tint = distanceFromCenter <= 1 ? new Color(0.94f, 0.9f, 0.84f)
+                : distanceFromCenter == 2 ? new Color(0.82f, 0.78f, 0.72f)
+                : new Color(0.66f, 0.62f, 0.58f);
+            // Leichte Unruhe im Muster, damit der Boden nicht wie eine Fliesenflaeche wirkt.
+            if ((x + z) % 4 == 0) tint = Color.Lerp(tint, new Color(0.96f, 0.84f, 0.68f), 0.3f);
             return tint;
         }
 
@@ -55,9 +59,9 @@ namespace Shatterspire
             // V14 art target: chunky fantasy silhouettes over a saturated magical-tech
             // court. Large color regions and landmarks read clearly on a phone screen.
             var root = new GameObject("THE FORGOTTEN COURT · V15 TOWER FOUNDATIONS").transform;
-            var abyss = new Color(0.018f, 0.025f, 0.065f);
-            var rim = new Color(0.055f, 0.09f, 0.17f);
-            var deepStone = new Color(0.34f, 0.43f, 0.62f);
+            var abyss = new Color(0.05f, 0.045f, 0.06f);
+            var rim = new Color(0.22f, 0.17f, 0.14f);
+            var deepStone = new Color(0.66f, 0.62f, 0.58f);
             var cyan = new Color(0.03f, 0.92f, 1f);
             var violet = new Color(0.72f, 0.22f, 1f);
             var ember = new Color(1f, 0.48f, 0.08f);
@@ -166,13 +170,13 @@ namespace Shatterspire
             var arenaObject = GameObject.Find("THE FORGOTTEN COURT · V15 TOWER FOUNDATIONS");
             if (arenaObject)
             {
-                // Das Thema faerbt den Verlauf ein, statt ihn zu ersetzen, und dunkelt den
-                // Boden dabei ab: Hindernisse und Figuren sollen heller sein als der Grund.
+                // Das Thema verschiebt nur den Farbton des warmen Verlaufs. Stimmung kommt aus
+                // dem Licht, nicht aus dunkel eingefaerbtem Stein.
                 var themeTint = theme switch
                 {
-                    FloorTheme.EmberFoundry => new Color(0.95f, 0.62f, 0.46f),
-                    FloorTheme.AstralArchive => new Color(0.72f, 0.6f, 1f),
-                    _ => new Color(0.62f, 0.7f, 0.86f)
+                    FloorTheme.EmberFoundry => new Color(1f, 0.84f, 0.72f),
+                    FloorTheme.AstralArchive => new Color(0.9f, 0.86f, 1f),
+                    _ => new Color(1f, 0.98f, 0.94f)
                 };
                 for (var i = 0; i < arenaObject.transform.childCount; i++)
                 {
@@ -186,15 +190,17 @@ namespace Shatterspire
 
             RenderSettings.fogColor = theme switch
             {
-                FloorTheme.EmberFoundry => new Color(0.13f, 0.035f, 0.02f),
-                FloorTheme.AstralArchive => new Color(0.075f, 0.025f, 0.14f),
-                _ => new Color(0.025f, 0.05f, 0.1f)
+                FloorTheme.EmberFoundry => new Color(0.18f, 0.09f, 0.06f),
+                FloorTheme.AstralArchive => new Color(0.12f, 0.08f, 0.18f),
+                _ => new Color(0.1f, 0.13f, 0.2f)
             };
+            // Der Himmelsanteil des Umgebungslichts faerbt die Schatten. Kuehl gegen die
+            // warme Sonne ist genau der Kontrast, der dem Bild bisher fehlte.
             RenderSettings.ambientSkyColor = theme switch
             {
-                FloorTheme.EmberFoundry => new Color(0.48f, 0.19f, 0.08f),
-                FloorTheme.AstralArchive => new Color(0.28f, 0.12f, 0.52f),
-                _ => new Color(0.22f, 0.3f, 0.46f)
+                FloorTheme.EmberFoundry => new Color(0.6f, 0.42f, 0.34f),
+                FloorTheme.AstralArchive => new Color(0.46f, 0.4f, 0.68f),
+                _ => new Color(0.4f, 0.48f, 0.66f)
             };
             if (Camera.main) Camera.main.backgroundColor = RenderSettings.fogColor;
         }
@@ -360,7 +366,7 @@ namespace Shatterspire
                 var target = propName == "pillar_decorated" ? 2.9f : 2.35f;
                 SpawnDungeonModel(root, propName, position, i * 47f + index * 19f, target,
                     propName == "pillar_decorated" ? FitAxis.Height : FitAxis.Horizontal,
-                    i % 2 == 0 ? new Color(0.82f, 0.86f, 0.9f) : new Color(0.74f, 0.8f, 0.86f));
+                    i % 2 == 0 ? Color.white : new Color(0.96f, 0.92f, 0.86f));
                 CrystalPart(root, "Prop Rift Crystal", position + new Vector3(0f, propName == "pillar_decorated" ? 2.25f : 1.1f, 0.36f),
                     new Vector3(0.14f, 0.46f, 0.14f), new Vector3(0f, 0f, 0f), accent);
                 CreateObstacle(root, new Vector3(position.x, 0.9f, position.z), new Vector3(1.15f, 1.8f, 1.15f));
@@ -474,9 +480,9 @@ namespace Shatterspire
         private static void BuildDungeonPortal(Transform root, Vector3 position, float yaw, Color accent)
         {
             SpawnDungeonModel(root, "wall_doorway", position, yaw, 4.25f, FitAxis.Horizontal,
-                new Color(0.76f, 0.82f, 0.88f));
+                new Color(0.96f, 0.93f, 0.88f));
             var pad = ArenaPart(root, PrimitiveType.Cylinder, "Portal Socket", position + Vector3.up * 0.045f,
-                new Vector3(2.75f, 0.035f, 2.25f), new Color(0.08f, 0.12f, 0.2f), false, 0.05f, false);
+                new Vector3(2.75f, 0.035f, 2.25f), new Color(0.2f, 0.15f, 0.12f), false, 0.05f, false);
             pad.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
             ArenaPart(root, PrimitiveType.Cylinder, "Portal Rune", position + Vector3.up * 0.09f,
                 new Vector3(1.1f, 0.016f, 1.1f), accent, true, 0.28f, false);
@@ -515,7 +521,7 @@ namespace Shatterspire
         private static void BuildCourtBastion(Transform root, Vector3 position, float yaw, Color accent)
         {
             SpawnDungeonModel(root, "pillar_decorated", position, yaw, 3.3f,
-                FitAxis.Height, new Color(0.52f, 0.6f, 0.76f));
+                FitAxis.Height, new Color(0.94f, 0.9f, 0.84f));
             var direction = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
             SpawnDungeonModel(root, "torch_lit", position + direction * 0.72f + Vector3.up * 1.38f,
                 yaw + 180f, 1.15f, FitAxis.Height, new Color(1f, 0.78f, 0.52f));
