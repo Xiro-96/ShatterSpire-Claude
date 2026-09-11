@@ -11,17 +11,18 @@ namespace Shatterspire
         Ricochet, Piercing, ExplosiveShot, FireBullet, IceBullet, LightningBullet,
         PoisonBullet, Vampirism, Shield, Multishot, HomingShot, DashExplosion,
         Execution,
-        // Upgrades, die eine Aktion veraendern. UltimateCooldown ist mit der Ultimate entfallen.
-        HeavyRapidCharge, HeavyPower, PerfectEcho, SkillHaste, SkillOverdrive,
+        // Upgrades, die eine Aktion veraendern.
+        HeavyRapidCharge, HeavyPower, PerfectEcho, SkillHaste, SkillOvercharge,
         RangerSplitFinisher, RangerRailShot, RangerArrowRain, RangerPartingShot,
         GuardianCleaveWave, GuardianEarthsplitter, GuardianBulwark, GuardianShoulderCharge,
-        ArcanistVoidBurst, ArcanistCollapse, ArcanistLingeringStar, ArcanistPhaseRift
+        ArcanistVoidBurst, ArcanistCollapse, ArcanistLingeringStar, ArcanistPhaseRift,
+        UltimateSurge, UltimateAfterglow, RangerHomingBarrage, GuardianMoltenQuake, ArcanistEventHorizon
     }
 
     public enum PerkRarity { Common, Rare, Epic, Legendary }
 
     /// <summary>Die Aktion, die ein Upgrade veraendert. Passive wirken auf alle Aktionen.</summary>
-    public enum ActionSlot { Light, Heavy, Skill, Dash, Passive }
+    public enum ActionSlot { Light, Heavy, Skill, Dash, Ultimate, Passive }
 
     [Serializable]
     public sealed class PerkDefinition
@@ -86,7 +87,7 @@ namespace Shatterspire
 
             // SKILL
             P(PerkId.SkillHaste, "QUICK CAST", "Skill cooldown is 25% shorter.", PerkRarity.Common, ActionSlot.Skill),
-            P(PerkId.SkillOverdrive, "OVERDRIVE", "Your Skill becomes your hero's overdrive: far stronger, 40% longer cooldown.", PerkRarity.Legendary, ActionSlot.Skill),
+            P(PerkId.SkillOvercharge, "OVERCHARGE", "Every Skill cast charges your Ultimate by 10%.", PerkRarity.Rare, ActionSlot.Skill),
             P(PerkId.RangerArrowRain, "ARROW RAIN", "Arrow Storm fires five wider volleys that follow your aim.", PerkRarity.Rare, ActionSlot.Skill, RangerOnly),
             P(PerkId.GuardianBulwark, "BULWARK", "Bull Rush ends in a slam and makes you invulnerable for 1.5 s.", PerkRarity.Rare, ActionSlot.Skill, GuardianOnly),
             P(PerkId.ArcanistLingeringStar, "LINGERING STAR", "Black Star pulses seven times and drifts toward your aim.", PerkRarity.Rare, ActionSlot.Skill, ArcanistOnly),
@@ -98,6 +99,13 @@ namespace Shatterspire
             P(PerkId.RangerPartingShot, "PARTING SHOT", "Dashing fires a fan of five arrows toward your aim.", PerkRarity.Rare, ActionSlot.Dash, RangerOnly),
             P(PerkId.GuardianShoulderCharge, "SHOULDER CHARGE", "Dashing slams every enemy in your path.", PerkRarity.Rare, ActionSlot.Dash, GuardianOnly),
             P(PerkId.ArcanistPhaseRift, "PHASE RIFT", "Dashing leaves a rift behind that detonates.", PerkRarity.Rare, ActionSlot.Dash, ArcanistOnly),
+
+            // ULTIMATE
+            P(PerkId.UltimateSurge, "SURGE CELL", "Your Ultimate charges 30% faster.", PerkRarity.Rare, ActionSlot.Ultimate),
+            P(PerkId.UltimateAfterglow, "AFTERGLOW", "Casting your Ultimate heals you for 30% of your max health.", PerkRarity.Epic, ActionSlot.Ultimate),
+            P(PerkId.RangerHomingBarrage, "HOMING BARRAGE", "Rift Barrage arrows seek out enemies.", PerkRarity.Epic, ActionSlot.Ultimate, RangerOnly),
+            P(PerkId.GuardianMoltenQuake, "MOLTEN QUAKE", "Forge Quake shockwaves set enemies on fire.", PerkRarity.Epic, ActionSlot.Ultimate, GuardianOnly),
+            P(PerkId.ArcanistEventHorizon, "EVENT HORIZON", "Singularity pulls enemies into its center.", PerkRarity.Epic, ActionSlot.Ultimate, ArcanistOnly),
 
             // PASSIVE
             P(PerkId.DamageUp, "TEMPERED POWER", "+25% damage for every action.", PerkRarity.Common, ActionSlot.Passive),
@@ -133,6 +141,7 @@ namespace Shatterspire
             ActionSlot.Heavy => "HEAVY",
             ActionSlot.Skill => "SKILL",
             ActionSlot.Dash => "DASH",
+            ActionSlot.Ultimate => "ULTIMATE",
             _ => "PASSIVE"
         };
 
@@ -142,6 +151,7 @@ namespace Shatterspire
             ActionSlot.Light => "LIGHT · " + HeroCatalog.LightAttackName(hero),
             ActionSlot.Heavy => "HEAVY · " + HeroCatalog.HeavyAttackName(hero),
             ActionSlot.Skill => "SKILL · " + HeroCatalog.SkillName(hero),
+            ActionSlot.Ultimate => "ULTIMATE · " + HeroCatalog.UltimateName(hero),
             _ => SlotLabel(slot)
         };
 
@@ -210,6 +220,7 @@ namespace Shatterspire
         public float HeavyChargeMultiplier { get; private set; } = 1f;
         public float SkillCooldownMultiplier { get; private set; } = 1f;
         public float DashRechargeMultiplier { get; private set; } = 1f;
+        public float UltimateChargeMultiplier { get; private set; } = 1f;
         public int ExtraDashCharges { get; private set; }
         public int ProjectileCount => Has(PerkId.Multishot) ? 2 : 1;
         public int Pierces => Has(PerkId.Piercing) ? 1 : 0;
@@ -257,6 +268,7 @@ namespace Shatterspire
                 case PerkId.HeavyRapidCharge: HeavyChargeMultiplier *= 1.3f; break;
                 case PerkId.HeavyPower: HeavyDamageMultiplier *= 1.4f; break;
                 case PerkId.SkillHaste: SkillCooldownMultiplier *= 0.75f; break;
+                case PerkId.UltimateSurge: UltimateChargeMultiplier *= 1.3f; break;
                 case PerkId.Shield: GetComponent<Health>().IncreaseMaximum(25f, true); break;
             }
             Changed?.Invoke();

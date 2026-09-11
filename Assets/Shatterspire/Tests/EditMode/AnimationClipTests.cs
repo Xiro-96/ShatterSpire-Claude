@@ -32,6 +32,8 @@ namespace Shatterspire.Tests
             ("Idle", new[] { "Idle_A", "Idle_B", "Idle_No_Loop" }),
             ("Laufen", new[] { "Running_A", "Running_B", "Walking_A" }),
             ("Angriff", new[] { "Throw", "Use_Item", "Interact" }),
+            ("Schlag", new[] { "Use_Item", "Interact", "Throw" }),
+            ("Wuchtschlag", new[] { "Throw", "Use_Item" }),
             ("Dash", new[] { "Jump_Start", "Jump_Full_Short", "Jump_Full_Long" }),
             ("Ultimate", new[] { "Spawn_Ground", "Spawn_Air", "Throw" }),
             ("Trefferreaktion", new[] { "Hit_A", "Hit_B", "Hit_Knockback" })

@@ -23,6 +23,7 @@ namespace Shatterspire
             public int RemainingRicochets;
             public DamageType Type;
             public bool ChargeHeavyOnHit;
+            public bool Homing;
             public float ImpactRadius;
             public float ImpactDamage;
             public float VisualScale;
@@ -167,7 +168,7 @@ namespace Shatterspire
         private void Update()
         {
             if (Time.time >= despawnAt) { Despawn(); return; }
-            if (payload.Build && payload.Build.Has(PerkId.HomingShot))
+            if (payload.Homing || (payload.Build && payload.Build.Has(PerkId.HomingShot)))
             {
                 var target = Targeting.FindClosest(transform.position, 5f, payload.TargetTeam);
                 if (target)
@@ -306,6 +307,7 @@ namespace Shatterspire
             var execution = payload.Build && payload.Build.Has(PerkId.Execution) && health.Normalized <= 0.2f ? 2f : 1f;
             var amount = payload.Damage * execution;
             health.TakeDamage(new DamageInfo(amount, payload.Type, payload.Owner, hitPoint, direction * 3f, payload.Critical));
+            if (payload.Owner && payload.Owner.TryGetComponent<WeaponSystem>(out var shooter)) shooter.NotifyDamageDealt(amount);
             if (payload.ChargeHeavyOnHit && payload.Owner)
                 payload.Owner.GetComponent<WeaponSystem>()?.NotifyLightHit();
             ApplyElement(health, amount);

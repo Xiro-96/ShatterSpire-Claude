@@ -14,7 +14,7 @@ namespace Shatterspire.Tests
     public sealed class PerkCatalogTests
     {
         private static readonly HeroClassId[] AllHeroes = (HeroClassId[])Enum.GetValues(typeof(HeroClassId));
-        private static readonly ActionSlot[] Actions = { ActionSlot.Light, ActionSlot.Heavy, ActionSlot.Skill, ActionSlot.Dash };
+        private static readonly ActionSlot[] Actions = { ActionSlot.Light, ActionSlot.Heavy, ActionSlot.Skill, ActionSlot.Dash, ActionSlot.Ultimate };
 
         [Test]
         public void JedeIdHatGenauEinUpgrade()
@@ -50,10 +50,11 @@ namespace Shatterspire.Tests
         }
 
         [Test]
-        public void KeinUpgradeVerweistAufDieEntfernteUltimate()
+        public void JederHeldHatEineEigeneUltimate()
         {
-            foreach (var perk in PerkCatalog.All)
-                Assert.That((perk.Name + " " + perk.Description).ToUpperInvariant(), Does.Not.Contain("ULTIMATE"), $"{perk.Id}");
+            var names = AllHeroes.Select(HeroCatalog.UltimateName).ToList();
+            Assert.That(names.All(name => !string.IsNullOrWhiteSpace(name)), Is.True);
+            Assert.That(names.Distinct().Count(), Is.EqualTo(AllHeroes.Length));
         }
 
         [Test]

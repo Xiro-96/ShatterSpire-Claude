@@ -110,10 +110,11 @@ namespace Shatterspire
                 yield break;
             }
 
-            // Kleiner als die alten Arenawellen: jede Etage hat zusaetzlich Lager in ihren Raeumen.
+            // Spieltest 11.09.: drei bis vier Verteidiger hielten nur 3 bis 5 Sekunden. Jetzt immer zwei
+            // Wellen, zusammen mit fast doppelt so viel Leben je Gegner.
             var count = kind == RoomKind.Elite
-                ? 5 + Mathf.Min(3, floorIndex / 3)
-                : 3 + Mathf.Min(3, floorIndex / 2);
+                ? 7 + Mathf.Min(5, floorIndex / 2)
+                : 5 + Mathf.Min(5, floorIndex / 2);
             encounterTotal = count;
             PublishEncounter();
             var waveCount = count >= 5 ? 2 : 1;

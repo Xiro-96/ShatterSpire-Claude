@@ -1444,6 +1444,8 @@ namespace Shatterspire
         private AnimationClip roll;
         private AnimationClip ultimate;
         private AnimationClip hit;
+        private AnimationClip swing;
+        private AnimationClip smash;
         private Vector3 previousPosition;
         private float moveBlend;
         private float referenceSpeed = 6f;
@@ -1471,6 +1473,10 @@ namespace Shatterspire
             roll = FindClip(clips, "Jump_Start", "Jump_Full_Short", "Jump_Full_Long");
             ultimate = FindClip(clips, "Spawn_Ground", "Spawn_Air", "Throw");
             hit = FindClip(clips, "Hit_A", "Hit_B", "Hit_Knockback");
+            // Echte Schlagclips gibt es im Projekt nicht. Use_Item ist ein kurzer Arm nach vorn,
+            // Throw eine Bewegung ueber den Kopf - zusammen mit der Oberkoerper-Drehung der beste Ersatz.
+            swing = FindClip(clips, "Use_Item", "Interact", "Throw");
+            smash = FindClip(clips, "Throw", "Use_Item");
             WarnAboutMissingClips();
             if (!idle) return;
 
@@ -1501,6 +1507,22 @@ namespace Shatterspire
         }
 
         public void PulseAttack(float strength) => PlayAction(attack, 0.28f + strength * 0.08f, 1.15f);
+        /// <summary>Spielt nur den Kern des Clips - Ausholen und Durchziehen - in genau der Dauer der Bewegung.</summary>
+        public void PlayMotion(AttackMotion kind, float duration)
+        {
+            var clip = kind is AttackMotion.Swing or AttackMotion.Shot ? swing : smash;
+            var (from, to) = kind switch
+            {
+                AttackMotion.Swing => (0.1f, 0.7f),
+                AttackMotion.Shot => (0.2f, 0.55f),
+                AttackMotion.Spin => (0.25f, 0.7f),
+                _ => (0.12f, 0.72f)
+            };
+            if (!ready || !clip || clip.length <= 0f) return;
+            var span = clip.length * (to - from);
+            PlayAction(clip, duration, Mathf.Clamp(span / Mathf.Max(0.05f, duration), 0.5f, 4f), clip.length * from);
+        }
+
         public void PulseDash() => PlayAction(roll, 0.34f, 1.45f);
         public void PulseUltimate() => PlayAction(ultimate, 0.72f, 1.05f);
         public void PulseHit() => PlayAction(hit, 0.2f, 1.4f);
@@ -1554,7 +1576,7 @@ namespace Shatterspire
             topMixer.SetInputWeight(2, second);
         }
 
-        private void PlayAction(AnimationClip clip, float holdSeconds, float speed)
+        private void PlayAction(AnimationClip clip, float holdSeconds, float speed, float startTime = 0f)
         {
             if (!ready || !clip || !graph.IsValid()) return;
             // In den jeweils anderen Slot legen, damit der laufende Schlag
@@ -1565,6 +1587,7 @@ namespace Shatterspire
             playable.SetApplyFootIK(false);
             playable.SetApplyPlayableIK(false);
             playable.SetSpeed(speed);
+            if (startTime > 0f) playable.SetTime(startTime);
             graph.Connect(playable, 0, topMixer, slot + 1);
             actionPlayables[slot] = playable;
             activeSlot = slot;

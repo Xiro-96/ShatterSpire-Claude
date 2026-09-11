@@ -113,7 +113,7 @@ namespace Shatterspire.Editor
             Set("m_Settings.Radius", p => p.floatValue = 0.25f);
             Set("m_Settings.DirectLightingStrength", p => p.floatValue = 0.25f);
             Set("m_Settings.Downsample", p => p.boolValue = true);
-            Set("m_Settings.Samples", p => p.enumValueIndex = 2); // Low
+            Set("m_Settings.Samples", p => p.enumValueIndex = 1); // Medium - Low rauschte bei bewegter Kamera sichtbar
             settings.ApplyModifiedPropertiesWithoutUndo();
 
             EditorUtility.SetDirty(ssao);

@@ -342,8 +342,19 @@ namespace Shatterspire
         }
     }
 
+    /// <summary>
+    /// Angriffsbewegungen. Die Animationsbibliotheken im Projekt enthalten keine Schlag-, Schuss- oder
+    /// Zauberclips; die Bewegung entsteht aus dem naechstpassenden Clip plus Oberkoerper-Drehung.
+    /// </summary>
+    public enum AttackMotion { Swing, Smash, Spin, Shot, Cast }
+
     public sealed class StylizedCharacterMotion : MonoBehaviour
     {
+        private Transform chest;
+        private Renderer skin;
+        private AttackMotion motionKind;
+        private float motionStarted = -10f;
+        private float motionDuration;
         private Transform model;
         private Vector3 modelOrigin;
         private Vector3 modelBaseScale = Vector3.one;
@@ -372,6 +383,10 @@ namespace Shatterspire
             authored = true;
             if (animator)
             {
+                chest = animator.GetBoneTransform(HumanBodyBones.UpperChest)
+                        ?? animator.GetBoneTransform(HumanBodyBones.Chest)
+                        ?? animator.GetBoneTransform(HumanBodyBones.Spine);
+                skin = visual.GetComponentInChildren<SkinnedMeshRenderer>();
                 authoredAnimation = gameObject.AddComponent<ChampionAnimationDriver>();
                 authoredAnimation.Configure(animator, topSpeed);
             }
@@ -381,6 +396,23 @@ namespace Shatterspire
         {
             recoil = Mathf.Max(recoil, strength);
             authoredAnimation?.PulseAttack(strength);
+        }
+
+        /// <summary>Angriff mit eigener Bewegung: Ausholen, Durchziehen, beim Wirbel eine volle Drehung.</summary>
+        public void PlayMotion(AttackMotion kind, float strength = 1f)
+        {
+            motionKind = kind;
+            motionStarted = Time.time;
+            motionDuration = kind switch
+            {
+                AttackMotion.Swing => 0.3f,
+                AttackMotion.Smash => 0.38f,
+                AttackMotion.Spin => 0.36f,
+                AttackMotion.Cast => 0.3f,
+                _ => 0.2f
+            };
+            recoil = Mathf.Max(recoil, strength * (kind == AttackMotion.Spin ? 0.25f : kind == AttackMotion.Shot ? 0.55f : 0.8f));
+            authoredAnimation?.PlayMotion(kind, motionDuration);
         }
 
         public void PulseDash() => authoredAnimation?.PulseDash();
@@ -413,19 +445,53 @@ namespace Shatterspire
                     Mathf.Clamp(local.x / 7f, -1f, 1f));
                 lean = Vector2.Lerp(lean, desiredLean, 1f - Mathf.Exp(-9f * Time.deltaTime));
 
+                var t = motionDuration > 0f ? (Time.time - motionStarted) / motionDuration : 1f;
+                var moving = t >= 0f && t < 1f;
+                // Wirbel: die ganze Figur dreht sich einmal, schnell hinein, weich hinaus.
+                var spin = moving && motionKind == AttackMotion.Spin ? (1f - Mathf.Pow(1f - t, 3f)) * 360f : 0f;
+
                 model.localPosition = modelOrigin + new Vector3(0f, 0f, -recoil * 0.17f);
                 model.localRotation = Quaternion.Euler(
-                    recoil * -11f + lean.x * 5.5f, 0f, lean.y * -5.5f);
+                    recoil * -11f + lean.x * 5.5f, spin, lean.y * -5.5f);
                 model.localScale = new Vector3(
                     modelBaseScale.x * stretch,
                     modelBaseScale.y * squash,
                     modelBaseScale.z * stretch);
+                // Nur waehrend der Bewegung und nur sichtbar: ausserhalb des Bilds schreibt die Animation
+                // den Knochen nicht neu, die Drehung wuerde sich sonst aufsummieren.
+                if (moving && chest && (!skin || skin.isVisible)) ApplyChestMotion(t);
                 return;
             }
             var bob = Mathf.Abs(Mathf.Sin(Time.time * stepFrequency)) * 0.075f * movement;
             var sway = Mathf.Sin(Time.time * stepFrequency * 0.5f) * 3.5f * movement;
             model.localPosition = modelOrigin + new Vector3(0f, bob, -recoil * 0.08f);
             model.localRotation = Quaternion.Euler(recoil * -7f, 0f, sway);
+        }
+
+        /// <summary>
+        /// Dreht den Oberkoerper um Achsen der Figur statt um Knochenachsen: die Achsen der Rigs sind
+        /// unbekannt, "um die Hochachse" und "nach vorn kippen" dagegen eindeutig.
+        /// </summary>
+        private void ApplyChestMotion(float t)
+        {
+            float twist = 0f, pitch = 0f;
+            switch (motionKind)
+            {
+                case AttackMotion.Swing: twist = Curve(t, 0.32f, 0.62f, 40f, -55f); break;
+                case AttackMotion.Smash: pitch = Curve(t, 0.4f, 0.62f, -28f, 34f); break;
+                case AttackMotion.Spin: pitch = Mathf.Sin(t * Mathf.PI) * 12f; break;
+                case AttackMotion.Cast: pitch = Curve(t, 0.4f, 0.6f, -18f, 22f); break;
+                default: pitch = -Mathf.Sin(t * Mathf.PI) * 10f; break;
+            }
+            chest.rotation = Quaternion.AngleAxis(twist, transform.up) * Quaternion.AngleAxis(pitch, transform.right) * chest.rotation;
+        }
+
+        /// <summary>Ausholen (weich), Schlag (schnell), zurueck in die Ruhe (weich).</summary>
+        private static float Curve(float t, float windupEnd, float strikeEnd, float windup, float strike)
+        {
+            if (t < windupEnd) return Mathf.Lerp(0f, windup, Mathf.SmoothStep(0f, 1f, t / windupEnd));
+            if (t < strikeEnd) return Mathf.Lerp(windup, strike, 1f - Mathf.Pow(1f - (t - windupEnd) / (strikeEnd - windupEnd), 3f));
+            return Mathf.Lerp(strike, 0f, Mathf.SmoothStep(0f, 1f, (t - strikeEnd) / (1f - strikeEnd)));
         }
     }
 

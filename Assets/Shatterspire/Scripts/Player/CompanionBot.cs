@@ -128,10 +128,10 @@ namespace Shatterspire
             Face(delta);
             if (Time.time < nextAttack || delta.sqrMagnitude > 2.75f * 2.75f) return;
 
-            nextAttack = Time.time + 1.6f;
-            motion?.PulseAttack(1.25f);
+            nextAttack = Time.time + 1.7f;
+            motion?.PlayMotion(AttackMotion.Smash, 1.25f);
             var impact = transform.position + transform.forward * 1.35f;
-            CombatUtility.Explode(impact, 1.8f, 8f, TeamId.Enemy, DamageType.Physical, gameObject);
+            CombatUtility.Explode(impact, 1.8f, 9f, TeamId.Enemy, DamageType.Physical, gameObject);
             PrototypeVfx.SpawnExplosion(impact + Vector3.up * 0.25f, 1.65f, accent);
             CameraController.Impulse(0.045f);
         }
@@ -150,21 +150,21 @@ namespace Shatterspire
             delta.y = 0f;
             Face(delta);
             if (Time.time < nextAttack) return;
-            nextAttack = Time.time + 0.58f;
+            nextAttack = Time.time + 0.75f;
             var direction = delta.sqrMagnitude > 0.01f ? delta.normalized : transform.forward;
             var start = muzzle ? muzzle.position : transform.position + Vector3.up + direction * 0.7f;
             Projectile.Spawn(start, direction, new Projectile.Payload
             {
                 Owner = gameObject,
                 TargetTeam = TeamId.Enemy,
-                Damage = 5.5f,
+                Damage = 4f,
                 Type = DamageType.Physical,
                 RemainingPierces = 1,
                 VisualScale = 0.92f,
                 VisualKind = ProjectileVisualKind.Arrow
             }, 21f);
             PrototypeVfx.SpawnMuzzle(start, direction);
-            motion?.PulseAttack(0.7f);
+            motion?.PlayMotion(AttackMotion.Shot, 0.7f);
         }
 
         private void SupportUpdate(Health threat)
@@ -179,20 +179,20 @@ namespace Shatterspire
                 Face(delta);
                 if (Time.time >= nextAttack)
                 {
-                    nextAttack = Time.time + 1.25f;
+                    nextAttack = Time.time + 1.35f;
                     var direction = delta.sqrMagnitude > 0.01f ? delta.normalized : transform.forward;
                     var start = muzzle ? muzzle.position : transform.position + Vector3.up * 1.1f + direction * 0.65f;
                     Projectile.Spawn(start, direction, new Projectile.Payload
                     {
                         Owner = gameObject,
                         TargetTeam = TeamId.Enemy,
-                        Damage = 3.2f,
+                        Damage = 3f,
                         Type = DamageType.Holy,
                         RemainingRicochets = 1,
                         VisualScale = 0.9f
                     }, 20f);
                     PrototypeVfx.SpawnMuzzle(start, direction);
-                    motion?.PulseAttack(0.68f);
+                    motion?.PlayMotion(AttackMotion.Cast, 0.68f);
                 }
             }
             else

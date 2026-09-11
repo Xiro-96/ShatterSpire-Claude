@@ -9,6 +9,8 @@ namespace Shatterspire
         private const float WallThickness = 0.8f;
         private const float WallColliderHeight = 2.6f;
         private const float WallModelSpacing = 3.8f;
+        /// <summary>Oberkante einer Bodenkachel je Einheit Kachelgroesse, einmal gemessen. -1 = noch nicht.</summary>
+        private static float tileTopPerSize = -1f;
 
         /// <summary>
         /// Baut die Geometrie einer Etage aus ihrem Layout: Boden, Waende mit Durchgaengen, Gaenge,
@@ -50,7 +52,8 @@ namespace Shatterspire
             roomRoot.SetParent(root, false);
 
             // Fundament unter dem Boden: der Raum liest sich als Plattform ueber dem Abgrund.
-            ArenaPart(roomRoot, PrimitiveType.Cube, "Room Foundation", new Vector3(center.x, -0.45f, center.z),
+            // Oberkante knapp unter y = 0: dort liegt jetzt die Kacheloberflaeche, gleiche Hoehe wuerde flackern.
+            ArenaPart(roomRoot, PrimitiveType.Cube, "Room Foundation", new Vector3(center.x, -0.47f, center.z),
                 new Vector3(bounds.Width + 1.6f, 0.9f, bounds.Depth + 1.6f), new Color(0.22f, 0.17f, 0.14f),
                 false, 0.04f, false);
 
@@ -89,10 +92,36 @@ namespace Shatterspire
                 var tint = edge ? edgeTint : innerTint;
                 var tile = SpawnDungeonModel(parent, model, position, ((ix + iz) & 1) * 90f, size,
                     FitAxis.Horizontal, tint);
+                // Nachbarkacheln ueberlappen leicht. Zwei Flaechen auf exakt derselben Hoehe flackern
+                // gegeneinander (Z-Fighting) - im Spielbild vom 11.09. als Schraffur an den Kachelkanten.
+                // Jede Kachel liegt deshalb wenige Millimeter anders als ihre Nachbarn, auch diagonal.
+                var stagger = ((ix + iz) & 1) * 0.006f + (ix & 1) * 0.003f;
+                if (tile) tile.transform.position += Vector3.up * (stagger - TileTop(parent, size));
                 if (!tile)
                     ArenaPart(parent, PrimitiveType.Cube, "Floor Slab", position + Vector3.down * 0.05f,
                         new Vector3(stepX + 0.05f, 0.1f, stepZ + 0.05f), tint, false, 0.08f, false);
             }
+        }
+
+        /// <summary>
+        /// Hoehe der Kacheloberflaeche bei gegebener Groesse. Kacheln werden so tief gesetzt, dass ihre
+        /// Oberflaeche bei y = 0 liegt - dort stehen die Figuren, knapp darueber liegen Schattenfleck,
+        /// Auswahlring und Zielmarkierung. Vorher lag die Oberflaeche hoeher, diese flachen Quads steckten
+        /// halb im Boden und flackerten, sobald sich jemand bewegte.
+        /// </summary>
+        private static float TileTop(Transform parent, float size)
+        {
+            if (tileTopPerSize < 0f)
+            {
+                tileTopPerSize = 0f;
+                var probe = SpawnDungeonModel(parent, "floor_tile_large", Vector3.zero, 0f, 4f, FitAxis.Horizontal, Color.white);
+                if (probe)
+                {
+                    if (TryGetBounds(probe, out var bounds)) tileTopPerSize = Mathf.Max(0f, bounds.max.y) / 4f;
+                    UnityEngine.Object.DestroyImmediate(probe);
+                }
+            }
+            return tileTopPerSize * size;
         }
 
         private static void BuildRoomWalls(Transform parent, FloorLayout layout, LayoutRoom room)
@@ -175,7 +204,7 @@ namespace Shatterspire
                 ? new Area(Mathf.Min(a.MaxX, b.MaxX), Mathf.Max(a.MinX, b.MinX), corridor.MinZ, corridor.MaxZ)
                 : new Area(corridor.MinX, corridor.MaxX, Mathf.Min(a.MaxZ, b.MaxZ), Mathf.Max(a.MinZ, b.MinZ));
             var middle = span.Center;
-            ArenaPart(corridorRoot, PrimitiveType.Cube, "Corridor Foundation", new Vector3(middle.x, -0.45f, middle.z),
+            ArenaPart(corridorRoot, PrimitiveType.Cube, "Corridor Foundation", new Vector3(middle.x, -0.47f, middle.z),
                 door.AlongX
                     ? new Vector3(span.Width, 0.9f, span.Depth + 1.6f)
                     : new Vector3(span.Width + 1.6f, 0.9f, span.Depth),

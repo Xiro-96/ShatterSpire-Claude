@@ -21,7 +21,7 @@ namespace Shatterspire
         public void OnPointerUp(PointerEventData eventData) { MobileInput.Move = Vector2.zero; knob.anchoredPosition = Vector2.zero; }
     }
 
-    public enum MobileAction { Attack, Heavy, Skill, Dash }
+    public enum MobileAction { Attack, Heavy, Skill, Dash, Ultimate }
 
     public sealed class MobileActionButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     {
@@ -35,6 +35,7 @@ namespace Shatterspire
                 case MobileAction.Heavy: MobileInput.SetHeavy(true); break;
                 case MobileAction.Skill: MobileInput.PressSkill(); break;
                 case MobileAction.Dash: MobileInput.PressDash(); break;
+                case MobileAction.Ultimate: MobileInput.PressUltimate(); break;
             }
         }
         public void OnPointerUp(PointerEventData eventData)

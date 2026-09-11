@@ -30,6 +30,8 @@ namespace Shatterspire
         private ActionButtonView heavyButton;
         private ActionButtonView skillButton;
         private ActionButtonView dashButton;
+        private ActionButtonView ultimateButton;
+        private bool ultimateWasReady;
         private Text heavyStateText;
         private CompanionBot[] team = Array.Empty<CompanionBot>();
         private Text[] teamStatus;
@@ -208,7 +210,8 @@ namespace Shatterspire
             abilitySprites = new[]
             {
                 UiIconFactory.Ability(runConfig.Hero, 0), UiIconFactory.Ability(runConfig.Hero, 1),
-                UiIconFactory.Ability(runConfig.Hero, 2), UiIconFactory.Ability(runConfig.Hero, 3)
+                UiIconFactory.Ability(runConfig.Hero, 2), UiIconFactory.Ability(runConfig.Hero, 3),
+                UiIconFactory.Ability(runConfig.Hero, 4)
             };
         }
 
@@ -347,6 +350,12 @@ namespace Shatterspire
                 new Color(0.62f, 0.32f, 1f), MobileAction.Skill);
             dashButton = CreateActionButton(parent, 2, mobile ? "DASH" : "SPACE", new Vector2(-140, 345), 100,
                 new Color(0.18f, 0.74f, 1f), MobileAction.Dash);
+            // Ultimate oben im Bogen: laedt sich im Kampf, der Ring zeigt die Ladung.
+            ultimateButton = CreateActionButton(parent, 4, mobile ? weapon.UltimateName : "R", new Vector2(-300, 440), 110,
+                new Color(1f, 0.74f, 0.16f), MobileAction.Ultimate);
+            ultimateButton.Status = CreateText(ultimateButton.Root, string.Empty, 15, TextAnchor.MiddleCenter,
+                new Vector2(0, ultimateButton.Size * 0.5f + 14f), new Vector2(200, 20), new Vector2(0.5f, 0.5f));
+            ultimateButton.Status.color = new Color(1f, 0.82f, 0.2f);
 
             // Goldenes Fenster fuer den perfekten Heavy: 50 bis 76 % der Ladung.
             heavyButton.PerfectZone = CreateRing(heavyButton.Root, "Perfect Zone", heavyButton.Size + 28f, new Color(1f, 0.8f, 0.12f, 0.6f), 0.26f);
@@ -425,7 +434,7 @@ namespace Shatterspire
                 var remaining = weapon.SkillCooldownRemaining;
                 var ready = remaining <= 0f;
                 skillButton.Cooldown.fillAmount = ready ? 0f : 1f - weapon.SkillNormalized;
-                skillButton.Center.text = ready ? string.Empty : remaining >= 1f ? Mathf.CeilToInt(remaining).ToString() : remaining.ToString("0.0");
+                skillButton.Center.text = ready ? string.Empty : remaining >= 1f ? Mathf.CeilToInt(remaining).ToString() : remaining.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
                 if (ready && !skillWasReady) skillButton.Punch();
                 skillWasReady = ready;
             }
@@ -449,7 +458,25 @@ namespace Shatterspire
             if (heavyButton != null && weapon.HeavyReady && !weapon.ChargingHeavy)
                 heavyButton.Progress.color = Color.Lerp(new Color(1f, 0.66f, 0.1f), new Color(1f, 0.95f, 0.7f),
                     0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 8f));
+            if (ultimateButton != null)
+            {
+                var ready = weapon.UltimateReady;
+                ultimateButton.Progress.fillAmount = weapon.UltimateNormalized;
+                ultimateButton.Progress.color = ready
+                    ? Color.Lerp(new Color(1f, 0.62f, 0.08f), new Color(1f, 0.96f, 0.72f), 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 7f))
+                    : new Color(1f, 0.74f, 0.16f);
+                ultimateButton.Cooldown.fillAmount = weapon.UltimateActive ? 1f : 1f - weapon.UltimateNormalized;
+                ultimateButton.Center.text = ready || weapon.UltimateActive ? string.Empty : Mathf.FloorToInt(weapon.UltimateNormalized * 100f) + "%";
+                ultimateButton.Status.text = ready ? "ULTIMATE READY" : string.Empty;
+                if (ready && !ultimateWasReady)
+                {
+                    ultimateButton.Punch();
+                    ShowAnnouncement($"{weapon.UltimateName} READY\n{(Application.isMobilePlatform ? "TAP ULTIMATE" : "PRESS R")}", 1.2f);
+                }
+                ultimateWasReady = ready;
+            }
             lightButton?.Tick();
+            ultimateButton?.Tick();
             heavyButton?.Tick();
             skillButton?.Tick();
             dashButton?.Tick();
@@ -464,6 +491,7 @@ namespace Shatterspire
             public Image[] Pips = Array.Empty<Image>();
             public Text Center;
             public Text Badge;
+            public Text Status;
             public float Size;
             public Color Accent;
             public int BadgeCount;
@@ -681,7 +709,7 @@ namespace Shatterspire
         /// <summary>Upgrades zeigen sich an der Aktion, die sie veraendern: "+2" am Knopf. Passive stehen unter dem Namen.</summary>
         private void RefreshBuild()
         {
-            var counts = new int[5];
+            var counts = new int[Enum.GetValues(typeof(ActionSlot)).Length];
             var passives = new List<string>();
             foreach (var id in build.Perks)
             {
@@ -694,6 +722,7 @@ namespace Shatterspire
             SetBadge(heavyButton, counts[(int)ActionSlot.Heavy]);
             SetBadge(skillButton, counts[(int)ActionSlot.Skill]);
             SetBadge(dashButton, counts[(int)ActionSlot.Dash]);
+            SetBadge(ultimateButton, counts[(int)ActionSlot.Ultimate]);
             var fusion = build.IsInferno ? "  ·  FUSION: INFERNO" : build.IsShatter ? "  ·  FUSION: SHATTER" : build.IsChainStorm ? "  ·  FUSION: CHAIN STORM" : string.Empty;
             buildText.text = passives.Count > 0 ? string.Join(" · ", passives) + fusion
                 : build.Perks.Count > 0 ? "UPGRADES SHOWN ON YOUR ACTIONS" : "NO UPGRADES YET";

@@ -123,6 +123,13 @@ namespace Shatterspire
             HeroClassId.Arcanist => "BLACK STAR",
             _ => "ARROW STORM"
         };
+
+        public static string UltimateName(HeroClassId hero) => hero switch
+        {
+            HeroClassId.Guardian => "FORGE QUAKE",
+            HeroClassId.Arcanist => "SINGULARITY",
+            _ => "RIFT BARRAGE"
+        };
     }
 
     public static class FloorCatalog

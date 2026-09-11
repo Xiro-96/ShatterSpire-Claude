@@ -5,10 +5,9 @@ using UnityEngine;
 namespace Shatterspire
 {
     /// <summary>
-    /// Die Aktionen eines Helden wie in R.I.S.E.: Light, Heavy und Skill, dazu die Dash-Effekte.
-    /// Eine Ultimate gibt es nicht mehr - ihre Wirkung ist jetzt das Skill-Upgrade OVERDRIVE.
-    /// Upgrades veraendern gezielt eine dieser Aktionen; die Abfragen stehen jeweils dort, wo die
-    /// Aktion ausgefuehrt wird.
+    /// Die Aktionen eines Helden: Light, Heavy und Skill wie in R.I.S.E., dazu Dash-Effekte und die
+    /// Ultimate auf R, die sich im Kampf laedt. Upgrades veraendern gezielt eine dieser Aktionen; die
+    /// Abfragen stehen jeweils dort, wo die Aktion ausgefuehrt wird.
     /// </summary>
     [RequireComponent(typeof(PlayerInputRouter), typeof(PlayerBuild), typeof(Health))]
     public sealed class WeaponSystem : MonoBehaviour
@@ -20,6 +19,11 @@ namespace Shatterspire
         // Zielhilfe nur knapp neben der Ziellinie. Alles ausserhalb trifft nur, wer dorthin zielt.
         private const float AimAssistAngle = 12f;
         private const float AimAssistRange = 15f;
+        /// <summary>
+        /// Schaden bis zur vollen Ultimate, in Grundschaden des Helden. Bei Dauerfeuer rund 20 bis 25
+        /// Sekunden; zusammen mit erlittenem Schaden und Kills etwa eine Ultimate je grossem Kampf.
+        /// </summary>
+        private const float UltimateDamageUnits = 70f;
         private readonly List<Health> strikeTargets = new();
         private PlayerInputRouter input;
         private PlayerBuild build;
@@ -33,14 +37,15 @@ namespace Shatterspire
         private float heavyMeter;
         private float heavyCharge;
         private bool chargingHeavy;
+        private float ultimateCharge;
+        private bool ultimateActive;
         private int lightComboStep;
         private float comboExpiresAt;
         private Health lockedTarget;
         private TargetLockIndicator targetIndicator;
 
         private float BaseDamage => HeroCatalog.BaseDamage(heroClass);
-        private float SkillCooldown => HeroCatalog.SkillCooldown(heroClass) * build.SkillCooldownMultiplier *
-                                       (build.Has(PerkId.SkillOverdrive) ? 1.4f : 1f);
+        private float SkillCooldown => HeroCatalog.SkillCooldown(heroClass) * build.SkillCooldownMultiplier;
         public float SkillNormalized => Mathf.Clamp01(1f - (skillReadyAt - Time.time) / SkillCooldown);
         public float SkillCooldownRemaining => Mathf.Max(0f, skillReadyAt - Time.time);
         public float HeavyMeterNormalized => heavyMeter / HeavyMeterMaximum;
@@ -48,10 +53,14 @@ namespace Shatterspire
         public bool HeavyReady => heavyMeter >= HeavyMeterMaximum;
         public bool ChargingHeavy => chargingHeavy;
         public bool HeavyPerfect => chargingHeavy && HeavyChargeNormalized >= PerfectStart && HeavyChargeNormalized <= PerfectEnd;
+        public float UltimateNormalized => ultimateCharge;
+        public bool UltimateReady => ultimateCharge >= 1f;
+        public bool UltimateActive => ultimateActive;
         public HeroClassId HeroClass => heroClass;
         public string LightName => HeroCatalog.LightAttackName(heroClass);
         public string HeavyName => HeroCatalog.HeavyAttackName(heroClass);
         public string SkillName => HeroCatalog.SkillName(heroClass);
+        public string UltimateName => HeroCatalog.UltimateName(heroClass);
 
         public void ConfigureClass(HeroClassId value) => heroClass = value;
 
@@ -69,7 +78,15 @@ namespace Shatterspire
             controller = GetComponent<PlayerController>();
             motion = GetComponent<StylizedCharacterMotion>();
             targetIndicator = gameObject.AddComponent<TargetLockIndicator>();
+            health.Damaged += OnDamaged;
+            GameEvents.EntityDied += OnEntityDied;
             PublishHeavyState();
+        }
+
+        private void OnDestroy()
+        {
+            if (health) health.Damaged -= OnDamaged;
+            GameEvents.EntityDied -= OnEntityDied;
         }
 
         private void Update()
@@ -77,9 +94,11 @@ namespace Shatterspire
             if (!health.IsAlive || Time.timeScale <= 0f) return;
             UpdateHeavyAttack();
             UpdateTargetLock();
-            if (!chargingHeavy && input.AttackHeld) TryLightAttack();
-            if (!chargingHeavy && input.SkillPressed && Time.time >= skillReadyAt)
+            if (!chargingHeavy && input.AttackHeld && !ultimateActive) TryLightAttack();
+            if (!chargingHeavy && input.SkillPressed && Time.time >= skillReadyAt && !ultimateActive)
                 StartCoroutine(ClassSkill());
+            if (!chargingHeavy && input.UltimatePressed && UltimateReady && !ultimateActive)
+                StartCoroutine(Ultimate());
         }
 
         public void NotifyLightHit()
@@ -94,9 +113,38 @@ namespace Shatterspire
             PublishHeavyState();
         }
 
+        // ── Ultimate-Ladung ─────────────────────────────────────────────────
+
+        /// <summary>Schaden des Spielers laedt die Ultimate. Gerufen von Strike und von Projektiltreffern.</summary>
+        public void NotifyDamageDealt(float amount)
+        {
+            if (amount <= 0f) return;
+            AddUltimateCharge(amount / (BaseDamage * UltimateDamageUnits));
+        }
+
+        private void OnDamaged(DamageInfo damage)
+        {
+            // Wer einsteckt, laedt mit: 40 % der Lebenspunkte verloren ergibt 16 % Ladung.
+            if (health.Maximum > 0f) AddUltimateCharge(damage.Amount / (health.Maximum * 2.5f));
+        }
+
+        private void OnEntityDied(Health value)
+        {
+            if (value && value.Team == TeamId.Enemy) AddUltimateCharge(0.02f);
+        }
+
+        private void AddUltimateCharge(float amount)
+        {
+            if (ultimateActive || UltimateReady || amount <= 0f) return;
+            ultimateCharge = Mathf.Min(1f, ultimateCharge + amount * build.UltimateChargeMultiplier);
+            if (!UltimateReady) return;
+            PrototypeVfx.SpawnHeavyReady(transform.position);
+            CameraController.Impulse(0.06f);
+        }
+
         private void UpdateHeavyAttack()
         {
-            if (input.HeavyPressed && HeavyReady && !chargingHeavy)
+            if (input.HeavyPressed && HeavyReady && !chargingHeavy && !ultimateActive)
             {
                 chargingHeavy = true;
                 heavyCharge = 0f;
@@ -116,32 +164,16 @@ namespace Shatterspire
             if (Time.time < nextShot) return;
             if (Time.time > comboExpiresAt) lightComboStep = 0;
             lightComboStep = lightComboStep % 3 + 1;
-            comboExpiresAt = Time.time + 0.95f;
             var finisher = lightComboStep == 3;
             var direction = AcquireAttackDirection();
 
             if (heroClass == HeroClassId.Guardian)
             {
-                nextShot = Time.time + (finisher ? 0.62f : 0.38f) / build.AttackSpeedMultiplier;
-                var point = transform.position + direction * (finisher ? 1.55f : 1.2f);
-                var meleeRadius = (finisher ? 1.75f : 1.15f) + build.Pierces * 0.28f;
-                var meleeDamage = BaseDamage * build.DamageMultiplier * (finisher ? 1.55f : 1f);
-                var type = ResolveDamageType(DamageType.Physical);
-                Strike(point, meleeRadius, meleeDamage, type);
-                if ((finisher && build.Ricochets > 0) || build.ProjectileCount > 1)
-                    Strike(point + direction * 1.25f, meleeRadius * 0.82f, meleeDamage * 0.62f, type);
-                if (finisher && build.Has(PerkId.GuardianCleaveWave))
-                    StartCoroutine(Eruptions(transform.position, direction, 3, 3.4f, 2.4f, 1.2f, meleeDamage * 0.7f, 0.07f));
-                NotifyLightHit();
-                // Nur noch auf dem Abschluss. Vorher schob jeder einzelne Schlag
-                // nach vorn, was bei gehaltenem Angriff zu stetigem Kriechen ohne
-                // Eingabe fuehrte - die Figur lief scheinbar von allein.
-                if (finisher) controller?.CombatStep(direction, 0.42f);
-                motion?.PulseAttack(finisher ? 1.35f : 0.92f);
-                if (finisher) CameraController.Impulse(0.085f);
+                HammerCombo(direction);
                 return;
             }
 
+            comboExpiresAt = Time.time + 0.95f;
             var interval = heroClass == HeroClassId.Arcanist ? 0.34f : finisher ? 0.42f : 0.25f;
             nextShot = Time.time + interval / build.AttackSpeedMultiplier;
             var damage = BaseDamage * (finisher ? 1.38f : lightComboStep == 2 ? 1.1f : 1f);
@@ -160,8 +192,73 @@ namespace Shatterspire
                     build.Ricochets, finisher ? 1.25f : 1f, impactRadius, impactDamage);
             }
             if (finisher) controller?.CombatStep(direction, 0.17f);
-            PulseShot();
+            PulseShot(finisher ? 1f : 0.62f);
             if (finisher) CameraController.Impulse(0.055f);
+        }
+
+        /// <summary>
+        /// Brax' Hammer-Kombo: erster Schlag quer, zweiter ueber den Kopf mit Wucht, dritter ein Wirbel
+        /// um sich selbst. Der Schaden faellt im Moment des Treffers, nicht beim Tastendruck - vorher
+        /// traf jeder Schlag, bevor der Hammer sich bewegt hatte, und es sah aus wie "nur so tun".
+        /// </summary>
+        private void HammerCombo(Vector3 direction)
+        {
+            var type = ResolveDamageType(DamageType.Physical);
+            var reach = build.Pierces * 0.28f;
+            var hit = BaseDamage * build.DamageMultiplier;
+            var accent = HeroCatalog.Accent(heroClass);
+            comboExpiresAt = Time.time + 1.1f;
+
+            if (lightComboStep == 1)
+            {
+                nextShot = Time.time + 0.34f / build.AttackSpeedMultiplier;
+                motion?.PlayMotion(AttackMotion.Swing, 0.9f);
+                StartCoroutine(MeleeImpact(0.11f, () =>
+                {
+                    var point = transform.position + direction * 1.25f;
+                    Strike(point, 1.35f + reach, hit, type);
+                    if (build.ProjectileCount > 1) Strike(point + direction * 1.2f, 1.1f, hit * 0.6f, type);
+                }));
+                return;
+            }
+
+            if (lightComboStep == 2)
+            {
+                nextShot = Time.time + 0.42f / build.AttackSpeedMultiplier;
+                motion?.PlayMotion(AttackMotion.Smash, 1.1f);
+                StartCoroutine(MeleeImpact(0.15f, () =>
+                {
+                    var point = transform.position + direction * 1.55f;
+                    Strike(point, 1.7f + reach, hit * 1.4f, type, 7f);
+                    PrototypeVfx.SpawnShockwave(point, 2.1f, accent);
+                    if (build.ProjectileCount > 1) Strike(point + direction * 1.25f, 1.3f, hit * 0.8f, type);
+                    controller?.CombatStep(direction, 0.25f);
+                    CameraController.Impulse(0.06f);
+                }));
+                return;
+            }
+
+            nextShot = Time.time + 0.6f / build.AttackSpeedMultiplier;
+            motion?.PlayMotion(AttackMotion.Spin, 1.3f);
+            StartCoroutine(MeleeImpact(0.12f, () =>
+            {
+                var radius = 2.6f + reach;
+                Strike(transform.position, radius, hit * 1.75f, type, 8f);
+                PrototypeVfx.SpawnShockwave(transform.position, radius + 0.4f, accent);
+                CameraController.Impulse(0.09f);
+                Hitstop.Freeze(0.04f, 0.1f);
+                if (build.Ricochets > 0) StartCoroutine(DelayedBlast(transform.position, radius * 0.85f, hit * 0.6f, type, 0.22f));
+                if (build.Has(PerkId.GuardianCleaveWave))
+                    StartCoroutine(Eruptions(transform.position, direction, 3, 3.4f, 2.4f, 1.2f, hit * 1.2f, 0.07f));
+            }));
+        }
+
+        private IEnumerator MeleeImpact(float delay, System.Action impact)
+        {
+            yield return new WaitForSeconds(delay);
+            if (!health.IsAlive) yield break;
+            impact();
+            NotifyLightHit();
         }
 
         // ── HEAVY ───────────────────────────────────────────────────────────
@@ -179,11 +276,12 @@ namespace Shatterspire
                 var point = transform.position + direction * 1.4f;
                 var damage = BaseDamage * multiplier * build.DamageMultiplier;
                 var type = ResolveDamageType(DamageType.Physical);
-                Strike(point, perfect ? 4.25f : 3.15f, damage, type);
+                Strike(point, perfect ? 4.25f : 3.15f, damage, type, 9f);
                 PrototypeVfx.SpawnShockwave(point, perfect ? 4.8f : 3.6f, new Color(1f, 0.55f, 0.08f));
                 if (build.Has(PerkId.GuardianEarthsplitter))
                     StartCoroutine(Eruptions(transform.position, direction, 4, 5.8f, 2.4f, 1.3f, damage * 0.45f, 0.08f));
                 if (echo) StartCoroutine(DelayedBlast(point, 4.6f, damage * 0.6f, type, 0.35f));
+                motion?.PlayMotion(AttackMotion.Smash, perfect ? 1.5f : 1.05f);
             }
             else if (heroClass == HeroClassId.Arcanist)
             {
@@ -195,6 +293,7 @@ namespace Shatterspire
                 if (build.Has(PerkId.ArcanistCollapse))
                     StartCoroutine(DelayedBlast(target + direction * 3.4f, 3f, damage * 0.6f, type, 0.3f));
                 if (echo) StartCoroutine(DelayedBlast(target, 4.6f, damage * 0.6f, type, 0.4f));
+                motion?.PlayMotion(AttackMotion.Cast, perfect ? 1.5f : 1.05f);
             }
             else
             {
@@ -209,6 +308,7 @@ namespace Shatterspire
                         perfect || build.HasEmberLens ? 2.8f : 1.8f,
                         BaseDamage * build.DamageMultiplier * (perfect ? 1.6f : 0.9f));
                 }
+                motion?.PlayMotion(AttackMotion.Shot, perfect ? 1.5f : 1.05f);
             }
 
             PrototypeVfx.SpawnExplosion(transform.position + direction * 1.1f + Vector3.up * 0.3f,
@@ -217,7 +317,6 @@ namespace Shatterspire
             // Das Perfect-Fenster ist die praeziseste Eingabe im ganzen Spiel und
             // hatte bisher kein eigenes Feedback ausser dem Schaden.
             Hitstop.Freeze(perfect ? 0.095f : 0.05f, perfect ? 0.04f : 0.09f);
-            motion?.PulseAttack(perfect ? 1.5f : 1.05f);
             heavyMeter = 0f;
             heavyCharge = 0f;
             chargingHeavy = false;
@@ -230,16 +329,12 @@ namespace Shatterspire
         private IEnumerator ClassSkill()
         {
             skillReadyAt = Time.time + SkillCooldown;
-            if (build.Has(PerkId.SkillOverdrive))
-            {
-                yield return Overdrive();
-                yield break;
-            }
-
+            if (build.Has(PerkId.SkillOvercharge)) AddUltimateCharge(0.1f);
             var direction = AcquireAttackDirection();
-            motion?.PulseAttack(1.2f);
+
             if (heroClass == HeroClassId.Guardian)
             {
+                motion?.PlayMotion(AttackMotion.Swing, 1.2f);
                 health.SetInvulnerable(0.55f);
                 var type = ResolveDamageType(DamageType.Physical);
                 for (var i = 0; i < 8; i++)
@@ -250,14 +345,17 @@ namespace Shatterspire
                 }
                 PrototypeVfx.SpawnShockwave(transform.position, 3.4f, HeroCatalog.Accent(heroClass));
                 if (!build.Has(PerkId.GuardianBulwark)) yield break;
-                Strike(transform.position, 3.6f, BaseDamage * 1.6f * build.DamageMultiplier, type);
+                motion?.PlayMotion(AttackMotion.Smash, 1.3f);
+                Strike(transform.position, 3.6f, BaseDamage * 1.6f * build.DamageMultiplier, type, 9f);
                 PrototypeVfx.SpawnShockwave(transform.position, 4.2f, new Color(1f, 0.55f, 0.08f));
                 health.SetInvulnerable(1.5f);
                 CameraController.Impulse(0.12f);
                 yield break;
             }
+
             if (heroClass == HeroClassId.Arcanist)
             {
+                motion?.PlayMotion(AttackMotion.Cast, 1.2f);
                 var lingering = build.Has(PerkId.ArcanistLingeringStar);
                 var pulses = lingering ? 7 : 4;
                 var center = transform.position + direction * 5.5f;
@@ -285,56 +383,76 @@ namespace Shatterspire
                     FireProjectile(shotDirection, BaseDamage * 1.15f, false, build.Pierces,
                         Mathf.Max(1, build.Ricochets), 1.05f, 1.2f, BaseDamage * build.DamageMultiplier * 0.35f);
                 }
-                PulseShot();
+                PulseShot(0.9f);
                 yield return new WaitForSeconds(0.1f);
             }
         }
 
-        /// <summary>Die fruehere Ultimate, jetzt als Skill-Upgrade OVERDRIVE.</summary>
-        private IEnumerator Overdrive()
+        // ── ULTIMATE ────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Rift Barrage, Forge Quake oder Singularity. Laedt sich durch Schaden, erlittenen Schaden und
+        /// Kills; der Held ist waehrenddessen kurz unverwundbar.
+        /// </summary>
+        private IEnumerator Ultimate()
         {
-            health.SetInvulnerable(heroClass == HeroClassId.Guardian ? 2.2f : 1.1f);
+            ultimateActive = true;
+            ultimateCharge = 0f;
             var direction = AcquireAttackDirection();
+            health.SetInvulnerable(heroClass == HeroClassId.Guardian ? 2.2f : 1.3f);
+            if (build.Has(PerkId.UltimateAfterglow)) health.Heal(health.Maximum * 0.3f);
             CameraController.Impulse(0.24f);
+            Hitstop.Freeze(0.07f, 0.06f);
             PrototypeVfx.SpawnHeavyReady(transform.position);
             motion?.PulseUltimate();
 
             if (heroClass == HeroClassId.Guardian)
             {
-                var type = ResolveDamageType(DamageType.Physical);
+                // Forge Quake: sechs Beben, jedes weiter als das vorige.
+                var type = build.Has(PerkId.GuardianMoltenQuake) ? DamageType.Fire : ResolveDamageType(DamageType.Physical);
                 for (var pulse = 0; pulse < 6; pulse++)
                 {
-                    var radius = 2.6f + pulse * 0.5f;
-                    Strike(transform.position, radius, BaseDamage * 1.4f * build.DamageMultiplier, type);
-                    PrototypeVfx.SpawnShockwave(transform.position, radius + 0.4f, HeroCatalog.Accent(heroClass));
-                    motion?.PulseAttack(1.5f);
+                    if (pulse % 2 == 0) motion?.PlayMotion(pulse == 0 ? AttackMotion.Smash : AttackMotion.Spin, 1.4f);
+                    var radius = 2.6f + pulse * 0.55f;
+                    Strike(transform.position, radius, BaseDamage * 1.5f * build.DamageMultiplier, type, 8f);
+                    PrototypeVfx.SpawnShockwave(transform.position, radius + 0.4f,
+                        type == DamageType.Fire ? new Color(1f, 0.4f, 0.08f) : HeroCatalog.Accent(heroClass));
+                    CameraController.Impulse(0.08f);
                     yield return new WaitForSeconds(0.2f);
                 }
-                yield break;
             }
-            if (heroClass == HeroClassId.Arcanist)
+            else if (heroClass == HeroClassId.Arcanist)
             {
+                // Singularity: ein schwarzer Stern vor dem Arcanist, acht Pulse.
+                motion?.PlayMotion(AttackMotion.Cast, 1.5f);
                 var center = transform.position + direction * 5.8f;
+                var pull = build.Has(PerkId.ArcanistEventHorizon);
                 var type = ResolveDamageType(DamageType.Void);
                 for (var pulse = 0; pulse < 8; pulse++)
                 {
-                    Strike(center, 4.8f, BaseDamage * 1.25f * build.DamageMultiplier, type);
+                    Strike(center, 4.8f, BaseDamage * 1.3f * build.DamageMultiplier, type, pull ? 6f : 4f, pull);
                     PrototypeVfx.SpawnShockwave(center, 5.1f, Color.Lerp(HeroCatalog.Accent(heroClass), Color.black, 0.28f));
                     yield return new WaitForSeconds(0.16f);
                 }
-                yield break;
             }
-            for (var volley = 0; volley < 5; volley++)
+            else
             {
-                for (var i = 0; i < 9; i++)
+                // Rift Barrage: fuenf breite Salven in Zielrichtung.
+                var homing = build.Has(PerkId.RangerHomingBarrage);
+                for (var volley = 0; volley < 5; volley++)
                 {
-                    var shotDirection = Quaternion.Euler(0f, Mathf.Lerp(-42f, 42f, i / 8f), 0f) * direction;
-                    FireProjectile(shotDirection, BaseDamage * 1.7f, false, build.Pierces + 1,
-                        build.Ricochets + 1, 1.18f, 1.35f, BaseDamage * build.DamageMultiplier * 0.45f);
+                    var aim = AcquireAttackDirection();
+                    for (var i = 0; i < 9; i++)
+                    {
+                        var shotDirection = Quaternion.Euler(0f, Mathf.Lerp(-42f, 42f, i / 8f), 0f) * aim;
+                        FireProjectile(shotDirection, BaseDamage * 1.7f, false, build.Pierces + 1,
+                            build.Ricochets + 1, 1.18f, 1.35f, BaseDamage * build.DamageMultiplier * 0.45f, homing);
+                    }
+                    PulseShot(1.2f);
+                    yield return new WaitForSeconds(0.12f);
                 }
-                PulseShot();
-                yield return new WaitForSeconds(0.12f);
             }
+            ultimateActive = false;
         }
 
         // ── DASH ────────────────────────────────────────────────────────────
@@ -370,10 +488,9 @@ namespace Shatterspire
 
         /// <summary>
         /// Flaechentreffer des Spielers. Anders als CombatUtility.Explode wirken hier Krit, Finisher,
-        /// Lebensraub und Elemente - vorher bekamen Guardian-Schlaege und die Flaechen des Arcanist
-        /// von diesen Upgrades nichts.
+        /// Lebensraub und Elemente, und der Schaden laedt die Ultimate. pull zieht Gegner zur Mitte.
         /// </summary>
-        private void Strike(Vector3 point, float radius, float damage, DamageType type)
+        private void Strike(Vector3 point, float radius, float damage, DamageType type, float knockback = 4f, bool pull = false)
         {
             var critical = Random.value < build.CritChance;
             var amount = damage * (critical ? build.CritMultiplier : 1f);
@@ -393,10 +510,11 @@ namespace Shatterspire
                 var offset = target.transform.position - point;
                 offset.y = 0f;
                 var dealt = amount * (build.Has(PerkId.Execution) && target.Normalized <= 0.2f ? 2f : 1f);
-                var force = offset.sqrMagnitude > 0.001f ? offset.normalized * 4f : Vector3.zero;
-                target.TakeDamage(new DamageInfo(dealt, type, gameObject, point, force, critical));
+                var away = offset.sqrMagnitude > 0.001f ? offset.normalized : Vector3.zero;
+                target.TakeDamage(new DamageInfo(dealt, type, gameObject, point, away * (pull ? -knockback : knockback), critical));
                 ApplyStatus(target, type, dealt);
                 if (build.Has(PerkId.Vampirism)) health.Heal(dealt * 0.04f);
+                NotifyDamageDealt(dealt);
             }
             if (critical && build.IsShatter && strikeTargets.Count > 0)
                 CombatUtility.Explode(point, 3f, amount * 0.8f, TeamId.Enemy, DamageType.Ice, gameObject);
@@ -449,7 +567,7 @@ namespace Shatterspire
         }
 
         private void FireProjectile(Vector3 direction, float baseAmount, bool chargeOnHit, int pierces,
-            int ricochets, float visualScale, float impactRadius, float impactDamage)
+            int ricochets, float visualScale, float impactRadius, float impactDamage, bool homing = false)
         {
             var critical = Random.value < build.CritChance;
             var amount = baseAmount * build.DamageMultiplier * (critical ? build.CritMultiplier : 1f);
@@ -466,10 +584,10 @@ namespace Shatterspire
                     Build = build,
                     RemainingPierces = pierces,
                     RemainingRicochets = ricochets,
-                    // Elemente gelten jetzt auch fuer den Arcanist. Vorher war sein Schaden immer Void,
-                    // EMBER, CRYO, STORM und TOXIN CORE wirkten bei ihm nicht.
+                    // Elemente gelten auch fuer den Arcanist; vorher war sein Schaden immer Void.
                     Type = ResolveDamageType(heroClass == HeroClassId.Arcanist ? DamageType.Void : DamageType.Physical),
                     ChargeHeavyOnHit = chargeOnHit,
+                    Homing = homing,
                     ImpactRadius = impactRadius,
                     ImpactDamage = impactDamage,
                     VisualScale = visualScale,
@@ -478,10 +596,11 @@ namespace Shatterspire
             }
         }
 
-        private void PulseShot()
+        /// <summary>Muendungsblitz plus Bewegung: Rex schiesst, Orion wirft einen Zauber.</summary>
+        private void PulseShot(float strength)
         {
             PrototypeVfx.SpawnMuzzle(MuzzlePosition(), transform.forward);
-            motion?.PulseAttack(0.72f);
+            motion?.PlayMotion(heroClass == HeroClassId.Arcanist ? AttackMotion.Cast : AttackMotion.Shot, strength);
         }
 
         private Vector3 MuzzlePosition()

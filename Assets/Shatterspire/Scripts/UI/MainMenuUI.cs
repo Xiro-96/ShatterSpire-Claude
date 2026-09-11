@@ -166,7 +166,7 @@ namespace Shatterspire
             name.fontStyle = FontStyle.Bold;
             Text(screen.transform, HeroCatalog.Role(hero), 22, TextAnchor.UpperLeft, new Vector2(58, -350), new Vector2(560, 30), new Vector2(0, 1)).color = accent;
             Text(screen.transform,
-                $"LIGHT   {HeroCatalog.LightAttackName(hero)}\nHEAVY   {HeroCatalog.HeavyAttackName(hero)}\nSKILL   {HeroCatalog.SkillName(hero)}\n\nHP   {HeroCatalog.BaseHealth(hero):0}",
+                $"LIGHT   {HeroCatalog.LightAttackName(hero)}\nHEAVY   {HeroCatalog.HeavyAttackName(hero)}\nSKILL   {HeroCatalog.SkillName(hero)}\nULTIMATE   {HeroCatalog.UltimateName(hero)}\n\nHP   {HeroCatalog.BaseHealth(hero):0}",
                 19, TextAnchor.UpperLeft, new Vector2(58, -396), new Vector2(520, 150), new Vector2(0, 1)).color = new Color(0.86f, 0.92f, 0.98f);
         }
 

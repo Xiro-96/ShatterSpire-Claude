@@ -50,7 +50,7 @@ namespace Shatterspire
     public static class EnemyBalance
     {
         /// <summary>Zusätzliche Leben pro Etage, multiplikativ. Wird in Etage 3 zur Kurve.</summary>
-        public const float HealthPerFloor = 0.13f;
+        public const float HealthPerFloor = 0.15f;
         /// <summary>Zusätzlicher Schaden pro Etage, multiplikativ.</summary>
         public const float DamagePerFloor = 0.065f;
         /// <summary>Zusätzliche Bewegung pro Etage, gedeckelt auf <see cref="MaximumSpeedBonus"/>.</summary>
@@ -60,13 +60,13 @@ namespace Shatterspire
         private static readonly EnemyStats[] Table =
         {
             //                       kind                  hp     spd   range  dmg   knock  stag   space  tele   cool   height radius
-            new(EnemyKind.Crawler,     28f,  3.5f,  1.35f, 10f,  0.58f, 0.09f,  1.05f, 0.32f, 1.05f, 1.3f,  0.42f),
-            new(EnemyKind.Shooter,     24f,  2.5f,  8.5f,   8f,  0.58f, 0.09f,  1.05f, 0.58f, 1.85f, 1.3f,  0.42f),
-            new(EnemyKind.Brute,       85f,  1.65f, 1.8f,  18f,  0.28f, 0.065f, 1.65f, 0.82f, 2.25f, 2.2f,  0.7f),
-            new(EnemyKind.Elite,      260f,  2.25f, 2.1f,  22f,  0.18f, 0.045f, 1.65f, 0.78f, 2.05f, 2.2f,  0.7f),
+            new(EnemyKind.Crawler,     50f,  3.5f,  1.35f, 10f,  0.58f, 0.09f,  1.05f, 0.32f, 1.05f, 1.3f,  0.42f),
+            new(EnemyKind.Shooter,     42f,  2.5f,  8.5f,   8f,  0.58f, 0.09f,  1.05f, 0.58f, 1.85f, 1.3f,  0.42f),
+            new(EnemyKind.Brute,       160f,  1.65f, 1.8f,  18f,  0.28f, 0.065f, 1.65f, 0.82f, 2.25f, 2.2f,  0.7f),
+            new(EnemyKind.Elite,      460f,  2.25f, 2.1f,  22f,  0.18f, 0.045f, 1.65f, 0.78f, 2.05f, 2.2f,  0.7f),
             // Iron Warden: Vorwarnzeit und Abklingzeit sind hier die Phase-1-Werte.
             // Die Phasen-Verkürzung (0,72 / 0,58 bzw. 1,15) bleibt Verhalten im Code.
-            new(EnemyKind.IronWarden, 1100f, 1.75f, 2.5f,  24f,  0.08f, 0.025f, 1.65f, 0.86f, 1.8f,  3.2f,  1.1f)
+            new(EnemyKind.IronWarden, 1900f, 1.75f, 2.5f,  24f,  0.08f, 0.025f, 1.65f, 0.86f, 1.8f,  3.2f,  1.1f)
         };
 
         public static IReadOnlyList<EnemyStats> All => Table;
