@@ -983,7 +983,11 @@ namespace Shatterspire
             return material;
         }
 
-        private static void ApplyForgeMaterials(GameObject root)
+        // internal statt private: der Tower Lift in FloorObjectiveController baut
+        // dasselbe Platform_Round1-Modell auf und konnte die Materialien bisher
+        // nicht zuweisen - er blieb deshalb mit dem untexturierten FBX-Standard
+        // als grosse weisse Scheibe im Bild.
+        internal static void ApplyForgeMaterials(GameObject root)
         {
             if (!root) return;
             foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))

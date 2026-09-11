@@ -82,6 +82,13 @@ namespace Shatterspire
             volume.priority = 0f;
             volume.weight = 1f;
             volume.sharedProfile = profile;
+
+            // Selbstbeschreibend statt mit Versionsnummer: die Zeile gibt die Werte
+            // aus, die tatsaechlich im Profil stehen. Damit laesst sich im
+            // Editor.log ohne Screenshot pruefen, welcher Grafik-Stand laeuft.
+            Debug.Log($"SHATTERSPIRE PostFx aktiv: Tonemapping {tonemapping.mode.value}, " +
+                      $"Bloom Schwelle {bloom.threshold.value:0.##} Intensitaet {bloom.intensity.value:0.##}, " +
+                      $"Belichtung {grading.postExposure.value:0.##}, Saettigung {grading.saturation.value:0.#}");
         }
 
         /// <summary>

@@ -555,6 +555,10 @@ namespace Shatterspire
             {
                 var platform = Instantiate(source, transform);
                 platform.name = "Tower Lift Platform";
+                // Ohne diesen Aufruf behielt das Modell sein eingebettetes
+                // FBX-Material - untexturiert und hell. Das war die grosse weisse
+                // Scheibe oben im Spielbild, kein Post-Processing-Effekt.
+                AuthoredArt.ApplyForgeMaterials(platform);
                 platform.transform.localPosition = Vector3.zero;
                 platform.transform.localScale = Vector3.one * 2.2f;
                 foreach (var collider in platform.GetComponentsInChildren<Collider>()) PrototypeFactory.RemoveCollider(collider);
