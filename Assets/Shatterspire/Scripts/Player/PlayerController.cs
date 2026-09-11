@@ -101,11 +101,11 @@ namespace Shatterspire
         {
             rolling = true;
             dashCharges--;
-            GetComponent<StylizedCharacterMotion>()?.PulseDash();
             if (dashCharges == MaxCharges - 1) nextRecharge = Time.time + RechargeSeconds;
             rollDirection = new Vector3(input.Move.x, 0f, input.Move.y);
             if (rollDirection.sqrMagnitude < 0.1f) rollDirection = transform.forward;
             rollDirection.Normalize();
+            GetComponent<StylizedCharacterMotion>()?.PulseDash(transform.InverseTransformDirection(rollDirection));
             var dashStart = transform.position;
             var weapon = GetComponent<WeaponSystem>();
             weapon?.OnDashStarted(dashStart, rollDirection);

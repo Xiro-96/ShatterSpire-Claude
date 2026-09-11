@@ -1446,6 +1446,15 @@ namespace Shatterspire
         private AnimationClip hit;
         private AnimationClip swing;
         private AnimationClip smash;
+        private AnimationClip spin;
+        private AnimationClip shot;
+        private AnimationClip cast;
+        private AnimationClip channel;
+        private AnimationClip leap;
+        private AnimationClip summon;
+        private AnimationClip dodgeBack;
+        private AnimationClip dodgeLeft;
+        private AnimationClip dodgeRight;
         private Vector3 previousPosition;
         private float moveBlend;
         private float referenceSpeed = 6f;
@@ -1461,6 +1470,10 @@ namespace Shatterspire
             clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/KayKit/Animations/Rig_Medium_General"));
             clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/KayKit/Animations/Rig_Medium_MovementBasic"));
             clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/Animations/UAL2_Standard"));
+            // KayKit Character Animations 1.1, dasselbe Rig_Medium wie General und MovementBasic.
+            clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/KayKit/Animations/Rig_Medium_CombatMelee"));
+            clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/KayKit/Animations/Rig_Medium_CombatRanged"));
+            clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/KayKit/Animations/Rig_Medium_MovementAdvanced"));
             var clips = clipList.ToArray();
             // Die Namen muessen exakt zu den AnimStacks in den FBX passen. Die
             // vorherige Liste suchte nach Melee_Hook, OverhandThrow, Slide_Start,
@@ -1470,13 +1483,22 @@ namespace Shatterspire
             idle = FindClip(clips, "Idle_A", "Idle_B", "Idle_No_Loop");
             move = FindClip(clips, "Running_A", "Running_B", "Walking_A");
             attack = FindClip(clips, "Throw", "Use_Item", "Interact");
-            roll = FindClip(clips, "Jump_Start", "Jump_Full_Short", "Jump_Full_Long");
+            roll = FindClip(clips, "Dodge_Forward", "Jump_Start", "Jump_Full_Short", "Jump_Full_Long");
+            dodgeBack = FindClip(clips, "Dodge_Backward");
+            dodgeLeft = FindClip(clips, "Dodge_Left");
+            dodgeRight = FindClip(clips, "Dodge_Right");
             ultimate = FindClip(clips, "Spawn_Ground", "Spawn_Air", "Throw");
             hit = FindClip(clips, "Hit_A", "Hit_B", "Hit_Knockback");
-            // Echte Schlagclips gibt es im Projekt nicht. Use_Item ist ein kurzer Arm nach vorn,
-            // Throw eine Bewegung ueber den Kopf - zusammen mit der Oberkoerper-Drehung der beste Ersatz.
-            swing = FindClip(clips, "Use_Item", "Interact", "Throw");
-            smash = FindClip(clips, "Throw", "Use_Item");
+            // Kampfclips aus KayKit Character Animations. Fehlen sie, bleiben Use_Item und Throw als Ersatz,
+            // und StylizedCharacterMotion ergaenzt die Bewegung mit einer Drehung des Oberkoerpers.
+            swing = FindClip(clips, "Melee_2H_Attack_Slice", "Melee_1H_Attack_Slice_Horizontal", "Use_Item", "Interact", "Throw");
+            smash = FindClip(clips, "Melee_2H_Attack_Chop", "Melee_1H_Attack_Chop", "Throw", "Use_Item");
+            spin = FindClip(clips, "Melee_2H_Attack_Spin", "Melee_2H_Attack_Spinning");
+            shot = FindClip(clips, "Ranged_1H_Shoot", "Ranged_2H_Shoot");
+            cast = FindClip(clips, "Ranged_Magic_Shoot", "Ranged_Magic_Spellcasting");
+            channel = FindClip(clips, "Ranged_Magic_Spellcasting", "Ranged_Magic_Shoot");
+            leap = FindClip(clips, "Melee_1H_Attack_Jump_Chop", "Melee_2H_Attack_Chop");
+            summon = FindClip(clips, "Ranged_Magic_Summon", "Ranged_Magic_Raise");
             WarnAboutMissingClips();
             if (!idle) return;
 
@@ -1507,20 +1529,68 @@ namespace Shatterspire
         }
 
         public void PulseAttack(float strength) => PlayAction(attack, 0.28f + strength * 0.08f, 1.15f);
-        /// <summary>Spielt nur den Kern des Clips - Ausholen und Durchziehen - in genau der Dauer der Bewegung.</summary>
+        private AnimationClip ClipFor(AttackMotion kind) => kind switch
+        {
+            AttackMotion.Swing => swing,
+            AttackMotion.Smash => smash,
+            AttackMotion.Spin => spin ? spin : smash,
+            AttackMotion.Shot => shot ? shot : swing,
+            AttackMotion.Cast => cast ? cast : smash,
+            AttackMotion.Channel => channel ? channel : smash,
+            AttackMotion.Leap => leap ? leap : smash,
+            _ => summon ? summon : ultimate
+        };
+
+        /// <summary>True, wenn fuer die Bewegung ein echter Kampfclip existiert - dann braucht es keine Ersatzdrehung.</summary>
+        public bool HasCombatClip(AttackMotion kind)
+        {
+            var clip = ClipFor(kind);
+            return clip && (clip.name.Contains("Melee_") || clip.name.Contains("Ranged_"));
+        }
+
+        /// <summary>Dauer einer Bewegung. Echte Clips bekommen mehr Zeit, sonst wirken sie gehetzt.</summary>
+        public float DurationFor(AttackMotion kind)
+        {
+            var combat = HasCombatClip(kind);
+            return kind switch
+            {
+                AttackMotion.Swing => combat ? 0.42f : 0.3f,
+                AttackMotion.Smash => combat ? 0.5f : 0.38f,
+                AttackMotion.Spin => combat ? 0.55f : 0.36f,
+                AttackMotion.Cast => combat ? 0.4f : 0.3f,
+                AttackMotion.Channel => combat ? 0.7f : 0.4f,
+                AttackMotion.Leap => combat ? 0.75f : 0.45f,
+                AttackMotion.Summon => combat ? 0.9f : 0.6f,
+                _ => combat ? 0.3f : 0.2f
+            };
+        }
+
+        /// <summary>Echte Kampfclips fast vollstaendig, Ersatzclips nur ihr Kern aus Ausholen und Durchziehen.</summary>
         public void PlayMotion(AttackMotion kind, float duration)
         {
-            var clip = kind is AttackMotion.Swing or AttackMotion.Shot ? swing : smash;
-            var (from, to) = kind switch
+            var clip = ClipFor(kind);
+            if (!ready || !clip || clip.length <= 0f) return;
+            var (from, to) = HasCombatClip(kind) ? (0f, 0.92f) : kind switch
             {
                 AttackMotion.Swing => (0.1f, 0.7f),
                 AttackMotion.Shot => (0.2f, 0.55f),
                 AttackMotion.Spin => (0.25f, 0.7f),
                 _ => (0.12f, 0.72f)
             };
-            if (!ready || !clip || clip.length <= 0f) return;
             var span = clip.length * (to - from);
-            PlayAction(clip, duration, Mathf.Clamp(span / Mathf.Max(0.05f, duration), 0.5f, 4f), clip.length * from);
+            PlayAction(clip, duration, Mathf.Clamp(span / Mathf.Max(0.05f, duration), 0.5f, 2.8f), clip.length * from);
+        }
+
+        /// <summary>Ausweichschritt passend zur Richtung relativ zur Blickrichtung: vor, zurueck oder seitlich.</summary>
+        public void PulseDash(Vector3 localDirection)
+        {
+            var clip = roll;
+            if (Mathf.Abs(localDirection.x) > Mathf.Abs(localDirection.z))
+                clip = localDirection.x > 0f ? (dodgeRight ? dodgeRight : roll) : (dodgeLeft ? dodgeLeft : roll);
+            else if (localDirection.z < 0f && dodgeBack) clip = dodgeBack;
+            if (!clip || clip.length <= 0f) return;
+            // Der Dash selbst dauert 0,22 s; der Clip bekommt etwas mehr, damit das Aufkommen zu sehen ist.
+            PlayAction(clip, 0.36f, Mathf.Clamp(clip.length * 0.85f / 0.36f, 0.8f, 3f));
         }
 
         public void PulseDash() => PlayAction(roll, 0.34f, 1.45f);

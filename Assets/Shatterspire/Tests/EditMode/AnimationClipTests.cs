@@ -20,7 +20,10 @@ namespace Shatterspire.Tests
         {
             "Art3D/KayKit/Animations/Rig_Medium_General",
             "Art3D/KayKit/Animations/Rig_Medium_MovementBasic",
-            "Art3D/Animations/UAL2_Standard"
+            "Art3D/Animations/UAL2_Standard",
+            "Art3D/KayKit/Animations/Rig_Medium_CombatMelee",
+            "Art3D/KayKit/Animations/Rig_Medium_CombatRanged",
+            "Art3D/KayKit/Animations/Rig_Medium_MovementAdvanced"
         };
 
         /// <summary>
@@ -32,8 +35,13 @@ namespace Shatterspire.Tests
             ("Idle", new[] { "Idle_A", "Idle_B", "Idle_No_Loop" }),
             ("Laufen", new[] { "Running_A", "Running_B", "Walking_A" }),
             ("Angriff", new[] { "Throw", "Use_Item", "Interact" }),
-            ("Schlag", new[] { "Use_Item", "Interact", "Throw" }),
-            ("Wuchtschlag", new[] { "Throw", "Use_Item" }),
+            // Kampfclips ohne Ersatz in der Liste: faellt der Import aus, soll der Test rot werden.
+            ("Hammer quer", new[] { "Melee_2H_Attack_Slice", "Melee_1H_Attack_Slice_Horizontal" }),
+            ("Hammer Wucht", new[] { "Melee_2H_Attack_Chop", "Melee_1H_Attack_Chop" }),
+            ("Wirbel", new[] { "Melee_2H_Attack_Spin", "Melee_2H_Attack_Spinning" }),
+            ("Schuss", new[] { "Ranged_1H_Shoot", "Ranged_2H_Shoot" }),
+            ("Zauber", new[] { "Ranged_Magic_Shoot", "Ranged_Magic_Spellcasting" }),
+            ("Ausweichen", new[] { "Dodge_Forward" }),
             ("Dash", new[] { "Jump_Start", "Jump_Full_Short", "Jump_Full_Long" }),
             ("Ultimate", new[] { "Spawn_Ground", "Spawn_Air", "Throw" }),
             ("Trefferreaktion", new[] { "Hit_A", "Hit_B", "Hit_Knockback" })

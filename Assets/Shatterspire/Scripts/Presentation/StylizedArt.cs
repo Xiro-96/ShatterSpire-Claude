@@ -343,10 +343,10 @@ namespace Shatterspire
     }
 
     /// <summary>
-    /// Angriffsbewegungen. Die Animationsbibliotheken im Projekt enthalten keine Schlag-, Schuss- oder
-    /// Zauberclips; die Bewegung entsteht aus dem naechstpassenden Clip plus Oberkoerper-Drehung.
+    /// Angriffsbewegungen. Gespielt mit den Kampfclips aus KayKit Character Animations; fehlt ein Clip,
+    /// entsteht die Bewegung aus einem Ersatzclip plus Oberkoerper-Drehung.
     /// </summary>
-    public enum AttackMotion { Swing, Smash, Spin, Shot, Cast }
+    public enum AttackMotion { Swing, Smash, Spin, Shot, Cast, Channel, Leap, Summon }
 
     public sealed class StylizedCharacterMotion : MonoBehaviour
     {
@@ -355,6 +355,7 @@ namespace Shatterspire
         private AttackMotion motionKind;
         private float motionStarted = -10f;
         private float motionDuration;
+        private bool motionUsesClip;
         private Transform model;
         private Vector3 modelOrigin;
         private Vector3 modelBaseScale = Vector3.one;
@@ -403,19 +404,21 @@ namespace Shatterspire
         {
             motionKind = kind;
             motionStarted = Time.time;
-            motionDuration = kind switch
+            motionUsesClip = authoredAnimation && authoredAnimation.HasCombatClip(kind);
+            motionDuration = authoredAnimation ? authoredAnimation.DurationFor(kind) : kind switch
             {
                 AttackMotion.Swing => 0.3f,
                 AttackMotion.Smash => 0.38f,
                 AttackMotion.Spin => 0.36f,
-                AttackMotion.Cast => 0.3f,
-                _ => 0.2f
+                AttackMotion.Shot => 0.2f,
+                _ => 0.4f
             };
             recoil = Mathf.Max(recoil, strength * (kind == AttackMotion.Spin ? 0.25f : kind == AttackMotion.Shot ? 0.55f : 0.8f));
             authoredAnimation?.PlayMotion(kind, motionDuration);
         }
 
         public void PulseDash() => authoredAnimation?.PulseDash();
+        public void PulseDash(Vector3 localDirection) => authoredAnimation?.PulseDash(localDirection);
         public void PulseUltimate() => authoredAnimation?.PulseUltimate();
         public void PulseHit() => authoredAnimation?.PulseHit();
 
@@ -459,7 +462,9 @@ namespace Shatterspire
                     modelBaseScale.z * stretch);
                 // Nur waehrend der Bewegung und nur sichtbar: ausserhalb des Bilds schreibt die Animation
                 // den Knochen nicht neu, die Drehung wuerde sich sonst aufsummieren.
-                if (moving && chest && (!skin || skin.isVisible)) ApplyChestMotion(t);
+                // Mit echtem Kampfclip bewegt der Clip den Oberkoerper selbst. Der Wirbel bleibt, weil Humanoid-
+                // Clips die Drehung um die eigene Achse als Root Motion abgeben und die hier aus ist.
+                if (moving && !motionUsesClip && chest && (!skin || skin.isVisible)) ApplyChestMotion(t);
                 return;
             }
             var bob = Mathf.Abs(Mathf.Sin(Time.time * stepFrequency)) * 0.075f * movement;

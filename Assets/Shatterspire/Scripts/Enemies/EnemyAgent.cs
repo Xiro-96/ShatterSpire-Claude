@@ -293,7 +293,7 @@ namespace Shatterspire
             yield return new WaitForSeconds(stats.TelegraphSeconds);
             if (!BeginAttack(telegraph)) yield break;
 
-            motion?.PulseAttack(0.9f);
+            motion?.PlayMotion(AttackMotion.Swing, 0.9f);
             var elapsed = 0f;
             while (elapsed < 0.13f && state != State.Dead)
             {
@@ -315,7 +315,7 @@ namespace Shatterspire
             yield return new WaitForSeconds(stats.TelegraphSeconds);
             if (!BeginAttack(telegraph)) yield break;
 
-            motion?.PulseAttack(0.8f);
+            motion?.PlayMotion(AttackMotion.Cast, 0.8f);
             for (var i = 0; i < 3 && state != State.Dead; i++)
             {
                 var spread = (i - 1) * 6.5f;
@@ -334,7 +334,7 @@ namespace Shatterspire
             yield return new WaitForSeconds(stats.TelegraphSeconds);
             if (!BeginAttack(telegraph)) yield break;
 
-            motion?.PulseAttack(1.25f);
+            motion?.PlayMotion(AttackMotion.Smash, 1.25f);
             CombatUtility.Explode(transform.position, 2.45f, attackDamage,
                 TeamId.Player, DamageType.Physical, gameObject);
             PrototypeVfx.SpawnShockwave(transform.position, 2.7f, new Color(1f, 0.42f, 0.08f));
@@ -352,7 +352,7 @@ namespace Shatterspire
             yield return new WaitForSeconds(stats.TelegraphSeconds);
             if (!BeginAttack(telegraph)) yield break;
 
-            motion?.PulseAttack(1.45f);
+            motion?.PlayMotion(eliteExplosive ? AttackMotion.Summon : AttackMotion.Leap, 1.45f);
             if (eliteExplosive)
             {
                 CombatUtility.Explode(transform.position, 3.25f, attackDamage,
@@ -441,7 +441,7 @@ namespace Shatterspire
             if (telegraph) Destroy(telegraph);
 
             state = State.Attack;
-            motion?.PulseAttack(1.35f + phase * 0.08f);
+            motion?.PlayMotion(pattern == 0 ? AttackMotion.Smash : pattern == 1 ? AttackMotion.Leap : AttackMotion.Summon, 1.35f + phase * 0.08f);
             if (pattern == 0)
             {
                 CombatUtility.Explode(targetPoint, phase == 3 ? 3.2f : 2.65f,
@@ -479,7 +479,7 @@ namespace Shatterspire
 
         private void MeleeAttack()
         {
-            motion?.PulseAttack(kind == EnemyKind.IronWarden ? 1.4f : 0.85f);
+            motion?.PlayMotion(kind == EnemyKind.IronWarden ? AttackMotion.Smash : AttackMotion.Swing, kind == EnemyKind.IronWarden ? 1.4f : 0.85f);
             PrototypeVfx.SpawnExplosion(transform.position + transform.forward, attackRange, new Color(1f, 0.18f, 0.08f));
             if (Vector3.Distance(transform.position, target.position) <= attackRange + 0.7f)
             {

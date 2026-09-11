@@ -211,9 +211,9 @@ namespace Shatterspire
 
             if (lightComboStep == 1)
             {
-                nextShot = Time.time + 0.34f / build.AttackSpeedMultiplier;
+                nextShot = Time.time + 0.38f / build.AttackSpeedMultiplier;
                 motion?.PlayMotion(AttackMotion.Swing, 0.9f);
-                StartCoroutine(MeleeImpact(0.11f, () =>
+                StartCoroutine(MeleeImpact(0.15f, () =>
                 {
                     var point = transform.position + direction * 1.25f;
                     Strike(point, 1.35f + reach, hit, type);
@@ -224,9 +224,9 @@ namespace Shatterspire
 
             if (lightComboStep == 2)
             {
-                nextShot = Time.time + 0.42f / build.AttackSpeedMultiplier;
+                nextShot = Time.time + 0.46f / build.AttackSpeedMultiplier;
                 motion?.PlayMotion(AttackMotion.Smash, 1.1f);
-                StartCoroutine(MeleeImpact(0.15f, () =>
+                StartCoroutine(MeleeImpact(0.2f, () =>
                 {
                     var point = transform.position + direction * 1.55f;
                     Strike(point, 1.7f + reach, hit * 1.4f, type, 7f);
@@ -238,9 +238,9 @@ namespace Shatterspire
                 return;
             }
 
-            nextShot = Time.time + 0.6f / build.AttackSpeedMultiplier;
+            nextShot = Time.time + 0.64f / build.AttackSpeedMultiplier;
             motion?.PlayMotion(AttackMotion.Spin, 1.3f);
-            StartCoroutine(MeleeImpact(0.12f, () =>
+            StartCoroutine(MeleeImpact(0.17f, () =>
             {
                 var radius = 2.6f + reach;
                 Strike(transform.position, radius, hit * 1.75f, type, 8f);
@@ -355,7 +355,7 @@ namespace Shatterspire
 
             if (heroClass == HeroClassId.Arcanist)
             {
-                motion?.PlayMotion(AttackMotion.Cast, 1.2f);
+                motion?.PlayMotion(AttackMotion.Channel, 1.2f);
                 var lingering = build.Has(PerkId.ArcanistLingeringStar);
                 var pulses = lingering ? 7 : 4;
                 var center = transform.position + direction * 5.5f;
@@ -404,7 +404,6 @@ namespace Shatterspire
             CameraController.Impulse(0.24f);
             Hitstop.Freeze(0.07f, 0.06f);
             PrototypeVfx.SpawnHeavyReady(transform.position);
-            motion?.PulseUltimate();
 
             if (heroClass == HeroClassId.Guardian)
             {
@@ -412,7 +411,7 @@ namespace Shatterspire
                 var type = build.Has(PerkId.GuardianMoltenQuake) ? DamageType.Fire : ResolveDamageType(DamageType.Physical);
                 for (var pulse = 0; pulse < 6; pulse++)
                 {
-                    if (pulse % 2 == 0) motion?.PlayMotion(pulse == 0 ? AttackMotion.Smash : AttackMotion.Spin, 1.4f);
+                    if (pulse % 2 == 0) motion?.PlayMotion(pulse == 0 ? AttackMotion.Leap : AttackMotion.Spin, 1.4f);
                     var radius = 2.6f + pulse * 0.55f;
                     Strike(transform.position, radius, BaseDamage * 1.5f * build.DamageMultiplier, type, 8f);
                     PrototypeVfx.SpawnShockwave(transform.position, radius + 0.4f,
@@ -424,7 +423,7 @@ namespace Shatterspire
             else if (heroClass == HeroClassId.Arcanist)
             {
                 // Singularity: ein schwarzer Stern vor dem Arcanist, acht Pulse.
-                motion?.PlayMotion(AttackMotion.Cast, 1.5f);
+                motion?.PlayMotion(AttackMotion.Summon, 1.5f);
                 var center = transform.position + direction * 5.8f;
                 var pull = build.Has(PerkId.ArcanistEventHorizon);
                 var type = ResolveDamageType(DamageType.Void);
