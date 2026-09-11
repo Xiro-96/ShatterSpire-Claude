@@ -17,9 +17,59 @@ namespace Shatterspire
 
         private static void OnSceneLoaded(Scene _, LoadSceneMode __) => Build();
 
+        /// <summary>
+        /// Baut Menue oder Aufstieg neu auf. Steht die aktive Szene in den Build Settings, wird sie neu
+        /// geladen. Sonst geht das nicht - etwa bei der unbenannten Szene, mit der Unity nach einem
+        /// Batchmode-Lauf startet. Dann entsteht eine frische leere Szene und die alte wird entladen.
+        /// Vorher lief LoadScene mit leerem Namen ins Leere, und BEGIN CLIMB tat nichts.
+        /// </summary>
+        public static void Reload()
+        {
+            Time.timeScale = 1f;
+            GameEvents.Reset();
+            var active = SceneManager.GetActiveScene();
+            if (active.buildIndex >= 0)
+            {
+                SceneManager.LoadScene(active.buildIndex);
+                return;
+            }
+            var fresh = SceneManager.CreateScene("SHATTERSPIRE " + Time.frameCount);
+            SceneManager.SetActiveScene(fresh);
+            var unload = SceneManager.UnloadSceneAsync(active);
+            if (unload == null)
+            {
+                Debug.LogWarning($"SHATTERSPIRE: Szene '{active.name}' liess sich nicht entladen, Neuaufbau abgebrochen.");
+                return;
+            }
+            unload.completed += _ => Build();
+        }
+
+        /// <summary>
+        /// Das Spiel baut Kamera und Licht selbst. Bringt die Szene eigene mit - die unbenannte
+        /// Standardszene hat "Main Camera" und "Directional Light" -, uebernimmt deren Kamera
+        /// Camera.main (Zielen, Labels) und ein zweites Licht verfaelscht das Bild.
+        /// </summary>
+        private static void DisableForeignSceneObjects()
+        {
+            var active = SceneManager.GetActiveScene();
+            foreach (var camera in Object.FindObjectsByType<Camera>(FindObjectsSortMode.None))
+            {
+                if (camera.gameObject.scene != active) continue;
+                Debug.Log($"SHATTERSPIRE: mitgebrachte Kamera '{camera.name}' abgeschaltet, das Spiel baut seine eigene.");
+                camera.gameObject.SetActive(false);
+            }
+            foreach (var light in Object.FindObjectsByType<Light>(FindObjectsSortMode.None))
+            {
+                if (light.gameObject.scene != active) continue;
+                Debug.Log($"SHATTERSPIRE: mitgebrachtes Licht '{light.name}' abgeschaltet, das Spiel baut sein eigenes.");
+                light.gameObject.SetActive(false);
+            }
+        }
+
         private static void Build()
         {
             if (Object.FindAnyObjectByType<RunDirector>() || Object.FindAnyObjectByType<MainMenuUI>()) return;
+            DisableForeignSceneObjects();
             Time.timeScale = 1f;
             Application.targetFrameRate = 60;
             QualitySettings.vSyncCount = 0;

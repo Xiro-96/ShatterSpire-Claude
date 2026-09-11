@@ -204,10 +204,7 @@ namespace Shatterspire
         {
             MetaSaveSystem.SaveRelics(config.Relics);
             RunLaunchSettings.Prepare(config);
-            Time.timeScale = 1f;
-            GameEvents.Reset();
-            var scene = SceneManager.GetActiveScene();
-            if (!string.IsNullOrEmpty(scene.name)) SceneManager.LoadScene(scene.name);
+            PrototypeBootstrap.Reload();
         }
 
         private void Header(string title, string subtitle, Color accent)

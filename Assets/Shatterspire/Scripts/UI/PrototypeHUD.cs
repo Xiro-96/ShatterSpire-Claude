@@ -749,13 +749,7 @@ namespace Shatterspire
             RestartSceneInternal();
         }
 
-        private static void RestartSceneInternal()
-        {
-            Time.timeScale = 1f;
-            GameEvents.Reset();
-            var active = SceneManager.GetActiveScene();
-            if (!string.IsNullOrEmpty(active.name)) SceneManager.LoadScene(active.name);
-        }
+        private static void RestartSceneInternal() => PrototypeBootstrap.Reload();
 
         private GameObject CreateModal(string title, string subtitle)
         {
