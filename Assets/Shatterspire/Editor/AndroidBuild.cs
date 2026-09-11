@@ -7,7 +7,11 @@ using UnityEngine;
 
 namespace Shatterspire.Editor
 {
-    internal static class AndroidBuild
+    /// <summary>
+    /// APK fuers Telefon. Im Editor ueber SHATTERSPIRE › Build Android APK, ohne Editor per
+    /// Unity.exe -batchmode -quit -buildTarget Android -executeMethod Shatterspire.Editor.AndroidBuild.BuildApk
+    /// </summary>
+    public static class AndroidBuild
     {
         private const string OutputDirectory = "Builds/Android";
         private const string OutputPath = OutputDirectory + "/Shatterspire-Prototype.apk";
@@ -30,6 +34,8 @@ namespace Shatterspire.Editor
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
             PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevelAuto;
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+            // ARM64 gibt es auf Android nur mit IL2CPP. Mit dem Standard Mono brach der Build ab.
+            PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.optimizedFramePacing = true;
 
             EditorUserBuildSettings.buildAppBundle = false;
