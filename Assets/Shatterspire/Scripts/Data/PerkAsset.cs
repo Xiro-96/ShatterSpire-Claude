@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Shatterspire
@@ -19,14 +20,19 @@ namespace Shatterspire
         [SerializeField, TextArea(1, 3)] private string description = "";
         [SerializeField] private PerkRarity rarity = PerkRarity.Common;
         [SerializeField] private Color color = Color.white;
+        [SerializeField] private ActionSlot slot = ActionSlot.Passive;
+        [Tooltip("Leer: fuer jeden Helden.")]
+        [SerializeField] private List<HeroClassId> heroes = new();
 
         public PerkId Id => id;
         public string DisplayName => displayName;
         public string Description => description;
         public PerkRarity Rarity => rarity;
         public Color Color => color;
+        public ActionSlot Slot => slot;
+        public IReadOnlyList<HeroClassId> Heroes => heroes;
 
-        public PerkDefinition ToRuntime() => new(id, displayName, description, rarity, color);
+        public PerkDefinition ToRuntime() => new(id, displayName, description, rarity, color, slot, heroes.ToArray());
 
         /// <summary>Nur für den einmaligen Migrationslauf im Editor.</summary>
         public void Fill(PerkDefinition source)
@@ -36,6 +42,8 @@ namespace Shatterspire
             description = source.Description;
             rarity = source.Rarity;
             color = source.Color;
+            slot = source.Slot;
+            heroes = new List<HeroClassId>(source.Heroes);
         }
     }
 }

@@ -115,6 +115,8 @@ namespace Shatterspire.Tests
                 Assert.That(asset.DisplayName, Is.EqualTo(expected.Name), $"{expected.Id}: Name");
                 Assert.That(asset.Description, Is.EqualTo(expected.Description), $"{expected.Id}: Text");
                 Assert.That(asset.Rarity, Is.EqualTo(expected.Rarity), $"{expected.Id}: Seltenheit");
+                Assert.That(asset.Slot, Is.EqualTo(expected.Slot), $"{expected.Id}: Aktion");
+                Assert.That(asset.Heroes, Is.EqualTo(expected.Heroes), $"{expected.Id}: Helden");
             }
         }
 

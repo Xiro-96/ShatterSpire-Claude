@@ -8,11 +8,15 @@ namespace Shatterspire
     public sealed class EnemyAgent : MonoBehaviour
     {
         private static readonly System.Collections.Generic.List<EnemyAgent> ActiveAgents = new();
-        private enum State { Chase, Telegraph, Attack, Dead }
+        private enum State { Idle, Chase, Telegraph, Attack, Dead }
         private EnemyKind kind;
         private EnemyStats stats;
         private const float ArrivalGraceSeconds = 0.75f;
         private float spawnedAt;
+        private const float LeashRadius = 18f;
+        private FloorNavigation navigation;
+        private Vector3 home;
+        private float aggroRadius = 8f;
         private Health health;
         private StatusReceiver status;
         private StylizedCharacterMotion motion;
@@ -30,9 +34,13 @@ namespace Shatterspire
         private float strafeDirection;
         private Vector3 knockbackVelocity;
         public event Action<EnemyAgent> Defeated;
+        /// <summary>Wird aufmerksam und greift an. Der Spawner alarmiert darueber das restliche Lager.</summary>
+        public event Action<EnemyAgent> Engaged;
         public EnemyKind Kind => kind;
         /// <summary>Kurz nach dem Erscheinen: fuer die Zielhilfe noch kein gueltiges Ziel.</summary>
         public bool IsArriving => Time.time - spawnedAt < ArrivalGraceSeconds;
+        /// <summary>Wartet im Lager und hat noch niemanden bemerkt.</summary>
+        public bool IsIdle => state == State.Idle;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetRegistry() => ActiveAgents.Clear();
@@ -76,6 +84,31 @@ namespace Shatterspire
             state = State.Chase;
         }
 
+        /// <summary>
+        /// Ordnet den Gegner einer Etage zu. Lagergegner starten ruhend und greifen erst an, wenn jemand
+        /// in ihren Aggro-Radius kommt oder sie getroffen werden.
+        /// </summary>
+        public void SetBehaviour(FloorNavigation floorNavigation, Vector3 homePosition, bool startIdle)
+        {
+            navigation = floorNavigation;
+            home = homePosition;
+            aggroRadius = kind switch
+            {
+                EnemyKind.Shooter => 10f,
+                EnemyKind.IronWarden => 12f,
+                _ => 8f
+            };
+            if (startIdle) state = State.Idle;
+        }
+
+        public void Engage(bool alertCamp = true)
+        {
+            if (state != State.Idle) return;
+            state = State.Chase;
+            attackReadyAt = Mathf.Max(attackReadyAt, Time.time + 0.4f);
+            if (alertCamp) Engaged?.Invoke(this);
+        }
+
         private void OnDestroy()
         {
             if (!health) return;
@@ -93,9 +126,19 @@ namespace Shatterspire
             var offset = target.position - transform.position;
             offset.y = 0f;
             var distance = offset.magnitude;
+            if (state == State.Idle)
+            {
+                IdleUpdate(distance);
+                return;
+            }
+            if (state == State.Chase && ShouldReturnHome())
+            {
+                state = State.Idle;
+                return;
+            }
             if (state == State.Chase)
             {
-                var direction = offset.sqrMagnitude > 0.01f ? offset.normalized : transform.forward;
+                var direction = SteerTowards(target.position, offset);
                 var movement = Vector3.zero;
                 if (kind == EnemyKind.Shooter)
                 {
@@ -120,9 +163,58 @@ namespace Shatterspire
             }
         }
 
+        private void IdleUpdate(float distanceToTarget)
+        {
+            // Ruhend: zum Lager zurueck und dort warten. Angriff erst, wenn der Spieler nahe kommt und
+            // im selben Raum steht - nicht durch Waende hindurch.
+            var toHome = home - transform.position;
+            toHome.y = 0f;
+            if (toHome.sqrMagnitude > 1.6f * 1.6f)
+            {
+                var step = SteerTowards(home, toHome);
+                transform.position += step * (speed * 0.7f * status.SpeedMultiplier * Time.deltaTime);
+                ClampToArena();
+                if (step.sqrMagnitude > 0.01f)
+                    transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(step), 6f * Time.deltaTime);
+            }
+            if (distanceToTarget > aggroRadius) return;
+            if (navigation != null && navigation.RoomAt(target.position) != navigation.RoomAt(transform.position) &&
+                distanceToTarget > aggroRadius * 0.45f) return;
+            Engage();
+        }
+
+        private bool ShouldReturnHome()
+        {
+            if (navigation == null || kind == EnemyKind.IronWarden) return false;
+            // Nur umkehren, wenn der Spieler das Lager weit hinter sich gelassen hat.
+            return FlatDistance(target.position, home) > LeashRadius &&
+                   FlatDistance(transform.position, home) > LeashRadius * 0.6f;
+        }
+
+        private Vector3 SteerTowards(Vector3 destination, Vector3 fallback)
+        {
+            if (navigation != null)
+            {
+                var waypoint = navigation.NextWaypoint(transform.position, destination);
+                var delta = waypoint - transform.position;
+                delta.y = 0f;
+                if (delta.sqrMagnitude > 0.0004f) return delta.normalized;
+            }
+            fallback.y = 0f;
+            return fallback.sqrMagnitude > 0.01f ? fallback.normalized : transform.forward;
+        }
+
+        private static float FlatDistance(Vector3 a, Vector3 b)
+        {
+            var dx = a.x - b.x;
+            var dz = a.z - b.z;
+            return Mathf.Sqrt(dx * dx + dz * dz);
+        }
+
         private void OnDamaged(DamageInfo damage)
         {
             if (state == State.Dead) return;
+            if (state == State.Idle) Engage();
             var force = damage.Force;
             force.y = 0f;
             knockbackVelocity += force * stats.KnockbackResistance;
@@ -156,6 +248,11 @@ namespace Shatterspire
 
         private void ClampToArena()
         {
+            if (navigation != null)
+            {
+                transform.position = navigation.ClampToWalkable(transform.position, 0.45f);
+                return;
+            }
             const float radius = 14.55f;
             var flat = new Vector2(transform.position.x, transform.position.z);
             if (flat.sqrMagnitude <= radius * radius) return;
@@ -354,6 +451,7 @@ namespace Shatterspire
             {
                 var dashDistance = phase == 3 ? 7.2f : 5.4f;
                 transform.position += direction * dashDistance;
+                ClampToArena();
                 CombatUtility.Explode(transform.position, phase == 3 ? 2.7f : 2.15f,
                     attackDamage, TeamId.Player, DamageType.Fire, gameObject);
             }

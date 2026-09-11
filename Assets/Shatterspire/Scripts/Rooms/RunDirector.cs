@@ -1,37 +1,55 @@
+using System;
 using System.Collections;
 using UnityEngine;
 
 namespace Shatterspire
 {
+    /// <summary>
+    /// Steuert einen Aufstieg: baut jede Etage aus einem Seed, setzt Gruppe, Kamera und Gegner,
+    /// und entscheidet nach jeder Etage ueber Belohnung, Route und das Ende des Pfads.
+    /// </summary>
     public sealed class RunDirector : MonoBehaviour
     {
+        private const int MaximumKnockouts = 3;
+
         private Transform player;
         private Health playerHealth;
+        private PlayerController playerController;
         private EnemySpawner spawner;
         private PrototypeHUD hud;
-        private GameObject roomDecor;
+        private CameraController cameraController;
+        private CompanionBot[] companions = Array.Empty<CompanionBot>();
+        private GameObject floorRoot;
+        private FloorNavigation navigation;
         private int roomIndex;
         private int shards;
         private int floorsCleared;
         private int bossesDefeated;
         private int enemiesDefeated;
+        private int runSeed;
         private RoomKind currentKind;
         private bool ended;
         private bool transitioning;
         private bool downed;
         private int knockouts;
-        private const int MaximumKnockouts = 3;
         private RunConfig config;
         private PlayerBuild build;
 
-        public void Configure(Transform playerTransform, EnemySpawner enemySpawner, PrototypeHUD prototypeHud, RunConfig runConfig)
+        public void Configure(Transform playerTransform, EnemySpawner enemySpawner, PrototypeHUD prototypeHud,
+            RunConfig runConfig, CameraController runCamera = null, CompanionBot[] team = null)
         {
             player = playerTransform;
             playerHealth = player.GetComponent<Health>();
+            playerController = player.GetComponent<PlayerController>();
             spawner = enemySpawner;
             hud = prototypeHud;
             config = runConfig ?? new RunConfig();
+            cameraController = runCamera;
+            companions = team ?? Array.Empty<CompanionBot>();
             build = player.GetComponent<PlayerBuild>();
+            // Ein Seed je Aufstieg, jede Etage leitet ihren eigenen daraus ab. So ist ein ganzer
+            // Aufstieg spaeter reproduzierbar - fuer Fehlersuche und fuer Co-op-Clients.
+            runSeed = Environment.TickCount;
             spawner.WaveCleared += CompleteRoom;
             playerHealth.Died += OnPlayerDied;
             GameEvents.EntityDied += OnEntityDied;
@@ -51,23 +69,58 @@ namespace Shatterspire
             if (ended) return;
             transitioning = false;
             roomIndex++;
-            currentKind = roomIndex % 5 == 0 ? RoomKind.Boss : kind;
-            player.position = currentKind == RoomKind.Boss ? new Vector3(0f, 0f, -9f) : new Vector3(0f, 0f, -11f);
-            player.rotation = Quaternion.identity;
+            currentKind = PathCatalog.IsBossFloor(roomIndex) ? RoomKind.Boss
+                : kind == RoomKind.Boss ? RoomKind.Combat : kind;
+
+            if (floorRoot) Destroy(floorRoot);
+            var seed = unchecked(runSeed * 486187739 + roomIndex * 7919);
+            var layout = FloorLayoutGenerator.Generate(seed, roomIndex, currentKind);
+            navigation = new FloorNavigation(layout);
             AuthoredArt.ApplyFloorTheme(roomIndex);
-            BuildLayout(roomIndex, currentKind);
+            floorRoot = AuthoredArt.BuildFloor(layout, null);
+
+            PlaceParty(layout);
+            spawner.BeginFloor(navigation, roomIndex);
             GameEvents.RaiseRoomStarted(roomIndex, currentKind);
+
             if (currentKind == RoomKind.Boss)
             {
+                spawner.SpawnBoss(layout.ExitPoint, roomIndex);
                 GameEvents.RaiseObjectiveChanged(0, 1, "DEFEAT THE SPIRE WARDEN");
-                GameEvents.RaiseObjectiveTargetChanged(Vector3.zero, string.Empty, false);
-                spawner.SpawnRoom(currentKind, roomIndex);
+                GameEvents.RaiseObjectiveTargetChanged(layout.ExitPoint, "SPIRE WARDEN", true);
                 return;
             }
 
-            var objective = roomDecor.AddComponent<FloorObjectiveController>();
-            objective.Configure(player, spawner, roomIndex, currentKind, CompleteRoom);
-            spawner.SpawnObjectiveRoom(currentKind, roomIndex, objective.CorePositions);
+            spawner.SpawnCamps(layout, currentKind);
+            var objective = floorRoot.AddComponent<FloorObjectiveController>();
+            objective.Configure(player, spawner, layout, roomIndex, currentKind, CompleteRoom);
+        }
+
+        private void PlaceParty(FloorLayout layout)
+        {
+            var spawn = layout.SpawnPoint;
+            if (playerController)
+            {
+                playerController.SetNavigation(navigation);
+                playerController.Teleport(spawn);
+            }
+            else
+            {
+                player.position = spawn;
+            }
+            player.rotation = Quaternion.identity;
+
+            for (var i = 0; i < companions.Length; i++)
+            {
+                if (!companions[i]) continue;
+                companions[i].SetNavigation(navigation);
+                var side = i % 2 == 0 ? -1f : 1f;
+                companions[i].Teleport(navigation.ClampToWalkable(spawn + new Vector3(side * 2.4f, 0f, -1.6f), 0.5f));
+            }
+
+            if (!cameraController) return;
+            cameraController.SetBounds(layout.Bounds);
+            cameraController.Snap();
         }
 
         private void CompleteRoom()
@@ -81,10 +134,16 @@ namespace Shatterspire
             floorsCleared++;
             if (currentKind == RoomKind.Boss) bossesDefeated++;
             GameEvents.RaiseRoomCompleted(roomIndex, currentKind);
+
+            if (PathCatalog.IsFinalFloor(config.Mode, roomIndex))
+            {
+                // Pfad durchgespielt: keine Wahl mehr zwischen Extrahieren und Aufsteigen.
+                EndRun(true);
+                return;
+            }
             if (currentKind == RoomKind.Boss)
             {
-                var canAscend = config.Mode == RunMode.EndlessTower || roomIndex < 15;
-                hud.ShowAscensionChoice(roomIndex, shards, canAscend, () => EndRun(true), Ascend);
+                hud.ShowAscensionChoice(roomIndex, shards, true, () => EndRun(true), Ascend);
                 return;
             }
             var healing = currentKind == RoomKind.Treasure ? 35f : currentKind == RoomKind.Mystery ? 18f : 12f;
@@ -147,45 +206,8 @@ namespace Shatterspire
 
         private void OnEntityDied(Health value)
         {
-            // Fuer die Wertung zaehlen nur gefallene Gegner. Der Spieler stirbt in
-            // dieser Liste auch, deshalb die Teampruefung.
+            // Fuer die Wertung zaehlen nur gefallene Gegner. Der Spieler stirbt in dieser Liste auch.
             if (value && value.Team == TeamId.Enemy) enemiesDefeated++;
-        }
-
-        private void BuildLayout(int index, RoomKind kind)
-        {
-            if (roomDecor) Destroy(roomDecor);
-            roomDecor = new GameObject("Room Layout " + index);
-            var accent = kind switch
-            {
-                RoomKind.Elite => new Color(1f, 0.08f, 0.48f),
-                RoomKind.Boss => new Color(1f, 0.36f, 0.04f),
-                RoomKind.Treasure => new Color(1f, 0.75f, 0.08f),
-                RoomKind.Mystery => new Color(0.62f, 0.15f, 1f),
-                _ => new Color(0.08f, 0.78f, 1f)
-            };
-            if (AuthoredArt.BuildRoomDecor(roomDecor.transform, index, kind, accent)) return;
-
-            var obstacleCount = kind == RoomKind.Boss ? 4 : 3 + index % 4;
-            for (var i = 0; i < obstacleCount; i++)
-            {
-                var angle = (i / (float)obstacleCount) * Mathf.PI * 2f + index * 0.55f;
-                var radius = kind == RoomKind.Boss ? 10f : 5.5f + (i % 2) * 3f;
-                var position = new Vector3(Mathf.Cos(angle) * radius, 0.65f, Mathf.Sin(angle) * radius);
-                var pillar = PrototypeFactory.Primitive(PrimitiveType.Cylinder, "Rune Plinth", position,
-                    new Vector3(1.35f + i % 2 * 0.35f, 0.68f, 1.35f + i % 2 * 0.35f), StylizedArt.Ink,
-                    keepCollider: true);
-                pillar.transform.SetParent(roomDecor.transform);
-                var crystal = PrototypeFactory.Primitive(PrimitiveType.Cube, "Spire Crystal", position + Vector3.up * 1.35f,
-                    new Vector3(0.62f, 1.35f, 0.62f), accent, true);
-                crystal.transform.rotation = Quaternion.Euler(12f, 35f + i * 19f, 45f);
-                crystal.transform.SetParent(roomDecor.transform);
-                Destroy(crystal.GetComponent<Collider>());
-                var halo = PrototypeFactory.Primitive(PrimitiveType.Cylinder, "Crystal Halo", position + Vector3.up * 0.74f,
-                    new Vector3(1.65f, 0.035f, 1.65f), Color.Lerp(accent, Color.white, 0.25f), true);
-                halo.transform.SetParent(roomDecor.transform);
-                Destroy(halo.GetComponent<Collider>());
-            }
         }
     }
 }

@@ -5,177 +5,278 @@ using UnityEngine;
 
 namespace Shatterspire
 {
+    /// <summary>
+    /// Gegner einer Etage, in zwei Arten:
+    /// Lager warten in den Raeumen und greifen erst an, wenn man ihnen nahe kommt - wie die
+    /// Gegnergruppen in den Arealen von R.I.S.E. Verteidigungswellen ruecken beim Aktivieren eines
+    /// Power Cores an. Dazu der Warden auf Boss-Etagen.
+    ///
+    /// Vorher erschienen alle Gegner als Wellen rund um den Spieler.
+    /// </summary>
     public sealed class EnemySpawner : MonoBehaviour
     {
-        private readonly List<EnemyAgent> living = new();
+        private readonly List<EnemyAgent> camps = new();
+        private readonly List<EnemyAgent> encounter = new();
+        private readonly List<EnemyAgent> bosses = new();
+        private readonly Dictionary<EnemyAgent, int> campOf = new();
         private Transform player;
-        private bool completionOnClear;
-        private bool spawningObjectiveEncounter;
+        private FloorNavigation navigation;
+        private int activeFloor = 1;
+        private bool spawningEncounter;
         private int encounterTotal;
         private int encounterDefeated;
-        private bool bossEncounter;
-        private bool clearReported;
-        private int activeFloor = 1;
+        private bool encounterClearReported = true;
+        private bool bossClearReported = true;
+
+        /// <summary>Der Warden der Boss-Etage ist besiegt.</summary>
         public event Action WaveCleared;
+
+        /// <summary>Die Verteidigungswelle eines Power Cores ist geschlagen.</summary>
         public event Action EnemiesCleared;
-        public int LivingCount => living.Count;
-        public bool IsSpawning => spawningObjectiveEncounter;
+
+        public int EncounterCount => encounter.Count;
+        public int LivingCount => camps.Count + encounter.Count + bosses.Count;
+        public bool IsSpawning => spawningEncounter;
 
         public void Configure(Transform target) => player = target;
 
-        public void SpawnRoom(RoomKind kind, int roomIndex)
+        public void BeginFloor(FloorNavigation floorNavigation, int floor)
         {
-            StopAllCoroutines();
             Clear();
-            completionOnClear = kind == RoomKind.Boss;
-            clearReported = kind == RoomKind.Treasure || kind == RoomKind.Mystery;
-            activeFloor = Mathf.Max(1, roomIndex);
-            StartCoroutine(SpawnRoutine(kind, roomIndex));
+            navigation = floorNavigation;
+            activeFloor = Mathf.Max(1, floor);
         }
 
-        public void SpawnObjectiveRoom(RoomKind kind, int floorIndex, IReadOnlyList<Vector3> corePositions)
+        public void SpawnCamps(FloorLayout layout, RoomKind kind)
         {
-            StopAllCoroutines();
-            Clear();
-            completionOnClear = false;
-            // Encounters are now activated locally by FloorObjectiveController as
-            // the party reaches each tower section. Keeping this entry point makes
-            // the room/spawner boundary network-friendly.
+            foreach (var room in layout.Rooms)
+            {
+                if (room.CampSize <= 0) continue;
+                for (var i = 0; i < room.CampSize; i++)
+                {
+                    var angle = i * (360f / room.CampSize) + room.Index * 23f;
+                    var radius = 2.2f + (i % 2) * 1.3f;
+                    var position = room.CampCenter + Quaternion.Euler(0f, angle, 0f) * Vector3.forward * radius;
+                    var enemyKind = kind == RoomKind.Elite && i == 0 && room.Role != RoomRole.Lift
+                        ? EnemyKind.Elite
+                        : i == room.CampSize - 1 && room.CampSize >= 4 ? EnemyKind.Brute
+                        : ResolveKind(activeFloor, kind, room.Index * 5 + i);
+                    var agent = Spawn(enemyKind, position, room.CampCenter, true);
+                    camps.Add(agent);
+                    campOf[agent] = room.Index;
+                    agent.Engaged += OnCampEngaged;
+                }
+            }
+        }
+
+        public void SpawnBoss(Vector3 position, int floorIndex)
+        {
+            activeFloor = Mathf.Max(1, floorIndex);
+            bossClearReported = false;
+            // Der Warden wartet in seinem Raum und greift an, sobald die Gruppe eintritt.
+            bosses.Add(Spawn(EnemyKind.IronWarden, position, position, true));
+            GameEvents.RaiseEncounterChanged(1, 1, true);
         }
 
         public void SpawnObjectiveEncounter(Vector3 center, int floorIndex, int encounterIndex, RoomKind kind)
         {
-            if (spawningObjectiveEncounter || living.Count > 0) return;
-            completionOnClear = false;
+            if (spawningEncounter || encounter.Count > 0) return;
             activeFloor = Mathf.Max(1, floorIndex);
             StartCoroutine(SpawnObjectiveEncounterRoutine(center, floorIndex, encounterIndex, kind));
         }
 
         private IEnumerator SpawnObjectiveEncounterRoutine(Vector3 center, int floorIndex, int encounterIndex, RoomKind kind)
         {
-            spawningObjectiveEncounter = true;
-            clearReported = false;
-            bossEncounter = false;
+            spawningEncounter = true;
+            encounterClearReported = false;
             encounterDefeated = 0;
-            if (kind == RoomKind.Treasure || kind == RoomKind.Mystery && UnityEngine.Random.value < 0.5f)
+
+            var noDefenders = kind == RoomKind.Treasure || (kind == RoomKind.Mystery && UnityEngine.Random.value < 0.5f);
+            if (noDefenders)
             {
                 encounterTotal = 0;
-                GameEvents.RaiseWaveChanged(0, 0);
                 PublishEncounter();
                 PrototypeVfx.SpawnExplosion(center + Vector3.up * 0.5f, kind == RoomKind.Treasure ? 3.4f : 2.8f,
                     kind == RoomKind.Treasure ? new Color(1f, 0.72f, 0.1f) : new Color(0.68f, 0.24f, 1f));
-                player.GetComponent<Health>()?.Heal(kind == RoomKind.Treasure ? 24f : 12f);
-                player.GetComponent<LevelSystem>()?.AddExperience(kind == RoomKind.Treasure ? 22 : 14);
+                if (player)
+                {
+                    player.GetComponent<Health>()?.Heal(kind == RoomKind.Treasure ? 24f : 12f);
+                    player.GetComponent<LevelSystem>()?.AddExperience(kind == RoomKind.Treasure ? 22 : 14);
+                }
                 yield return new WaitForSeconds(0.85f);
-                spawningObjectiveEncounter = false;
-                clearReported = true;
-                EnemiesCleared?.Invoke();
+                spawningEncounter = false;
+                ReportEncounterClearIfReady();
                 yield break;
             }
+
+            // Kleiner als die alten Arenawellen: jede Etage hat zusaetzlich Lager in ihren Raeumen.
             var count = kind == RoomKind.Elite
-                ? 9 + Mathf.Min(2, floorIndex - 1)
-                : 6 + Mathf.Min(3, floorIndex);
+                ? 5 + Mathf.Min(3, floorIndex / 3)
+                : 3 + Mathf.Min(3, floorIndex / 2);
             encounterTotal = count;
             PublishEncounter();
-            var waveCount = count >= 7 ? 2 : 1;
+            var waveCount = count >= 5 ? 2 : 1;
             var spawned = 0;
             for (var wave = 0; wave < waveCount; wave++)
             {
                 GameEvents.RaiseWaveChanged(wave + 1, waveCount);
-                var remaining = count - spawned;
-                var wavesRemaining = waveCount - wave;
-                var inWave = Mathf.CeilToInt(remaining / (float)wavesRemaining);
+                var inWave = Mathf.CeilToInt((count - spawned) / (float)(waveCount - wave));
                 var positions = new List<Vector3>(inWave);
                 var kinds = new List<EnemyKind>(inWave);
                 for (var localIndex = 0; localIndex < inWave; localIndex++)
                 {
                     var i = spawned + localIndex;
                     var angle = encounterIndex * 41f + i * (360f / count) + wave * 17f;
-                    var radius = 4.35f + (i % 3) * 0.72f;
-                    var offset = Quaternion.Euler(0f, angle, 0f) * Vector3.forward * radius;
-                    var spawnPosition = ClampSpawn(center + offset);
-                    if (player && (spawnPosition - player.position).sqrMagnitude < 3.4f * 3.4f)
+                    var radius = 5.2f + (i % 3) * 0.7f;
+                    var position = Walkable(center + Quaternion.Euler(0f, angle, 0f) * Vector3.forward * radius);
+                    if (player && FlatDistance(position, player.position) < 3.4f)
                     {
                         var away = center - player.position;
                         away.y = 0f;
                         if (away.sqrMagnitude < 0.1f) away = Vector3.forward;
-                        spawnPosition = ClampSpawn(center + away.normalized * radius);
+                        position = Walkable(center + away.normalized * radius);
                     }
-                    var enemyKind = kind == RoomKind.Elite && i == 0
-                        ? EnemyKind.Elite
-                        : i == count - 1 && encounterIndex > 0 ? EnemyKind.Brute
+                    var enemyKind = kind == RoomKind.Elite && i == 0 ? EnemyKind.Elite
+                        : i == count - 1 && count >= 4 ? EnemyKind.Brute
                         : ResolveKind(floorIndex, kind, encounterIndex * 5 + i);
-                    positions.Add(spawnPosition);
+                    positions.Add(position);
                     kinds.Add(enemyKind);
-                    PrototypeVfx.SpawnEnemyArrival(spawnPosition, enemyKind is EnemyKind.Elite or EnemyKind.Brute);
+                    PrototypeVfx.SpawnEnemyArrival(position, enemyKind is EnemyKind.Elite or EnemyKind.Brute);
                 }
 
-                // The complete formation is readable before it becomes dangerous.
-                // This gives the arrival the authored, arcade-like cadence that the
-                // old one-by-one spawns were missing.
+                // Die ganze Formation ist sichtbar, bevor sie gefaehrlich wird.
                 yield return new WaitForSeconds(wave == 0 ? 0.58f : 0.72f);
                 for (var localIndex = 0; localIndex < positions.Count; localIndex++)
                 {
-                    Spawn(kinds[localIndex], positions[localIndex]);
+                    encounter.Add(Spawn(kinds[localIndex], positions[localIndex], center, false));
                     yield return new WaitForSeconds(0.075f);
                 }
                 spawned += inWave;
 
                 if (wave >= waveCount - 1) continue;
-                while (living.Count > 0) yield return null;
+                while (encounter.Count > 0) yield return null;
                 yield return new WaitForSeconds(0.9f);
             }
-            spawningObjectiveEncounter = false;
+            spawningEncounter = false;
             GameEvents.RaiseWaveChanged(0, 0);
             PublishEncounter();
-            ReportClearIfReady();
+            ReportEncounterClearIfReady();
         }
 
-        private static Vector3 ClampSpawn(Vector3 position)
+        private EnemyAgent Spawn(EnemyKind kind, Vector3 position, Vector3 home, bool idle)
         {
-            const float radius = 13.55f;
-            var flat = new Vector2(position.x, position.z);
-            if (flat.sqrMagnitude <= radius * radius) return position;
-            flat = flat.normalized * radius;
-            return new Vector3(flat.x, position.y, flat.y);
+            var enemy = EnemyFactory.Create(kind, Walkable(position), player, activeFloor);
+            enemy.SetBehaviour(navigation, home, idle);
+            enemy.Defeated += OnDefeated;
+            return enemy;
         }
 
-        private IEnumerator SpawnRoutine(RoomKind kind, int roomIndex)
+        private Vector3 Walkable(Vector3 position)
+            => navigation != null ? navigation.ClampToWalkable(position, 0.6f) : position;
+
+        private void OnCampEngaged(EnemyAgent source)
         {
-            if (kind == RoomKind.Treasure || kind == RoomKind.Mystery)
+            // Ein Lager kaempft gemeinsam: wird einer aufmerksam, greifen alle an.
+            if (!campOf.TryGetValue(source, out var room)) return;
+            foreach (var agent in camps)
+                if (agent && agent != source && campOf.TryGetValue(agent, out var other) && other == room)
+                    agent.Engage(false);
+        }
+
+        private void OnDefeated(EnemyAgent enemy)
+        {
+            enemy.Defeated -= OnDefeated;
+            enemy.Engaged -= OnCampEngaged;
+            camps.Remove(enemy);
+            campOf.Remove(enemy);
+            if (encounter.Remove(enemy))
             {
-                yield return new WaitForSeconds(1.2f);
-                player.GetComponent<Health>().Heal(kind == RoomKind.Treasure ? 20f : 10f);
-                player.GetComponent<LevelSystem>().AddExperience(kind == RoomKind.Treasure ? 24 : 14);
-                WaveCleared?.Invoke();
-                yield break;
-            }
-            if (kind == RoomKind.Boss)
-            {
-                clearReported = false;
-                bossEncounter = true;
-                encounterDefeated = 0;
-                encounterTotal = 1;
-                Spawn(EnemyKind.IronWarden, new Vector3(0f, 0f, 7f));
+                encounterDefeated = Mathf.Min(encounterTotal, encounterDefeated + 1);
                 PublishEncounter();
-                yield break;
+                ReportEncounterClearIfReady();
             }
-            var count = 4 + roomIndex * 2;
-            if (kind == RoomKind.Elite)
+            if (bosses.Remove(enemy))
             {
-                Spawn(EnemyKind.Elite, new Vector3(0f, 0f, 6f));
-                count = Mathf.Max(3, roomIndex);
+                GameEvents.RaiseEncounterChanged(0, 0, false);
+                ReportBossClearIfReady();
             }
-            for (var i = 0; i < count; i++)
+        }
+
+        private void LateUpdate()
+        {
+            camps.RemoveAll(agent => !agent);
+            var removed = encounter.RemoveAll(agent => !agent);
+            if (removed > 0)
             {
-                var angle = i * Mathf.PI * 2f / count + UnityEngine.Random.Range(-0.25f, 0.25f);
-                var radius = UnityEngine.Random.Range(6.5f, 11.5f);
-                var position = new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
-                var roll = UnityEngine.Random.value;
-                var enemyKind = roll < 0.5f ? EnemyKind.Crawler : roll < 0.78f ? EnemyKind.Shooter : EnemyKind.Brute;
-                Spawn(enemyKind, position);
-                yield return new WaitForSeconds(0.08f);
+                encounterDefeated = Mathf.Min(encounterTotal, encounterDefeated + removed);
+                PublishEncounter();
+                ReportEncounterClearIfReady();
             }
+            if (bosses.RemoveAll(agent => !agent) > 0) ReportBossClearIfReady();
+        }
+
+        private void ReportEncounterClearIfReady()
+        {
+            if (encounterClearReported || encounter.Count > 0 || spawningEncounter) return;
+            encounterClearReported = true;
+            EnemiesCleared?.Invoke();
+        }
+
+        private void ReportBossClearIfReady()
+        {
+            if (bossClearReported || bosses.Count > 0) return;
+            bossClearReported = true;
+            WaveCleared?.Invoke();
+        }
+
+        private void PublishEncounter()
+        {
+            if (encounterTotal <= 0)
+            {
+                GameEvents.RaiseEncounterChanged(0, 0, false);
+                return;
+            }
+            GameEvents.RaiseEncounterChanged(Mathf.Max(0, encounterTotal - encounterDefeated), encounterTotal, false);
+        }
+
+        public void ResetStalledObjectiveEncounter()
+        {
+            if (encounter.Count > 0) return;
+            StopAllCoroutines();
+            spawningEncounter = false;
+            encounterTotal = 0;
+            encounterDefeated = 0;
+            encounterClearReported = true;
+            GameEvents.RaiseWaveChanged(0, 0);
+            GameEvents.RaiseEncounterChanged(0, 0, false);
+        }
+
+        public void Clear()
+        {
+            StopAllCoroutines();
+            spawningEncounter = false;
+            encounterClearReported = true;
+            bossClearReported = true;
+            DestroyAll(camps);
+            DestroyAll(encounter);
+            DestroyAll(bosses);
+            campOf.Clear();
+            encounterTotal = 0;
+            encounterDefeated = 0;
+            GameEvents.RaiseWaveChanged(0, 0);
+            GameEvents.RaiseEncounterChanged(0, 0, false);
+        }
+
+        private void DestroyAll(List<EnemyAgent> agents)
+        {
+            foreach (var enemy in agents)
+            {
+                if (!enemy) continue;
+                enemy.Defeated -= OnDefeated;
+                enemy.Engaged -= OnCampEngaged;
+                Destroy(enemy.gameObject);
+            }
+            agents.Clear();
         }
 
         private static EnemyKind ResolveKind(int floorIndex, RoomKind kind, int seed)
@@ -187,85 +288,11 @@ namespace Shatterspire
             return EnemyKind.Brute;
         }
 
-        private void Spawn(EnemyKind kind, Vector3 position)
+        private static float FlatDistance(Vector3 a, Vector3 b)
         {
-            var enemy = EnemyFactory.Create(kind, position, player, activeFloor);
-            enemy.Defeated += OnDefeated;
-            living.Add(enemy);
-        }
-
-        private void OnDefeated(EnemyAgent enemy)
-        {
-            enemy.Defeated -= OnDefeated;
-            living.Remove(enemy);
-            encounterDefeated = Mathf.Min(encounterTotal, encounterDefeated + 1);
-            PublishEncounter();
-            ReportClearIfReady();
-        }
-
-        private void LateUpdate()
-        {
-            var removed = 0;
-            for (var i = living.Count - 1; i >= 0; i--)
-            {
-                if (living[i]) continue;
-                living.RemoveAt(i);
-                removed++;
-            }
-            if (removed == 0) return;
-            encounterDefeated = Mathf.Min(encounterTotal, encounterDefeated + removed);
-            PublishEncounter();
-            ReportClearIfReady();
-        }
-
-        private void ReportClearIfReady()
-        {
-            if (clearReported || living.Count != 0 || spawningObjectiveEncounter) return;
-            clearReported = true;
-            EnemiesCleared?.Invoke();
-            if (completionOnClear) WaveCleared?.Invoke();
-        }
-
-        private void PublishEncounter()
-        {
-            if (encounterTotal <= 0)
-            {
-                GameEvents.RaiseEncounterChanged(0, 0, false);
-                return;
-            }
-            GameEvents.RaiseEncounterChanged(Mathf.Max(0, encounterTotal - encounterDefeated),
-                encounterTotal, bossEncounter);
-        }
-
-        public void ResetStalledObjectiveEncounter()
-        {
-            if (living.Count > 0) return;
-            StopAllCoroutines();
-            spawningObjectiveEncounter = false;
-            encounterTotal = 0;
-            encounterDefeated = 0;
-            bossEncounter = false;
-            clearReported = true;
-            GameEvents.RaiseWaveChanged(0, 0);
-            GameEvents.RaiseEncounterChanged(0, 0, false);
-        }
-
-        public void Clear()
-        {
-            spawningObjectiveEncounter = false;
-            clearReported = true;
-            foreach (var enemy in living)
-                if (enemy)
-                {
-                    enemy.Defeated -= OnDefeated;
-                    Destroy(enemy.gameObject);
-                }
-            living.Clear();
-            encounterTotal = 0;
-            encounterDefeated = 0;
-            bossEncounter = false;
-            GameEvents.RaiseWaveChanged(0, 0);
-            GameEvents.RaiseEncounterChanged(0, 0, false);
+            var dx = a.x - b.x;
+            var dz = a.z - b.z;
+            return Mathf.Sqrt(dx * dx + dz * dz);
         }
     }
 }

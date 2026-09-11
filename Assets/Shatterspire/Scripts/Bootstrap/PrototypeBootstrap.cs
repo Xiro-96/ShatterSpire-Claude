@@ -25,7 +25,6 @@ namespace Shatterspire
             QualitySettings.vSyncCount = 0;
             MobileInput.Reset();
             StylizedArt.ConfigureWorld();
-            StylizedArt.BuildArena();
 
             if (!RunLaunchSettings.HasPendingRun)
             {
@@ -38,6 +37,8 @@ namespace Shatterspire
 
         private static void BuildFrontEnd()
         {
+            // Die Hof-Arena ist nur noch Kulisse fuers Menue. Aufstiege bauen ihre Etagen aus Raeumen.
+            StylizedArt.BuildArena();
             AuthoredArt.ApplyFloorTheme(1);
             CreatePreviewHero(HeroClassId.Ranger, new Vector3(-3.5f, 0f, 1.1f), 15f);
             CreatePreviewHero(HeroClassId.Guardian, new Vector3(0f, 0f, 1.8f), 0f);
@@ -52,15 +53,15 @@ namespace Shatterspire
         private static void BuildRun(RunConfig config)
         {
             var player = CreatePlayer(config);
-            CreateOfflineTeam(player.transform, config.Hero);
-            CreateCamera(player.transform);
+            var team = CreateOfflineTeam(player.transform, config.Hero);
+            var runCamera = CreateCamera(player.transform);
             var systems = new GameObject("Game Systems");
             var spawner = systems.AddComponent<EnemySpawner>();
             spawner.Configure(player.transform);
             var hud = systems.AddComponent<PrototypeHUD>();
             hud.Configure(player, config);
             var run = systems.AddComponent<RunDirector>();
-            run.Configure(player.transform, spawner, hud, config);
+            run.Configure(player.transform, spawner, hud, config, runCamera, team);
 #if UNITY_EDITOR
             EditorCaptureAgent.Attach(systems, "run", true, 3f, 12f);
 #endif
@@ -113,7 +114,7 @@ namespace Shatterspire
             go.AddComponent<AudioListener>();
         }
 
-        private static void CreateCamera(Transform target)
+        private static CameraController CreateCamera(Transform target)
         {
             var go = new GameObject("Main Camera");
             go.tag = "MainCamera";
@@ -124,30 +125,31 @@ namespace Shatterspire
             go.transform.position = target.position + new Vector3(0f, 11.4f, -10.2f);
             go.transform.rotation = Quaternion.Euler(51.5f, 0f, 0f);
             go.AddComponent<AudioListener>();
+            return controller;
         }
 
-        private static void CreateOfflineTeam(Transform player, HeroClassId selected)
+        private static CompanionBot[] CreateOfflineTeam(Transform player, HeroClassId selected)
         {
-            if (selected != HeroClassId.Guardian)
-                CreateCompanion(player, new Vector3(-2.25f, 0f, -1.4f), CompanionRole.Guardian,
-                    new Color(1f, 0.54f, 0.12f), "BRAX · GUARDIAN");
-            else
-                CreateCompanion(player, new Vector3(-2.25f, 0f, -1.4f), CompanionRole.Ranger,
+            var first = selected != HeroClassId.Guardian
+                ? CreateCompanion(player, new Vector3(-2.25f, 0f, -1.4f), CompanionRole.Guardian,
+                    new Color(1f, 0.54f, 0.12f), "BRAX · GUARDIAN")
+                : CreateCompanion(player, new Vector3(-2.25f, 0f, -1.4f), CompanionRole.Ranger,
                     new Color(0.05f, 0.9f, 0.92f), "REX · RANGER");
-
-            if (selected != HeroClassId.Arcanist)
-                CreateCompanion(player, new Vector3(2.25f, 0f, -1.4f), CompanionRole.Support,
-                    new Color(0.28f, 1f, 0.58f), "MIRA · SUPPORT");
-            else
-                CreateCompanion(player, new Vector3(2.25f, 0f, -1.4f), CompanionRole.Ranger,
+            var second = selected != HeroClassId.Arcanist
+                ? CreateCompanion(player, new Vector3(2.25f, 0f, -1.4f), CompanionRole.Support,
+                    new Color(0.28f, 1f, 0.58f), "MIRA · SUPPORT")
+                : CreateCompanion(player, new Vector3(2.25f, 0f, -1.4f), CompanionRole.Ranger,
                     new Color(0.05f, 0.9f, 0.92f), "REX · RANGER");
+            return new[] { first, second };
         }
 
-        private static void CreateCompanion(Transform player, Vector3 offset, CompanionRole role, Color accent, string label)
+        private static CompanionBot CreateCompanion(Transform player, Vector3 offset, CompanionRole role, Color accent, string label)
         {
             var companion = new GameObject(label + " Bot");
             companion.transform.position = player.position + offset;
-            companion.AddComponent<CompanionBot>().Configure(player, offset, role, accent, label);
+            var bot = companion.AddComponent<CompanionBot>();
+            bot.Configure(player, offset, role, accent, label);
+            return bot;
         }
     }
 }

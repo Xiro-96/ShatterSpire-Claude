@@ -1,267 +1,208 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace Shatterspire
 {
     /// <summary>
-    /// A short mobile-friendly tower floor: one readable objective, two enemy waves,
-    /// one reward claim and a visible lift. Floors stay punchy while the full run can
-    /// now contain many visually distinct stages without repeating a cell scavenger hunt.
+    /// Ziel einer Etage nach dem Vorbild von R.I.S.E.: die Power Cores in verschiedenen Raeumen finden
+    /// und aktivieren, dann den Aufzug im entferntesten Raum nehmen. Kommt man einem Core nahe, greifen
+    /// Verteidiger an; ist die Welle geschlagen, wird der Core im Ring stabilisiert. Die Reihenfolge der
+    /// Cores ist frei.
+    ///
+    /// Ersetzt die Einzelarena mit einem Core neun Meter vor dem Start und dem Aufzug geradeaus dahinter.
     /// </summary>
     public sealed class FloorObjectiveController : MonoBehaviour
     {
-        private enum FloorState { Seeking, Fighting, Claiming, ExitOpen, Finished }
+        private const float WakeDistance = 4.5f;
 
         private readonly List<RiftCellNode> nodes = new();
         private Transform player;
         private EnemySpawner spawner;
+        private FloorLayout layout;
         private AscensionGate gate;
         private Action completed;
         private RoomKind roomKind;
-        private FloorState state;
-        private int activated;
         private int floor;
-        private float stateEnteredAt;
-        private bool encounterRetryUsed;
-        private Color routeAccent = new(0.08f, 0.76f, 0.92f);
+        private RiftCellNode charging;
+        private float chargingSince;
+        private bool retryUsed;
+        private bool finished;
 
-        public IReadOnlyList<Vector3> CorePositions
-        {
-            get
-            {
-                var positions = new List<Vector3>(nodes.Count);
-                foreach (var node in nodes) positions.Add(node.transform.position);
-                return positions;
-            }
-        }
-
-        public void Configure(Transform playerTransform, EnemySpawner enemySpawner, int floorIndex,
-            RoomKind kind, Action onCompleted)
+        public void Configure(Transform playerTransform, EnemySpawner enemySpawner, FloorLayout floorLayout,
+            int floorIndex, RoomKind kind, Action onCompleted)
         {
             player = playerTransform;
             spawner = enemySpawner;
+            layout = floorLayout;
             floor = floorIndex;
             roomKind = kind;
             completed = onCompleted;
-            state = FloorState.Seeking;
-            stateEnteredAt = Time.time;
-            spawner.EnemiesCleared += OnEncounterCleared;
+            spawner.EnemiesCleared += OnDefendersCleared;
 
-            BuildTowerPath();
-            var positions = new[]
+            var number = 0;
+            foreach (var room in layout.CoreRooms)
             {
-                new Vector3(0f, 0f, -2.2f)
-            };
-            for (var i = 0; i < positions.Length; i++)
-            {
-                var nodeObject = new GameObject("Power Cell " + (i + 1));
+                number++;
+                var nodeObject = new GameObject("Power Core " + number);
                 nodeObject.transform.SetParent(transform, false);
-                nodeObject.transform.position = positions[i];
+                nodeObject.transform.position = room.CorePosition;
                 var node = nodeObject.AddComponent<RiftCellNode>();
-                node.Configure(this, player, i + 1, kind == RoomKind.Elite ? 0.5f : 0.36f);
+                node.Configure(this, player, number, kind == RoomKind.Elite ? 0.9f : 0.7f);
+                node.SetCurrent();
                 nodes.Add(node);
             }
-            nodes[0].SetCurrent();
 
             var gateObject = new GameObject("Tower Lift");
             gateObject.transform.SetParent(transform, false);
-            gateObject.transform.position = new Vector3(0f, 0f, 13.2f);
+            gateObject.transform.position = layout.ExitPoint;
             gate = gateObject.AddComponent<AscensionGate>();
             gate.Configure(player, CompleteFloor);
-            GameEvents.RaiseObjectiveChanged(0, nodes.Count, "REACH POWER CELL 1");
-            GameEvents.RaiseObjectiveTargetChanged(nodes[0].transform.position, "POWER CELL 1", true);
+
+            if (nodes.Count == 0)
+            {
+                gate.Unlock();
+                GameEvents.RaiseObjectiveChanged(0, 0, "TOWER LIFT OPEN");
+            }
+            else
+            {
+                GameEvents.RaiseObjectiveChanged(0, nodes.Count, "FIND THE POWER CORES");
+            }
+            PublishTarget();
         }
 
         private void OnDestroy()
         {
-            if (spawner) spawner.EnemiesCleared -= OnEncounterCleared;
+            if (spawner) spawner.EnemiesCleared -= OnDefendersCleared;
+        }
+
+        private int ActivatedCount
+        {
+            get
+            {
+                var count = 0;
+                foreach (var node in nodes)
+                    if (node && node.Activated) count++;
+                return count;
+            }
         }
 
         private void Update()
         {
-            if (!player || activated >= nodes.Count) return;
-            if (state == FloorState.Fighting)
+            if (finished || !player) return;
+            if (charging)
             {
-                RepairStalledEncounter();
+                RepairStalledDefence();
+                PublishTarget();
                 return;
             }
-            if (state != FloorState.Seeking) return;
 
-            var distance = Vector3.Distance(Flat(player.position), Flat(nodes[activated].transform.position));
-            var firstCellAutoStart = activated == 0 && Time.time - stateEnteredAt >= 0.35f;
-            if (!firstCellAutoStart && distance > 5.1f) return;
-
-            StartEncounter();
+            foreach (var node in nodes)
+            {
+                if (!node || node.Activated || node.Ready) continue;
+                if (FlatDistance(player.position, node.transform.position) > WakeDistance) continue;
+                BeginDefence(node);
+                return;
+            }
+            PublishTarget();
         }
 
-        private void StartEncounter()
+        private void BeginDefence(RiftCellNode node)
         {
-            state = FloorState.Fighting;
-            stateEnteredAt = Time.time;
-            encounterRetryUsed = false;
-            GameEvents.RaiseObjectiveChanged(activated, nodes.Count,
-                "DEFEAT THE CELL GUARDIANS");
-            GameEvents.RaiseObjectiveTargetChanged(nodes[activated].transform.position,
-                "ACTIVE CELL " + (activated + 1), true);
-            spawner.SpawnObjectiveEncounter(nodes[activated].transform.position, floor, activated, roomKind);
+            charging = node;
+            chargingSince = Time.time;
+            retryUsed = false;
+            var index = nodes.IndexOf(node);
+            GameEvents.RaiseObjectiveChanged(ActivatedCount, nodes.Count, $"DEFEND POWER CORE {index + 1}");
+            spawner.SpawnObjectiveEncounter(node.transform.position, floor, index, roomKind);
         }
 
-        private void RepairStalledEncounter()
+        private void RepairStalledDefence()
         {
-            var elapsed = Time.time - stateEnteredAt;
-            if (elapsed < 3f || spawner.LivingCount > 0) return;
+            // Sicherung, falls das Ende einer Welle einmal nicht gemeldet wird: einmal neu starten,
+            // danach den Core freigeben, statt die Etage unloesbar zu machen.
+            var elapsed = Time.time - chargingSince;
+            if (elapsed < 3f || spawner.EncounterCount > 0) return;
             if (spawner.IsSpawning && elapsed < 6f) return;
             if (spawner.IsSpawning) spawner.ResetStalledObjectiveEncounter();
-            if (encounterRetryUsed)
+            if (retryUsed)
             {
-                OnEncounterCleared();
+                OnDefendersCleared();
                 return;
             }
-
-            encounterRetryUsed = true;
-            stateEnteredAt = Time.time;
-            spawner.SpawnObjectiveEncounter(nodes[activated].transform.position, floor, activated, roomKind);
+            retryUsed = true;
+            chargingSince = Time.time;
+            spawner.SpawnObjectiveEncounter(charging.transform.position, floor, nodes.IndexOf(charging), roomKind);
         }
 
-        private void OnEncounterCleared()
+        private void OnDefendersCleared()
         {
-            if (state != FloorState.Fighting || activated >= nodes.Count) return;
-            state = FloorState.Claiming;
-            stateEnteredAt = Time.time;
-            nodes[activated].SetReady();
-            GameEvents.RaiseObjectiveChanged(activated, nodes.Count, "POWER CELL SYNCING");
-            GameEvents.RaiseObjectiveTargetChanged(nodes[activated].transform.position,
-                "SYNCING CELL " + (activated + 1), true);
-            StartCoroutine(AutoClaim(nodes[activated]));
-        }
-
-        private IEnumerator AutoClaim(RiftCellNode node)
-        {
-            yield return new WaitForSeconds(0.95f);
-            if (state == FloorState.Claiming && activated < nodes.Count && node == nodes[activated])
-                Activate(node);
+            if (!charging) return;
+            var node = charging;
+            charging = null;
+            node.SetReady();
+            GameEvents.RaiseObjectiveChanged(ActivatedCount, nodes.Count, "STAND IN THE RING TO ACTIVATE");
+            PublishTarget(node);
         }
 
         public void Activate(RiftCellNode node)
         {
-            if (state != FloorState.Claiming || activated >= nodes.Count || node != nodes[activated]) return;
+            if (finished || !node || node.Activated || !node.Ready) return;
             node.LockActivated();
-            activated++;
-
-            if (activated >= nodes.Count)
+            if (ActivatedCount >= nodes.Count)
             {
-                state = FloorState.ExitOpen;
                 gate.Unlock();
-                GameEvents.RaiseObjectiveChanged(activated, nodes.Count, "TOWER LIFT OPEN");
-                GameEvents.RaiseObjectiveTargetChanged(gate.transform.position, "TOWER LIFT", true);
+                GameEvents.RaiseObjectiveChanged(nodes.Count, nodes.Count, "TOWER LIFT OPEN");
+            }
+            else
+            {
+                GameEvents.RaiseObjectiveChanged(ActivatedCount, nodes.Count, "FIND THE NEXT POWER CORE");
+            }
+            PublishTarget();
+        }
+
+        private void PublishTarget(RiftCellNode focus = null)
+        {
+            if (finished || !player) return;
+            var target = focus ? focus : charging;
+            if (!target)
+            {
+                // Naechster noch nicht aktivierter Core. Sind alle aktiv, der Aufzug.
+                var best = float.MaxValue;
+                foreach (var node in nodes)
+                {
+                    if (!node || node.Activated) continue;
+                    var distance = FlatDistance(player.position, node.transform.position);
+                    if (distance >= best) continue;
+                    best = distance;
+                    target = node;
+                }
+            }
+            if (target)
+            {
+                var index = nodes.IndexOf(target) + 1;
+                GameEvents.RaiseObjectiveTargetChanged(target.transform.position,
+                    target.Ready ? $"ACTIVATE CORE {index}" : $"POWER CORE {index}", true);
                 return;
             }
-
-            state = FloorState.Seeking;
-            stateEnteredAt = Time.time;
-            nodes[activated].SetCurrent();
-            GameEvents.RaiseObjectiveChanged(activated, nodes.Count, "REACH POWER CELL " + (activated + 1));
-            GameEvents.RaiseObjectiveTargetChanged(nodes[activated].transform.position,
-                "POWER CELL " + (activated + 1), true);
+            GameEvents.RaiseObjectiveTargetChanged(gate.transform.position, "TOWER LIFT", true);
         }
 
         private void CompleteFloor()
         {
-            if (state is FloorState.Finished or FloorState.Fighting) return;
-            state = FloorState.Finished;
+            if (finished) return;
+            finished = true;
             GameEvents.RaiseObjectiveTargetChanged(Vector3.zero, string.Empty, false);
             GameEvents.RaiseObjectiveChanged(nodes.Count, nodes.Count, "FLOOR SECURED");
             completed?.Invoke();
         }
 
-        private void BuildTowerPath()
+        private static float FlatDistance(Vector3 a, Vector3 b)
         {
-            var theme = FloorCatalog.ThemeFor(floor);
-            var colors = theme switch
-            {
-                FloorTheme.EmberFoundry => new[] { new Color(1f, 0.28f, 0.04f), new Color(1f, 0.56f, 0.06f), new Color(0.82f, 0.08f, 0.03f) },
-                FloorTheme.AstralArchive => new[] { new Color(0.6f, 0.18f, 1f), new Color(0.12f, 0.82f, 1f), new Color(0.92f, 0.2f, 0.74f) },
-                _ => new[] { new Color(0.2f, 0.88f, 0.74f), new Color(0.72f, 0.38f, 0.95f), new Color(1f, 0.61f, 0.18f) }
-            };
-            routeAccent = colors[0];
-            BuildEncounterPlaza(new Vector3(0f, 0f, -2.2f), colors[0]);
-            BuildGuidePath(new Vector3(0f, 0.08f, -11.8f), new Vector3(0f, 0.08f, -2.2f));
-            BuildGuidePath(new Vector3(0f, 0.08f, -2.2f), new Vector3(0f, 0.08f, 13.2f));
+            var dx = a.x - b.x;
+            var dz = a.z - b.z;
+            return Mathf.Sqrt(dx * dx + dz * dz);
         }
-
-        private void BuildEncounterPlaza(Vector3 position, Color accent)
-        {
-            var border = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            border.name = "Cell Stone Plaza";
-            border.transform.SetParent(transform, false);
-            border.transform.position = position + Vector3.up * 0.065f;
-            border.transform.localScale = new Vector3(3.7f, 0.045f, 3.7f);
-            border.GetComponent<Renderer>().sharedMaterial = PrototypeFactory.CreateMaterial(
-                new Color(0.035f, 0.06f, 0.14f), false, 0.06f);
-            PrototypeFactory.RemoveCollider(border.GetComponent<Collider>());
-
-            var inset = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            inset.name = "Cell Rift Inset";
-            inset.transform.SetParent(transform, false);
-            inset.transform.position = position + Vector3.up * 0.12f;
-            inset.transform.localScale = new Vector3(3.08f, 0.022f, 3.08f);
-            inset.GetComponent<Renderer>().sharedMaterial = PrototypeFactory.CreateMaterial(
-                Color.Lerp(new Color(0.12f, 0.2f, 0.38f), accent, 0.22f), false, 0.04f);
-            PrototypeFactory.RemoveCollider(inset.GetComponent<Collider>());
-
-            var sigil = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            sigil.name = "Cell Sigil";
-            sigil.transform.SetParent(transform, false);
-            sigil.transform.position = position + Vector3.up * 0.155f;
-            sigil.transform.localScale = new Vector3(0.88f, 0.016f, 0.88f);
-            sigil.GetComponent<Renderer>().sharedMaterial = PrototypeFactory.CreateMaterial(accent, true, 0.3f, 0.04f);
-            PrototypeFactory.RemoveCollider(sigil.GetComponent<Collider>());
-
-            for (var i = 0; i < 4; i++)
-            {
-                var direction = Quaternion.Euler(0f, i * 90f, 0f) * Vector3.forward;
-                var rune = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                rune.name = "Cell Compass Rune";
-                rune.transform.SetParent(transform, false);
-                rune.transform.position = position + direction * 2.55f + Vector3.up * 0.16f;
-                rune.transform.rotation = Quaternion.LookRotation(direction);
-                rune.transform.localScale = new Vector3(0.18f, 0.025f, 0.72f);
-                rune.GetComponent<Renderer>().sharedMaterial = PrototypeFactory.CreateMaterial(accent, true, 0.28f, 0.04f);
-                PrototypeFactory.RemoveCollider(rune.GetComponent<Collider>());
-            }
-        }
-
-        private void BuildGuidePath(Vector3 from, Vector3 to)
-        {
-            var direction = to - from;
-            if (direction.sqrMagnitude < 0.01f) return;
-            var length = direction.magnitude;
-            var forward = direction / length;
-            var midpoint = Vector3.Lerp(from, to, 0.5f);
-            var route = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            route.name = "Recessed Rift Route";
-            route.transform.SetParent(transform, false);
-            route.transform.position = midpoint;
-            route.transform.rotation = Quaternion.LookRotation(forward);
-            route.transform.localScale = new Vector3(0.82f, 0.025f, length);
-            route.GetComponent<Renderer>().sharedMaterial = PrototypeFactory.CreateMaterial(
-                new Color(0.12f, 0.18f, 0.27f), false, 0.05f);
-            PrototypeFactory.RemoveCollider(route.GetComponent<Collider>());
-
-            var energy = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            energy.name = "Rift Route Energy";
-            energy.transform.SetParent(transform, false);
-            energy.transform.position = midpoint + Vector3.up * 0.025f;
-            energy.transform.rotation = Quaternion.LookRotation(forward);
-            energy.transform.localScale = new Vector3(0.07f, 0.012f, length * 0.96f);
-            energy.GetComponent<Renderer>().sharedMaterial = PrototypeFactory.CreateMaterial(
-                routeAccent, true, 0.18f);
-            PrototypeFactory.RemoveCollider(energy.GetComponent<Collider>());
-        }
-
-        private static Vector3 Flat(Vector3 value) => new(value.x, 0f, value.z);
     }
 
     public sealed class RiftCellNode : MonoBehaviour
@@ -280,6 +221,7 @@ namespace Shatterspire
         private bool ready;
         private bool activated;
         public bool Activated => activated;
+        public bool Ready => ready;
 
         public void Configure(FloorObjectiveController controller, Transform playerTransform, int number, float seconds)
         {
@@ -306,7 +248,7 @@ namespace Shatterspire
                 beaconRenderer.sharedMaterial = PrototypeFactory.CreateMaterial(new Color(1f, 0.68f, 0.12f), true, 0.45f, 0.05f);
             if (cellLabel)
             {
-                cellLabel.text = "CLAIM";
+                cellLabel.text = "ACTIVATE";
                 cellLabel.color = new Color(1f, 0.78f, 0.12f);
             }
             PrototypeVfx.SpawnExplosion(transform.position + Vector3.up * 0.8f, 1.65f, new Color(1f, 0.72f, 0.12f));
@@ -383,7 +325,7 @@ namespace Shatterspire
             cellLabel = new GameObject("Power Cell Label").AddComponent<TextMesh>();
             cellLabel.transform.SetParent(transform, false);
             cellLabel.transform.localPosition = Vector3.up * 3.15f;
-            cellLabel.text = "POWER CELL " + number;
+            cellLabel.text = "POWER CORE " + number;
             cellLabel.fontSize = 34;
             cellLabel.characterSize = 0.045f;
             cellLabel.anchor = TextAnchor.MiddleCenter;
@@ -555,9 +497,8 @@ namespace Shatterspire
             {
                 var platform = Instantiate(source, transform);
                 platform.name = "Tower Lift Platform";
-                // Ohne diesen Aufruf behielt das Modell sein eingebettetes
-                // FBX-Material - untexturiert und hell. Das war die grosse weisse
-                // Scheibe oben im Spielbild, kein Post-Processing-Effekt.
+                // Ohne diesen Aufruf behielt das Modell sein eingebettetes FBX-Material -
+                // untexturiert und hell, die grosse weisse Scheibe im Spielbild vom 11.09.
                 AuthoredArt.ApplyForgeMaterials(platform);
                 platform.transform.localPosition = Vector3.zero;
                 platform.transform.localScale = Vector3.one * 2.2f;

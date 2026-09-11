@@ -30,7 +30,7 @@ namespace Shatterspire
         private Image heavyPerfectZone;
         private Text heavyStateText;
         private Text skillStateText;
-        private Text ultimateStateText;
+        private Text dashStateText;
         private Text knockoutText;
         private Image xpFill;
         private Text levelText;
@@ -51,6 +51,7 @@ namespace Shatterspire
         private Action ascendCallback;
         private Action extractCallback;
         private bool selectingLevelPerk;
+        private readonly System.Random perkRandom = new();
 
         public void Configure(GameObject player, RunConfig config)
         {
@@ -195,7 +196,7 @@ namespace Shatterspire
             }
             if (!controller || !weapon) return;
             if (skillStateText) skillStateText.text = weapon.SkillNormalized >= 1f ? "Q  READY" : $"Q  {weapon.SkillNormalized:P0}";
-            if (ultimateStateText) ultimateStateText.text = weapon.UltimateNormalized >= 1f ? "E  READY" : $"E  {weapon.UltimateNormalized:P0}";
+            if (dashStateText) dashStateText.text = $"SPACE {controller.DashCharges}/{controller.MaxDashCharges}";
             UpdateObjectiveNavigation();
         }
 
@@ -204,8 +205,7 @@ namespace Shatterspire
             abilitySprites = new[]
             {
                 UiIconFactory.Ability(runConfig.Hero, 0), UiIconFactory.Ability(runConfig.Hero, 1),
-                UiIconFactory.Ability(runConfig.Hero, 2), UiIconFactory.Ability(runConfig.Hero, 3),
-                UiIconFactory.Ability(runConfig.Hero, 4)
+                UiIconFactory.Ability(runConfig.Hero, 2), UiIconFactory.Ability(runConfig.Hero, 3)
             };
         }
 
@@ -261,11 +261,11 @@ namespace Shatterspire
         private void CreateDesktopAbilityBar(Transform parent)
         {
             if (Application.isMobilePlatform) return;
-            // Abstand 106 fuer die groesseren Sockel (92 breit plus Rand).
+            // Drei Aktionen und Dash wie in R.I.S.E. Abstand 106 fuer die Sockel (92 breit plus Rand).
             CreateAbilityTile(parent, 0, "LMB", new Vector2(-40, 40), new Color(0.1f, 0.82f, 0.95f));
             CreateAbilityTile(parent, 3, "RMB", new Vector2(-146, 40), new Color(1f, 0.68f, 0.12f));
             skillStateText = CreateAbilityTile(parent, 1, "Q", new Vector2(-252, 40), new Color(0.55f, 0.3f, 1f));
-            ultimateStateText = CreateAbilityTile(parent, 4, "E", new Vector2(-358, 40), new Color(1f, 0.34f, 0.62f));
+            dashStateText = CreateAbilityTile(parent, 2, "SPACE", new Vector2(-358, 40), new Color(0.18f, 0.74f, 1f));
         }
 
         private void CreateTeamPanel(Transform parent)
@@ -441,7 +441,7 @@ namespace Shatterspire
             if (!visible) return;
             encounterText.text = boss
                 ? "IRON WARDEN  ·  BOSS ENGAGED"
-                : $"CELL GUARDIANS  ·  {remaining} REMAINING";
+                : $"CORE DEFENDERS  ·  {remaining} REMAINING";
             encounterText.color = boss
                 ? new Color(1f, 0.58f, 0.12f)
                 : remaining <= Mathf.Max(2, total / 3)
@@ -518,7 +518,7 @@ namespace Shatterspire
 
         private void OnRoomStarted(int index, RoomKind kind)
         {
-            var counter = runConfig.Mode == RunMode.EndlessTower ? $"FLOOR {index}" : $"FLOOR {index} / 15";
+            var counter = PathCatalog.FloorCounter(runConfig.Mode, index);
             roomText.text = $"{counter}  ·  {kind.ToString().ToUpperInvariant()}";
             ShowAnnouncement($"{FloorCatalog.Name(FloorCatalog.ThemeFor(index))}\nFLOOR {index} · {kind.ToString().ToUpperInvariant()}", 1.8f);
         }
@@ -528,7 +528,10 @@ namespace Shatterspire
         {
             var names = new List<string>();
             foreach (var id in build.Perks)
-                names.Add(PerkCatalog.All.FirstOrDefault(perk => perk.Id == id)?.Name ?? id.ToString());
+            {
+                var perk = PerkCatalog.Find(id);
+                names.Add(perk == null ? id.ToString() : $"{PerkCatalog.SlotLabel(perk.Slot)} {perk.Name}");
+            }
             var fusion = build.IsInferno ? "\nFUSION: INFERNO" : build.IsShatter ? "\nFUSION: SHATTER" : build.IsChainStorm ? "\nFUSION: CHAIN STORM" : string.Empty;
             buildText.text = names.Count == 0 ? "NO PERKS" : string.Join(" · ", names) + fusion;
         }
@@ -551,13 +554,17 @@ namespace Shatterspire
         {
             if (modal) return;
             Time.timeScale = 0f;
-            modal = CreateModal(selectingLevelPerk ? "LEVEL UP · CHOOSE A POWER" : "CHOOSE A FLOOR BLESSING",
-                "ONE CHOICE SHAPES THIS CLIMB");
-            var choices = PerkCatalog.RollThree(new HashSet<PerkId>(build.Perks));
+            modal = CreateModal(selectingLevelPerk ? "LEVEL UP · CHOOSE AN UPGRADE" : "FLOOR CLEARED · CHOOSE AN UPGRADE",
+                "EVERY UPGRADE CHANGES ONE OF YOUR ACTIONS");
+            var hero = runConfig.Hero;
+            var choices = PerkCatalog.RollThree(hero, new HashSet<PerkId>(build.Perks), perkRandom);
             for (var i = 0; i < choices.Count; i++)
             {
                 var perk = choices[i];
-                var button = CreateButton(modal.transform, $"[{i + 1}]  {perk.Name}\n\n{perk.Description}\n\n{perk.Rarity.ToString().ToUpperInvariant()}",
+                var rarity = perk.Rarity.ToString().ToUpperInvariant() +
+                             (perk.Heroes.Length == 1 ? "  ·  " + HeroCatalog.Name(hero) + " ONLY" : string.Empty);
+                var button = CreateButton(modal.transform,
+                    $"[{i + 1}]  {PerkCatalog.SlotLabel(perk.Slot, hero)}\n{perk.Name}\n\n{perk.Description}\n\n{rarity}",
                     new Vector2(-390f + i * 390f, -20f), new Vector2(340f, 420f), perk.Color);
                 button.onClick.AddListener(() => SelectPerk(perk));
                 modalButtons.Add(button);
@@ -787,13 +794,12 @@ namespace Shatterspire
             CreateAction(parent, weapon.HeavyName, new Vector2(-345, 120), 132, MobileAction.Heavy, new Color(1f, 0.66f, 0.1f, 0.82f));
             CreateAction(parent, weapon.SkillName, new Vector2(-300, 305), 124, MobileAction.Skill, new Color(0.62f, 0.28f, 1f, 0.8f));
             CreateAction(parent, "DASH", new Vector2(-455, 250), 112, MobileAction.Dash, new Color(0.18f, 0.74f, 1f, 0.8f));
-            CreateAction(parent, "ULT", new Vector2(-150, 350), 118, MobileAction.Ultimate, new Color(1f, 0.26f, 0.56f, 0.82f));
         }
 
         private void CreateAction(Transform parent, string label, Vector2 pos, float size, MobileAction action, Color color)
         {
             var image = CreateImage(parent, label, color, pos, new Vector2(size, size), new Vector2(1, 0));
-            var spriteIndex = action switch { MobileAction.Attack => 0, MobileAction.Heavy => 3, MobileAction.Skill => 1, MobileAction.Dash => 2, _ => 4 };
+            var spriteIndex = action switch { MobileAction.Attack => 0, MobileAction.Heavy => 3, MobileAction.Skill => 1, MobileAction.Dash => 2, _ => 0 };
             if (abilitySprites != null && spriteIndex < abilitySprites.Length)
             {
                 image.sprite = abilitySprites[spriteIndex];

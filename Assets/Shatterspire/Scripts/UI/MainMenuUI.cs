@@ -67,16 +67,19 @@ namespace Shatterspire
                 new Vector2(126, -208), new Vector2(800, 42), new Vector2(0, 1));
             subtitle.color = new Color(0.16f, 0.92f, 0.86f);
 
-            Panel(screen.transform, new Vector2(120, -284), new Vector2(580, 430), new Vector2(0, 1),
+            // Drei Pfade wie in R.I.S.E.: vor dem Start gewaehlt, mit fester Laenge.
+            Panel(screen.transform, new Vector2(120, -284), new Vector2(580, 474), new Vector2(0, 1),
                 new Color(0.02f, 0.045f, 0.08f, 0.96f), new Color(0.12f, 0.72f, 0.72f));
-            Button(screen.transform, "[1]  STANDARD SPIRE\n15 FLOORS · EXTRACT AFTER BOSSES",
-                new Vector2(150, -330), new Vector2(520, 112), new Vector2(0, 1), new Color(0.06f, 0.86f, 0.72f),
-                () => ShowPreparation(RunMode.StandardSpire));
-            Button(screen.transform, "[2]  ENDLESS TOWER\nUNLIMITED TIERS · RISING REWARDS",
-                new Vector2(150, -468), new Vector2(520, 112), new Vector2(0, 1), new Color(0.65f, 0.28f, 1f),
-                () => ShowPreparation(RunMode.EndlessTower));
-            Button(screen.transform, "[3]  META FORGE\nPERMANENT POWER",
-                new Vector2(150, -606), new Vector2(520, 82), new Vector2(0, 1), new Color(1f, 0.55f, 0.08f), ShowForge);
+            var paths = new[] { RunMode.Brave, RunMode.Heroic, RunMode.Legendary };
+            for (var i = 0; i < paths.Length; i++)
+            {
+                var path = paths[i];
+                Button(screen.transform, $"[{i + 1}]  {PathCatalog.Name(path)}\n{PathCatalog.Summary(path)}",
+                    new Vector2(150, -316 - i * 104), new Vector2(520, 92), new Vector2(0, 1), PathCatalog.Accent(path),
+                    () => ShowPreparation(path));
+            }
+            Button(screen.transform, "[4]  META FORGE\nPERMANENT POWER",
+                new Vector2(150, -628), new Vector2(520, 80), new Vector2(0, 1), new Color(1f, 0.55f, 0.08f), ShowForge);
 
             // Rang und Shift-Restlaufzeit gehoeren nach oben rechts, weil sie der
             // Grund sind, ueberhaupt noch einen Aufstieg zu starten.
@@ -130,9 +133,9 @@ namespace Shatterspire
             config.Mode = mode;
             BeginScreen(new Color(0.006f, 0.014f, 0.035f, 0.88f));
             backAction = ShowHome;
-            var accent = mode == RunMode.EndlessTower ? new Color(0.66f, 0.28f, 1f) : new Color(0.06f, 0.86f, 0.72f);
-            Header(mode == RunMode.EndlessTower ? "ENDLESS TOWER" : "STANDARD SPIRE",
-                "CHOOSE A HERO AND UP TO THREE RELICS", accent);
+            var accent = PathCatalog.Accent(mode);
+            Header($"{PathCatalog.Name(mode)} CLIMB",
+                $"{PathCatalog.Summary(mode)}  ·  CHOOSE A HERO AND UP TO THREE RELICS", accent);
 
             var heroes = new[] { HeroClassId.Ranger, HeroClassId.Guardian, HeroClassId.Arcanist };
             for (var i = 0; i < heroes.Length; i++)

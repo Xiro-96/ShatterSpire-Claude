@@ -5,7 +5,8 @@ using UnityEngine;
 namespace Shatterspire
 {
     public enum HeroClassId { Ranger, Guardian, Arcanist }
-    public enum RunMode { StandardSpire, EndlessTower }
+    /// <summary>Schwierigkeitspfad wie in R.I.S.E.: Brave 5 Etagen, Heroic 15, Legendary ohne Ende.</summary>
+    public enum RunMode { Brave, Heroic, Legendary }
     public enum FloorTheme { ForgottenCourt, EmberFoundry, AstralArchive }
     public enum MetaUpgradeId { Vitality, Might, Agility }
     public enum RelicId { WindstepSigil, HuntersMark, DawnSeed, EmberLens, ArcBattery, FortunePrism }
@@ -14,7 +15,7 @@ namespace Shatterspire
     public sealed class RunConfig
     {
         public HeroClassId Hero = HeroClassId.Ranger;
-        public RunMode Mode = RunMode.StandardSpire;
+        public RunMode Mode = RunMode.Heroic;
         public List<RelicId> Relics = new();
 
         public RunConfig Clone()

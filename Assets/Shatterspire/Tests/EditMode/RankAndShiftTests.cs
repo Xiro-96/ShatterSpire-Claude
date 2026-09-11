@@ -12,7 +12,7 @@ namespace Shatterspire.Tests
     public sealed class RankAndShiftTests
     {
         private static ClimbResult Climb(int floors, int bosses, int enemies, int shards, bool extracted)
-            => new(floors, bosses, enemies, shards, extracted, RunMode.StandardSpire, HeroClassId.Ranger);
+            => new(floors, bosses, enemies, shards, extracted, RunMode.Heroic, HeroClassId.Ranger);
 
         // ── Score ────────────────────────────────────────────────
 

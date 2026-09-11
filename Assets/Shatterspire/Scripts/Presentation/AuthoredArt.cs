@@ -10,7 +10,7 @@ namespace Shatterspire
     /// Runtime bridge for authored FBX content. Gameplay code only knows about
     /// roots and colliders, so visual assets can continue to be replaced later.
     /// </summary>
-    public static class AuthoredArt
+    public static partial class AuthoredArt
     {
         private const string RexModel = "Art3D/KayKit/Characters/Ranger";
         private const string ForgeModels = "Art3D/Forge/Models/";

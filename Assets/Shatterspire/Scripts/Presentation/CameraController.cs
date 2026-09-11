@@ -4,6 +4,8 @@ namespace Shatterspire
 {
     public sealed class CameraController : MonoBehaviour
     {
+        private const float Pitch = 51.5f;
+
         private static CameraController instance;
         private Transform target;
         private Vector3 velocity;
@@ -12,45 +14,52 @@ namespace Shatterspire
         private Vector3 lookAhead;
         private Vector3 offset = new(0f, 11.4f, -10.2f);
         private float shake;
-        private float arenaHalfExtent = 15f;
+        private Area bounds;
+        private bool hasBounds;
         private Camera view;
+
         private void Awake() => instance = this;
         private void OnDestroy() { if (instance == this) instance = null; }
         public static void Impulse(float strength) { if (instance) instance.shake = Mathf.Max(instance.shake, strength); }
-        /// <param name="halfExtent">Halbe Kantenlaenge der begehbaren Flaeche. Die Kamera
-        /// zeigt nie darueber hinaus. Echte Raeume aus Etage 3 geben ihre eigenen Grenzen mit.</param>
-        public void Configure(Transform value, float halfExtent = 15f)
+
+        public void Configure(Transform value)
         {
             target = value;
-            arenaHalfExtent = Mathf.Max(1f, halfExtent);
             view = GetComponent<Camera>();
             if (target) previousTargetPosition = target.position;
         }
-        /// <summary>
-        /// Der Spieler startet jede Etage bei z = -11, nahe am Rand. Ohne Begrenzung sah die
-        /// Kamera rund 5 Einheiten ueber die Kante hinaus - das dunkle Viertel unten im Bild.
-        /// Am Rand steht der Spieler dafuer nicht mehr mittig, so wie in jedem Top-Down-Spiel
-        /// mit Raumgrenzen.
-        /// </summary>
-        private Vector3 ClampToArena(Vector3 focus)
+
+        /// <summary>Sichtbereich der aktuellen Etage. Die Kamera zeigt nicht ueber dessen Rand hinaus.</summary>
+        public void SetBounds(Area floorBounds)
         {
-            if (!view || !view.orthographic) return focus;
-            const float pitch = 51.5f;
-            var halfDepth = view.orthographicSize / Mathf.Sin(pitch * Mathf.Deg2Rad);
-            var halfWidth = view.orthographicSize * view.aspect;
-            // Der Bildmittelpunkt trifft den Boden nicht unter dem Fokus, sondern um diesen
-            // Betrag versetzt - abhaengig von Hoehe und Rueckversatz der Kamera.
-            var centerShift = offset.z + offset.y / Mathf.Tan(pitch * Mathf.Deg2Rad);
-            focus.z = ClampAxis(focus.z, arenaHalfExtent - halfDepth, -centerShift);
-            focus.x = ClampAxis(focus.x, arenaHalfExtent - halfWidth, 0f);
-            return focus;
+            bounds = new Area(floorBounds.MinX - 2f, floorBounds.MaxX + 2f, floorBounds.MinZ - 2f, floorBounds.MaxZ + 2f);
+            hasBounds = true;
         }
 
-        private static float ClampAxis(float value, float room, float shift)
+        /// <summary>Springt ohne Nachziehen ans Ziel, etwa nach dem Wechsel auf eine neue Etage.</summary>
+        public void Snap()
         {
-            // Ist die Arena schmaler als das Bild, einfach mittig bleiben.
-            if (room <= 0f) return shift;
-            return Mathf.Clamp(value, -room + shift, room + shift);
+            if (!target) return;
+            lookAhead = Vector3.zero;
+            lookVelocity = Vector3.zero;
+            velocity = Vector3.zero;
+            previousTargetPosition = target.position;
+            transform.position = Clamp(target.position) + offset;
+            transform.rotation = Quaternion.Euler(Pitch, 0f, 0f);
+        }
+
+        private Vector3 Clamp(Vector3 focus)
+        {
+            if (!hasBounds || !view || !view.orthographic) return focus;
+            var halfDepth = view.orthographicSize / Mathf.Sin(Pitch * Mathf.Deg2Rad);
+            var halfWidth = view.orthographicSize * view.aspect;
+            // Der Bildmittelpunkt trifft den Boden nicht unter dem Fokus, sondern um diesen Betrag
+            // versetzt - abhaengig von Hoehe und Rueckversatz der Kamera.
+            var centerShift = offset.z + offset.y / Mathf.Tan(Pitch * Mathf.Deg2Rad);
+            var centerZ = Area.ClampAxis(focus.z + centerShift, bounds.MinZ + halfDepth, bounds.MaxZ - halfDepth);
+            focus.z = centerZ - centerShift;
+            focus.x = Area.ClampAxis(focus.x, bounds.MinX + halfWidth, bounds.MaxX - halfWidth);
+            return focus;
         }
 
         private void LateUpdate()
@@ -64,10 +73,9 @@ namespace Shatterspire
             lookAhead = Vector3.SmoothDamp(lookAhead, desiredLookAhead, ref lookVelocity, 0.2f);
             var jitter = Random.insideUnitSphere * shake;
             jitter.y *= 0.25f;
-            var focus = ClampToArena(target.position + lookAhead);
-            transform.position = Vector3.SmoothDamp(transform.position,
-                focus + offset, ref velocity, 0.12f) + jitter;
-            transform.rotation = Quaternion.Euler(51.5f, 0f, 0f);
+            var focus = Clamp(target.position + lookAhead);
+            transform.position = Vector3.SmoothDamp(transform.position, focus + offset, ref velocity, 0.12f) + jitter;
+            transform.rotation = Quaternion.Euler(Pitch, 0f, 0f);
             shake = Mathf.MoveTowards(shake, 0f, 2.8f * Time.unscaledDeltaTime);
         }
     }
