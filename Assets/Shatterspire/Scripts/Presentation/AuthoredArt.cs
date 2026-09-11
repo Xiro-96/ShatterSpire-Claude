@@ -30,6 +30,24 @@ namespace Shatterspire
         private static readonly Dictionary<string, Material> MaterialCache = new();
         private static Mesh crystalMesh;
 
+        private const float CourtTileSpacing = 4.22f;
+
+        /// <summary>
+        /// Helligkeitsverlauf des Hofbodens: hell in der Mitte, dunkler zum Rand. Liegt hier
+        /// als einzige Quelle, weil ApplyFloorTheme den Verlauf vorher auf jeder Etage mit
+        /// einer einzigen hellen Farbe ueberschrieben hat - der Boden war dadurch von Kante
+        /// zu Kante ein Farbwert und Hindernisse hoben sich nicht ab.
+        /// </summary>
+        private static Color CourtTileTint(int x, int z)
+        {
+            var distanceFromCenter = Mathf.Max(Mathf.Abs(x - 3), Mathf.Abs(z - 3));
+            var tint = distanceFromCenter <= 1 ? new Color(0.72f, 0.79f, 0.9f)
+                : distanceFromCenter == 2 ? new Color(0.55f, 0.66f, 0.82f)
+                : new Color(0.34f, 0.43f, 0.62f);
+            if ((x + z) % 4 == 0) tint = Color.Lerp(tint, new Color(0.48f, 0.4f, 0.72f), 0.22f);
+            return tint;
+        }
+
         public static bool TryBuildArena()
         {
             if (!LoadModel(DungeonModels + "floor_tile_large")) return false;
@@ -40,8 +58,6 @@ namespace Shatterspire
             var abyss = new Color(0.018f, 0.025f, 0.065f);
             var rim = new Color(0.055f, 0.09f, 0.17f);
             var deepStone = new Color(0.34f, 0.43f, 0.62f);
-            var courtStone = new Color(0.55f, 0.66f, 0.82f);
-            var heroStone = new Color(0.72f, 0.79f, 0.9f);
             var cyan = new Color(0.03f, 0.92f, 1f);
             var violet = new Color(0.72f, 0.22f, 1f);
             var ember = new Color(1f, 0.48f, 0.08f);
@@ -52,19 +68,16 @@ namespace Shatterspire
                 new Vector3(30.4f, 0.32f, 30.4f), rim, false, 0.04f, false);
 
             const int tileCount = 7;
-            const float spacing = 4.22f;
+            const float spacing = CourtTileSpacing;
             for (var x = 0; x < tileCount; x++)
             for (var z = 0; z < tileCount; z++)
             {
                 var edge = x == 0 || z == 0 || x == tileCount - 1 || z == tileCount - 1;
-                var distanceFromCenter = Mathf.Max(Mathf.Abs(x - 3), Mathf.Abs(z - 3));
                 var tileName = (x == 3 && z == 3) || ((x + z * 2) % 11 == 0)
                     ? "floor_tile_big_grate"
                     : edge && (x + z) % 3 == 0 ? "floor_tile_large_rocks" : "floor_tile_large";
                 var position = new Vector3((x - 3) * spacing, 0f, (z - 3) * spacing);
-                var tint = distanceFromCenter <= 1 ? heroStone
-                    : distanceFromCenter == 2 ? courtStone : deepStone;
-                if ((x + z) % 4 == 0) tint = Color.Lerp(tint, new Color(0.48f, 0.4f, 0.72f), 0.22f);
+                var tint = CourtTileTint(x, z);
                 SpawnDungeonModel(root, tileName, position, ((x + z) & 1) * 90f, 4.34f, FitAxis.Horizontal,
                     tint);
             }
@@ -153,16 +166,21 @@ namespace Shatterspire
             var arenaObject = GameObject.Find("THE FORGOTTEN COURT · V15 TOWER FOUNDATIONS");
             if (arenaObject)
             {
-                var tint = theme switch
+                // Das Thema faerbt den Verlauf ein, statt ihn zu ersetzen, und dunkelt den
+                // Boden dabei ab: Hindernisse und Figuren sollen heller sein als der Grund.
+                var themeTint = theme switch
                 {
-                    FloorTheme.EmberFoundry => new Color(0.72f, 0.48f, 0.36f),
-                    FloorTheme.AstralArchive => new Color(0.58f, 0.48f, 0.82f),
-                    _ => new Color(0.78f, 0.86f, 1f)
+                    FloorTheme.EmberFoundry => new Color(0.95f, 0.62f, 0.46f),
+                    FloorTheme.AstralArchive => new Color(0.72f, 0.6f, 1f),
+                    _ => new Color(0.62f, 0.7f, 0.86f)
                 };
                 for (var i = 0; i < arenaObject.transform.childCount; i++)
                 {
                     var child = arenaObject.transform.GetChild(i);
-                    if (child.name.Contains("floor_tile")) ApplyKayKitMaterials(child.gameObject, DungeonTexture, tint);
+                    if (!child.name.Contains("floor_tile")) continue;
+                    var x = Mathf.RoundToInt(child.localPosition.x / CourtTileSpacing) + 3;
+                    var z = Mathf.RoundToInt(child.localPosition.z / CourtTileSpacing) + 3;
+                    ApplyKayKitMaterials(child.gameObject, DungeonTexture, CourtTileTint(x, z) * themeTint);
                 }
             }
 

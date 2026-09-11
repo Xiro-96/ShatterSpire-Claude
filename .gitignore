@@ -94,3 +94,6 @@ desktop.ini
 !/Tools/**/*.csproj
 /Tools/**/bin/
 /Tools/**/obj/
+
+# Automatische Spielbilder aus dem Editor (EditorCaptureAgent)
+/Screenshots/

@@ -44,6 +44,9 @@ namespace Shatterspire
             CreatePreviewHero(HeroClassId.Arcanist, new Vector3(3.5f, 0f, 1.1f), -15f);
             CreateMenuCamera();
             new GameObject("Front End Systems").AddComponent<MainMenuUI>().Configure();
+#if UNITY_EDITOR
+            EditorCaptureAgent.Attach(new GameObject("Editor Capture"), "menu", false, 2f);
+#endif
         }
 
         private static void BuildRun(RunConfig config)
@@ -58,6 +61,9 @@ namespace Shatterspire
             hud.Configure(player, config);
             var run = systems.AddComponent<RunDirector>();
             run.Configure(player.transform, spawner, hud, config);
+#if UNITY_EDITOR
+            EditorCaptureAgent.Attach(systems, "run", true, 3f, 12f);
+#endif
         }
 
         private static GameObject CreatePlayer(RunConfig config)
