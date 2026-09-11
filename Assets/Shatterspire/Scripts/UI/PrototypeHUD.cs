@@ -293,9 +293,16 @@ namespace Shatterspire
             zoneRect.offsetMin = Vector2.zero;
             zoneRect.offsetMax = Vector2.zero;
             heavyPerfectZone.gameObject.SetActive(false);
-            heavyStateText = CreateText(parent, weapon.LightName + " CHARGES " + weapon.HeavyName, 12, TextAnchor.LowerCenter,
-                new Vector2(0, 55), new Vector2(400, 20), new Vector2(0.5f, 0));
+            // Der Text steht ohne Hintergrund direkt ueber dem Boden. Auf dem alten
+            // dunklen Terrakotta war hellblau lesbar, auf dem hellen Boden nach dem
+            // Grafik-Paket verschwand er. Die Kontur macht ihn unabhaengig vom
+            // Untergrund lesbar, die groessere Schrift zusaetzlich auf dem Telefon.
+            heavyStateText = CreateText(parent, weapon.LightName + " CHARGES " + weapon.HeavyName, 16, TextAnchor.LowerCenter,
+                new Vector2(0, 55), new Vector2(520, 26), new Vector2(0.5f, 0));
             heavyStateText.color = new Color(0.75f, 0.9f, 1f);
+            var hintOutline = heavyStateText.gameObject.AddComponent<Outline>();
+            hintOutline.effectColor = new Color(0.01f, 0.02f, 0.05f, 0.92f);
+            hintOutline.effectDistance = new Vector2(1.6f, -1.6f);
         }
 
         private Text CreateAbilityTile(Transform parent, int spriteIndex, string keyLabel, Vector2 position, Color accent)

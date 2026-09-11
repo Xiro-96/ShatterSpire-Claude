@@ -26,19 +26,24 @@ namespace Shatterspire
             profile = ScriptableObject.CreateInstance<VolumeProfile>();
             profile.name = "Shatterspire Post FX";
 
-            // Tonemapping zuerst: ohne Kurve wirken gesaettigte Farben schnell
-            // ausgebrannt, sobald Bloom dazukommt.
+            // Neutral statt ACES. ACES ist eine filmische Kurve und entsaettigt sehr
+            // helle Werte gezielt Richtung Weiss. Im ersten Spielbild mit dieser
+            // Einstellung wurde der orangegoldene Lift-Ring dadurch zu einer
+            // flachen weissen Scheibe - fuer einen gesaettigten Stil die falsche Wahl.
             var tonemapping = profile.Add<Tonemapping>();
             tonemapping.mode.overrideState = true;
-            tonemapping.mode.value = TonemappingMode.ACES;
+            tonemapping.mode.value = TonemappingMode.Neutral;
 
-            // Bloom traegt den Stil: Kristalle, Projektile und Trefferblitze
-            // bekommen dadurch ueberhaupt erst Leuchtkraft.
+            // Jedes emissive Material im Projekt leuchtet mit color * 1,35. Solange
+            // HDR aus war, wurde das bei 1 abgeschnitten. Mit HDR liegen diese Werte
+            // darueber - eine Schwelle knapp unter 1 liess deshalb jede leuchtende
+            // Flaeche bluehen. Erst oberhalb von 1,35 bluehen nur noch echte
+            // Spitzen wie Treffer und Projektilkerne.
             var bloom = profile.Add<Bloom>();
             bloom.intensity.overrideState = true;
-            bloom.intensity.value = 0.85f;
+            bloom.intensity.value = 0.42f;
             bloom.threshold.overrideState = true;
-            bloom.threshold.value = 0.95f;
+            bloom.threshold.value = 1.4f;
             bloom.scatter.overrideState = true;
             bloom.scatter.value = 0.62f;
             bloom.tint.overrideState = true;
@@ -57,15 +62,17 @@ namespace Shatterspire
             vignette.color.overrideState = true;
             vignette.color.value = new Color(0.02f, 0.02f, 0.05f);
 
-            // Saettigung leicht hoch und Kontrast dazu: der Screenshot war ueber
-            // die ganze Flaeche ein einziger, mittiger Farbwert.
+            // Kontrast hoch, Belichtung neutral. Die erste Einstellung hatte +0,12
+            // Belichtung - zusammen mit HDR und dem Kantenlicht hat das den Boden
+            // ausgewaschen. Neutral-Tonemapping haelt die Saettigung ohnehin besser
+            // als ACES, deshalb reicht hier ein kleiner Zuschlag.
             var grading = profile.Add<ColorAdjustments>();
             grading.postExposure.overrideState = true;
-            grading.postExposure.value = 0.12f;
+            grading.postExposure.value = 0f;
             grading.contrast.overrideState = true;
-            grading.contrast.value = 14f;
+            grading.contrast.value = 16f;
             grading.saturation.overrideState = true;
-            grading.saturation.value = 12f;
+            grading.saturation.value = 6f;
             grading.colorFilter.overrideState = true;
             grading.colorFilter.value = new Color(1f, 0.98f, 0.95f);
 

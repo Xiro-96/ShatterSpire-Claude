@@ -59,7 +59,10 @@ namespace Shatterspire
             var rim = rimGo.AddComponent<Light>();
             rim.type = LightType.Directional;
             rim.color = new Color(0.62f, 0.82f, 1f);
-            rim.intensity = 0.85f;
+            // Ein gerichtetes Licht ist nur eine Naeherung an Kantenlicht: es trifft
+            // auch den Boden. Bei 0,85 hat es die Szene sichtbar aufgehellt und den
+            // Boden ausgewaschen. 0,45 trennt die Silhouetten noch, ohne das.
+            rim.intensity = 0.45f;
             rim.shadows = LightShadows.None;
             rimGo.transform.rotation = Quaternion.Euler(14f, 196f, 0f);
 
