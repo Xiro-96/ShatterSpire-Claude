@@ -77,6 +77,19 @@ namespace Shatterspire
             grading.colorFilter.overrideState = true;
             grading.colorFilter.value = new Color(1f, 0.98f, 0.95f);
 
+            // Split Toning: Schatten kuehl, Lichter warm. Umgebungslicht allein reicht dafuer
+            // nicht - blaues Licht auf warmem Sandstein ergibt Grau-Braun, genau das zeigten
+            // die Aufnahmen vom 11.09. Grau als Farbe bedeutet hier "keine Toenung", die
+            // Saettigung der Farbe bestimmt die Staerke.
+            var split = profile.Add<SplitToning>();
+            split.shadows.overrideState = true;
+            split.shadows.value = new Color(0.42f, 0.54f, 0.86f);
+            split.highlights.overrideState = true;
+            split.highlights.value = new Color(0.9f, 0.78f, 0.62f);
+            split.balance.overrideState = true;
+            // Negativ betont die Schattentoenung gegenueber den Lichtern.
+            split.balance.value = -20f;
+
             var host = new GameObject("Post FX Volume");
             var volume = host.AddComponent<Volume>();
             volume.isGlobal = true;
@@ -89,7 +102,8 @@ namespace Shatterspire
             // Editor.log ohne Screenshot pruefen, welcher Grafik-Stand laeuft.
             Debug.Log($"SHATTERSPIRE PostFx aktiv: Tonemapping {tonemapping.mode.value}, " +
                       $"Bloom Schwelle {bloom.threshold.value:0.##} Intensitaet {bloom.intensity.value:0.##}, " +
-                      $"Belichtung {grading.postExposure.value:0.##}, Saettigung {grading.saturation.value:0.#}");
+                      $"Belichtung {grading.postExposure.value:0.##}, Saettigung {grading.saturation.value:0.#}, " +
+                      $"SplitToning Schatten {split.shadows.value} Balance {split.balance.value:0}");
         }
 
         /// <summary>

@@ -1,0 +1,11 @@
+Roboto
+Designed by Christian Robertson for Google.
+Licensed under the Apache License, Version 2.0.
+https://www.apache.org/licenses/LICENSE-2.0
+https://github.com/googlefonts/roboto
+
+Used in SHATTERSPIRE as the HUD and menu typeface:
+  Assets/Shatterspire/Resources/Fonts/Roboto-Black.ttf
+  Assets/Shatterspire/Resources/Fonts/Roboto-Bold.ttf
+Copied unmodified from the Roboto files shipped with the Unity package
+com.unity.searcher (Editor/Resources/FlatSkin/Font).

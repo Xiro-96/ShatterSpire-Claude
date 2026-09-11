@@ -26,8 +26,8 @@ namespace Shatterspire
         {
             RenderSettings.ambientMode = AmbientMode.Trilight;
             // Heller und kuehler als vorher: Schatten sollen blau werden, nicht schwarz.
-            RenderSettings.ambientSkyColor = new Color(0.4f, 0.48f, 0.66f);
-            RenderSettings.ambientEquatorColor = new Color(0.3f, 0.3f, 0.36f);
+            RenderSettings.ambientSkyColor = new Color(0.36f, 0.48f, 0.74f);
+            RenderSettings.ambientEquatorColor = new Color(0.28f, 0.32f, 0.42f);
             RenderSettings.ambientGroundColor = new Color(0.16f, 0.13f, 0.12f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;

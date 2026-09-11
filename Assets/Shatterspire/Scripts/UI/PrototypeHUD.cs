@@ -101,7 +101,9 @@ namespace Shatterspire
 
         private void BuildCanvas()
         {
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            // Roboto Black statt Arial: kraeftige Buchstaben wie in Mobile-Actionspielen.
+            // Faellt auf die eingebaute Schrift zurueck, falls das Asset fehlt.
+            font = Resources.Load<Font>("Fonts/Roboto-Black") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             var root = new GameObject("HUD Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             root.transform.SetParent(transform, false);
             canvas = root.GetComponent<Canvas>();
@@ -116,7 +118,7 @@ namespace Shatterspire
             if (!FindAnyObjectByType<EventSystem>())
                 new GameObject("Event System", typeof(EventSystem), typeof(StandaloneInputModule));
 
-            var championBack = CreateImage(root.transform, "Champion Status Panel", new Color(0.018f, 0.035f, 0.065f, 0.94f),
+            var championBack = CreateImage(root.transform, "Champion Status Panel", new Color(0.09f, 0.06f, 0.05f, 0.9f),
                 new Vector2(16, -16), new Vector2(382, 122), new Vector2(0, 1));
             ApplyRounded(championBack);
             var championOutline = championBack.gameObject.AddComponent<Outline>();
@@ -128,7 +130,7 @@ namespace Shatterspire
             championAccent.raycastTarget = false;
 
             CreateChampionPanel(root.transform);
-            var hpBack = CreateImage(root.transform, "HP", new Color(0.04f, 0.06f, 0.11f, 0.9f),
+            var hpBack = CreateImage(root.transform, "HP", new Color(0.05f, 0.035f, 0.03f, 0.92f),
                 new Vector2(112, -62), new Vector2(268, 23), new Vector2(0, 1));
             ApplyRounded(hpBack);
             hpChip = CreateFill(hpBack.transform, new Color(1f, 0.72f, 0.24f));
@@ -137,23 +139,23 @@ namespace Shatterspire
             ApplyRoundedFill(hpFill);
             hpText = CreateText(hpBack.transform, "100 / 100", 15, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
 
-            var objectivePanel = CreateImage(root.transform, "Floor Objective Panel", new Color(0.025f, 0.055f, 0.075f, 0.9f),
+            var objectivePanel = CreateImage(root.transform, "Floor Objective Panel", new Color(0.09f, 0.06f, 0.05f, 0.9f),
                 new Vector2(0, -16), new Vector2(500, 106), new Vector2(0.5f, 1));
             ApplyRounded(objectivePanel);
             var objectiveOutline = objectivePanel.gameObject.AddComponent<Outline>();
-            objectiveOutline.effectColor = new Color(0.18f, 0.72f, 0.62f, 0.72f);
+            objectiveOutline.effectColor = new Color(1f, 0.76f, 0.22f, 0.92f);
             objectiveOutline.effectDistance = new Vector2(2f, -2f);
             objectivePanel.raycastTarget = false;
             var objectiveAccent = CreateImage(objectivePanel.transform, "Objective Accent",
-                new Color(0.12f, 0.78f, 0.7f, 0.92f), new Vector2(0, -1), new Vector2(500, 4), new Vector2(0.5f, 1));
+                new Color(1f, 0.76f, 0.22f, 0.92f), new Vector2(0, -1), new Vector2(500, 5), new Vector2(0.5f, 1));
             objectiveAccent.raycastTarget = false;
 
-            roomText = CreateText(objectivePanel.transform, "FLOOR 1 / 15", 21, TextAnchor.UpperCenter,
+            roomText = CreateText(objectivePanel.transform, "FLOOR 1 / 15", 24, TextAnchor.UpperCenter,
                 new Vector2(0, -7), new Vector2(468, 28), new Vector2(0.5f, 1));
             roomText.fontStyle = FontStyle.Bold;
             objectiveText = CreateText(objectivePanel.transform, "FIND THE RIFT CELLS", 16, TextAnchor.UpperCenter,
                 new Vector2(0, -34), new Vector2(468, 25), new Vector2(0.5f, 1));
-            objectiveText.color = new Color(0.82f, 0.96f, 1f);
+            objectiveText.color = new Color(1f, 0.95f, 0.86f);
             navigationText = CreateText(objectivePanel.transform, string.Empty, 17, TextAnchor.UpperCenter,
                 new Vector2(0, -59), new Vector2(468, 23), new Vector2(0.5f, 1));
             navigationText.color = new Color(1f, 0.78f, 0.15f);
@@ -209,7 +211,7 @@ namespace Shatterspire
 
         private void CreateChampionPanel(Transform parent)
         {
-            var frame = CreateImage(parent, "Hero Emblem Frame", new Color(0.035f, 0.06f, 0.12f, 0.96f),
+            var frame = CreateImage(parent, "Hero Emblem Frame", new Color(0.13f, 0.09f, 0.07f, 0.96f),
                 new Vector2(22, -22), new Vector2(78, 78), new Vector2(0, 1));
             ApplyRounded(frame);
             var outline = frame.gameObject.AddComponent<Outline>();
@@ -221,7 +223,7 @@ namespace Shatterspire
             portrait.sprite = UiIconFactory.Hero(runConfig.Hero);
             portrait.preserveAspect = true;
             portrait.raycastTarget = false;
-            var name = CreateText(parent, HeroCatalog.Name(runConfig.Hero), 20, TextAnchor.UpperLeft, new Vector2(112, -19), new Vector2(210, 27), new Vector2(0, 1));
+            var name = CreateText(parent, HeroCatalog.Name(runConfig.Hero), 24, TextAnchor.UpperLeft, new Vector2(112, -19), new Vector2(210, 27), new Vector2(0, 1));
             name.fontStyle = FontStyle.Bold;
             var role = CreateText(parent, HeroCatalog.Role(runConfig.Hero), 11, TextAnchor.UpperLeft, new Vector2(112, -43), new Vector2(245, 18), new Vector2(0, 1));
             role.color = HeroCatalog.Accent(runConfig.Hero);
@@ -229,7 +231,7 @@ namespace Shatterspire
 
         private void CreateExperienceBar(Transform parent)
         {
-            var back = CreateImage(parent, "Rift Experience", new Color(0.025f, 0.04f, 0.085f, 0.92f),
+            var back = CreateImage(parent, "Rift Experience", new Color(0.05f, 0.035f, 0.03f, 0.92f),
                 new Vector2(16, -146), new Vector2(382, 16), new Vector2(0, 1));
             ApplyRounded(back);
             xpFill = CreateFill(back.transform, new Color(0.62f, 0.28f, 1f));
@@ -241,11 +243,11 @@ namespace Shatterspire
 
         private void CreateAnnouncement(Transform parent)
         {
-            var panel = CreateImage(parent, "Combat Announcement", new Color(0.018f, 0.035f, 0.08f, 0.93f),
+            var panel = CreateImage(parent, "Combat Announcement", new Color(0.09f, 0.06f, 0.05f, 0.9f),
                 new Vector2(0, -148), new Vector2(460, 74), new Vector2(0.5f, 1));
             ApplyRounded(panel);
             var outline = panel.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(0.56f, 0.24f, 1f, 0.95f);
+            outline.effectColor = new Color(1f, 0.76f, 0.22f, 0.92f);
             outline.effectDistance = new Vector2(3f, -3f);
             announcementGroup = panel.gameObject.AddComponent<CanvasGroup>();
             announcementGroup.blocksRaycasts = false;
@@ -259,27 +261,28 @@ namespace Shatterspire
         private void CreateDesktopAbilityBar(Transform parent)
         {
             if (Application.isMobilePlatform) return;
-            CreateAbilityTile(parent, 0, "LMB", new Vector2(-44, 44), new Color(0.1f, 0.82f, 0.95f));
-            CreateAbilityTile(parent, 3, "RMB", new Vector2(-126, 44), new Color(1f, 0.68f, 0.12f));
-            skillStateText = CreateAbilityTile(parent, 1, "Q", new Vector2(-208, 44), new Color(0.55f, 0.3f, 1f));
-            ultimateStateText = CreateAbilityTile(parent, 4, "E", new Vector2(-290, 44), new Color(1f, 0.34f, 0.62f));
+            // Abstand 106 fuer die groesseren Sockel (92 breit plus Rand).
+            CreateAbilityTile(parent, 0, "LMB", new Vector2(-40, 40), new Color(0.1f, 0.82f, 0.95f));
+            CreateAbilityTile(parent, 3, "RMB", new Vector2(-146, 40), new Color(1f, 0.68f, 0.12f));
+            skillStateText = CreateAbilityTile(parent, 1, "Q", new Vector2(-252, 40), new Color(0.55f, 0.3f, 1f));
+            ultimateStateText = CreateAbilityTile(parent, 4, "E", new Vector2(-358, 40), new Color(1f, 0.34f, 0.62f));
         }
 
         private void CreateTeamPanel(Transform parent)
         {
-            var panel = CreateImage(parent, "Offline Team", new Color(0.025f, 0.05f, 0.09f, 0.9f),
+            var panel = CreateImage(parent, "Offline Team", new Color(0.09f, 0.06f, 0.05f, 0.9f),
                 new Vector2(-22, -22), new Vector2(218, 52), new Vector2(1, 1));
             ApplyRounded(panel);
             var team = runConfig.Hero == HeroClassId.Arcanist ? "BRAX  ·  ORION  ·  REX"
                 : runConfig.Hero == HeroClassId.Guardian ? "REX  ·  BRAX  ·  MIRA" : "BRAX  ·  REX  ·  MIRA";
             var text = CreateText(panel.transform, "RIFT TEAM  3/3\n" + team, 13, TextAnchor.MiddleCenter,
                 Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
-            text.color = new Color(0.38f, 0.94f, 0.78f);
+            text.color = new Color(1f, 0.86f, 0.5f);
         }
 
         private void CreateHeavyBar(Transform parent)
         {
-            var back = CreateImage(parent, "Heavy Attack Meter", new Color(0.025f, 0.045f, 0.09f, 0.94f),
+            var back = CreateImage(parent, "Heavy Attack Meter", new Color(0.05f, 0.035f, 0.03f, 0.92f),
                 new Vector2(0, 34), new Vector2(340, 15), new Vector2(0.5f, 0));
             ApplyRounded(back);
             heavyFill = CreateFill(back.transform, new Color(0.15f, 0.78f, 1f));
@@ -299,19 +302,26 @@ namespace Shatterspire
             // Untergrund lesbar, die groessere Schrift zusaetzlich auf dem Telefon.
             heavyStateText = CreateText(parent, weapon.LightName + " CHARGES " + weapon.HeavyName, 16, TextAnchor.LowerCenter,
                 new Vector2(0, 55), new Vector2(520, 26), new Vector2(0.5f, 0));
-            heavyStateText.color = new Color(0.75f, 0.9f, 1f);
-            var hintOutline = heavyStateText.gameObject.AddComponent<Outline>();
-            hintOutline.effectColor = new Color(0.01f, 0.02f, 0.05f, 0.92f);
-            hintOutline.effectDistance = new Vector2(1.6f, -1.6f);
+            // Kontur und Schatten setzt jetzt CreateText fuer jeden Text.
+            heavyStateText.color = new Color(1f, 0.95f, 0.86f);
         }
 
         private Text CreateAbilityTile(Transform parent, int spriteIndex, string keyLabel, Vector2 position, Color accent)
         {
-            var tile = CreateImage(parent, "Ability", new Color(0.025f, 0.045f, 0.09f, 0.95f), position,
-                new Vector2(74, 74), new Vector2(1, 0));
-            var outline = tile.gameObject.AddComponent<Outline>();
-            outline.effectColor = accent;
-            outline.effectDistance = new Vector2(3, -3);
+            // Eigener Sockel hinter dem Icon. Das Icon-Sprite ueberdeckt die Grundfarbe des Tiles
+            // (tile.color wird auf Weiss gesetzt), deshalb hatte Einfaerben bisher keine Wirkung.
+            // Groesser und mit dickem Rand in der Faehigkeitsfarbe, wie Aktionsknoepfe in
+            // Mobile-Actionspielen.
+            var socket = CreateImage(parent, "Ability Socket", new Color(0.1f, 0.07f, 0.06f, 0.94f), position,
+                new Vector2(92, 92), new Vector2(1, 0));
+            ApplyRounded(socket);
+            socket.raycastTarget = false;
+            var rim = socket.gameObject.AddComponent<Outline>();
+            rim.effectColor = accent;
+            rim.effectDistance = new Vector2(4, -4);
+
+            var tile = CreateImage(socket.transform, "Ability", new Color(0.025f, 0.045f, 0.09f, 0.95f),
+                new Vector2(0, 7), new Vector2(70, 70), new Vector2(0.5f, 0.5f));
             if (abilitySprites != null && spriteIndex >= 0 && spriteIndex < abilitySprites.Length)
             {
                 tile.sprite = abilitySprites[spriteIndex];
@@ -319,8 +329,8 @@ namespace Shatterspire
                 tile.preserveAspect = true;
             }
             tile.raycastTarget = false;
-            var label = CreateText(tile.transform, keyLabel, 12, TextAnchor.LowerCenter, new Vector2(0, 4),
-                new Vector2(74, 18), new Vector2(0.5f, 0));
+            var label = CreateText(socket.transform, keyLabel, 15, TextAnchor.LowerCenter, new Vector2(0, 3),
+                new Vector2(92, 20), new Vector2(0.5f, 0));
             label.color = Color.white;
             return label;
         }
@@ -489,7 +499,7 @@ namespace Shatterspire
             var hold = Application.isMobilePlatform ? "HOLD HEAVY" : "HOLD RMB";
             heavyStateText.text = perfect ? "PERFECT!  " + release : charging ? weapon.HeavyName + " · RELEASE IN GOLD ZONE"
                 : meter >= 0.999f ? weapon.HeavyName + " READY · " + hold : weapon.LightName + " COMBO CHARGES HEAVY";
-            heavyStateText.color = perfect ? new Color(1f, 0.82f, 0.14f) : new Color(0.75f, 0.9f, 1f);
+            heavyStateText.color = perfect ? new Color(1f, 0.82f, 0.14f) : new Color(1f, 0.95f, 0.86f);
         }
 
         private void RefreshKnockout(int skulls, int maximum, float reviveProgress, bool downed)
@@ -863,6 +873,14 @@ namespace Shatterspire
             text.alignment = alignment;
             text.color = Color.white;
             text.raycastTarget = false;
+            // Helle Schrift mit dunkler Kontur und Schlagschatten: liest sich auf jedem Untergrund
+            // und gibt der UI das Gewicht, das ihr als Platzhalter gefehlt hat.
+            var stroke = go.AddComponent<Outline>();
+            stroke.effectColor = new Color(0.04f, 0.025f, 0.02f, 0.9f);
+            stroke.effectDistance = new Vector2(1.6f, -1.6f);
+            var drop = go.AddComponent<Shadow>();
+            drop.effectColor = new Color(0f, 0f, 0f, 0.5f);
+            drop.effectDistance = new Vector2(0f, -2.6f);
             return text;
         }
 

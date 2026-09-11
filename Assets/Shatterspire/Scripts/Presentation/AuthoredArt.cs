@@ -49,6 +49,12 @@ namespace Shatterspire
                 : new Color(0.66f, 0.62f, 0.58f);
             // Leichte Unruhe im Muster, damit der Boden nicht wie eine Fliesenflaeche wirkt.
             if ((x + z) % 4 == 0) tint = Color.Lerp(tint, new Color(0.96f, 0.84f, 0.68f), 0.3f);
+            // Deterministische Streuung je Kachel: ohne sie ist jede Ringstufe exakt gleich hell,
+            // und der Boden liest sich als Flaeche statt als verlegter Stein.
+            var hash = (x * 73856093) ^ (z * 19349663);
+            var jitter = ((hash & 0xFF) / 255f - 0.5f) * 0.12f;
+            tint = new Color(Mathf.Clamp01(tint.r + jitter), Mathf.Clamp01(tint.g + jitter * 0.9f),
+                Mathf.Clamp01(tint.b + jitter * 0.75f));
             return tint;
         }
 
@@ -77,9 +83,15 @@ namespace Shatterspire
             for (var z = 0; z < tileCount; z++)
             {
                 var edge = x == 0 || z == 0 || x == tileCount - 1 || z == tileCount - 1;
-                var tileName = (x == 3 && z == 3) || ((x + z * 2) % 11 == 0)
+                // Grates nur noch als Eckdetail. Vorher lagen fuenf davon im Feld, zwei direkt
+                // gestapelt in der Mitte - mit ihren hohen Rahmen dominierten sie jedes Spielbild
+                // und liessen die Arena wie einen Prototyp aus Kloetzen wirken. Verzierte
+                // Kacheln im Inneren geben dem Boden stattdessen Struktur.
+                var tileName = (x == 0 && z == 0) || (x == tileCount - 1 && z == tileCount - 1)
                     ? "floor_tile_big_grate"
-                    : edge && (x + z) % 3 == 0 ? "floor_tile_large_rocks" : "floor_tile_large";
+                    : edge && (x + z) % 3 == 0 ? "floor_tile_large_rocks"
+                    : !edge && (x * 3 + z * 5) % 7 == 0 ? "floor_tile_small_decorated"
+                    : "floor_tile_large";
                 var position = new Vector3((x - 3) * spacing, 0f, (z - 3) * spacing);
                 var tint = CourtTileTint(x, z);
                 SpawnDungeonModel(root, tileName, position, ((x + z) & 1) * 90f, 4.34f, FitAxis.Horizontal,
@@ -198,9 +210,9 @@ namespace Shatterspire
             // warme Sonne ist genau der Kontrast, der dem Bild bisher fehlte.
             RenderSettings.ambientSkyColor = theme switch
             {
-                FloorTheme.EmberFoundry => new Color(0.6f, 0.42f, 0.34f),
-                FloorTheme.AstralArchive => new Color(0.46f, 0.4f, 0.68f),
-                _ => new Color(0.4f, 0.48f, 0.66f)
+                FloorTheme.EmberFoundry => new Color(0.5f, 0.44f, 0.52f),
+                FloorTheme.AstralArchive => new Color(0.42f, 0.42f, 0.76f),
+                _ => new Color(0.36f, 0.48f, 0.74f)
             };
             if (Camera.main) Camera.main.backgroundColor = RenderSettings.fogColor;
         }

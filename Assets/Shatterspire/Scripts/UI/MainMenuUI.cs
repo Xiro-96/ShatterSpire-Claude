@@ -18,7 +18,9 @@ namespace Shatterspire
 
         public void Configure()
         {
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            // Roboto Black statt Arial: kraeftige Buchstaben wie in Mobile-Actionspielen.
+            // Faellt auf die eingebaute Schrift zurueck, falls das Asset fehlt.
+            font = Resources.Load<Font>("Fonts/Roboto-Black") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             var save = MetaSaveSystem.Load();
             config.Relics.Clear();
             foreach (var value in save.equippedRelics)
@@ -288,6 +290,14 @@ namespace Shatterspire
             text.alignment = align;
             text.color = Color.white;
             text.raycastTarget = false;
+            // Helle Schrift mit dunkler Kontur und Schlagschatten: liest sich auf jedem Untergrund
+            // und gibt der UI das Gewicht, das ihr als Platzhalter gefehlt hat.
+            var stroke = go.AddComponent<Outline>();
+            stroke.effectColor = new Color(0.04f, 0.025f, 0.02f, 0.9f);
+            stroke.effectDistance = new Vector2(1.6f, -1.6f);
+            var drop = go.AddComponent<Shadow>();
+            drop.effectColor = new Color(0f, 0f, 0f, 0.5f);
+            drop.effectDistance = new Vector2(0f, -2.6f);
             return text;
         }
 
