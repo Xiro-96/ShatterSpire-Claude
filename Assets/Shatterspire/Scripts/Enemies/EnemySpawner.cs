@@ -61,7 +61,10 @@ namespace Shatterspire
                         ? EnemyKind.Elite
                         : i == room.CampSize - 1 && room.CampSize >= 4 ? EnemyKind.Brute
                         : ResolveKind(activeFloor, kind, room.Index * 5 + i);
-                    var agent = Spawn(enemyKind, position, room.CampCenter, true);
+                    // Jeder bleibt an seinem Platz im Lager, statt zur Mitte zu schlurfen:
+                    // schlafende Skelette liegen dort, wo sie liegen.
+                    var spot = Walkable(position);
+                    var agent = Spawn(enemyKind, spot, spot, true);
                     camps.Add(agent);
                     campOf[agent] = room.Index;
                     agent.Engaged += OnCampEngaged;

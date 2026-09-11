@@ -23,7 +23,8 @@ namespace Shatterspire.Tests
             "Art3D/Animations/UAL2_Standard",
             "Art3D/KayKit/Animations/Rig_Medium_CombatMelee",
             "Art3D/KayKit/Animations/Rig_Medium_CombatRanged",
-            "Art3D/KayKit/Animations/Rig_Medium_MovementAdvanced"
+            "Art3D/KayKit/Animations/Rig_Medium_MovementAdvanced",
+            "Art3D/KayKit/Animations/Rig_Medium_Special"
         };
 
         /// <summary>
@@ -42,6 +43,10 @@ namespace Shatterspire.Tests
             ("Schuss", new[] { "Ranged_1H_Shoot", "Ranged_2H_Shoot" }),
             ("Zauber", new[] { "Ranged_Magic_Shoot", "Ranged_Magic_Spellcasting" }),
             ("Ausweichen", new[] { "Dodge_Forward" }),
+            ("Auftauchen", new[] { "Skeletons_Spawn_Ground" }),
+            ("Aufstehen", new[] { "Skeletons_Awaken_Floor", "Skeletons_Awaken_Standing" }),
+            ("Ruhend", new[] { "Skeletons_Inactive_Floor_Pose", "Skeletons_Inactive_Standing_Pose" }),
+            ("Provozieren", new[] { "Skeletons_Taunt", "Skeletons_Taunt_Longer" }),
             ("Dash", new[] { "Jump_Start", "Jump_Full_Short", "Jump_Full_Long" }),
             ("Ultimate", new[] { "Spawn_Ground", "Spawn_Air", "Throw" }),
             ("Trefferreaktion", new[] { "Hit_A", "Hit_B", "Hit_Knockback" })

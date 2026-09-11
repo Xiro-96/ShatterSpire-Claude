@@ -17,6 +17,9 @@ namespace Shatterspire
         private FloorNavigation navigation;
         private Vector3 home;
         private float aggroRadius = 8f;
+        private float busyUntil;
+        private bool dormant;
+        private bool dormantOnFloor;
         private Health health;
         private StatusReceiver status;
         private StylizedCharacterMotion motion;
@@ -98,7 +101,24 @@ namespace Shatterspire
                 EnemyKind.IronWarden => 12f,
                 _ => 8f
             };
-            if (startIdle) state = State.Idle;
+            if (startIdle)
+            {
+                state = State.Idle;
+                // Lager schlafen: leichte Skelette liegen meist am Boden, schwere stehen reglos. Wer naeher
+                // kommt, weckt sie - erst stehen sie auf, dann greifen sie an.
+                dormantOnFloor = kind is EnemyKind.Crawler or EnemyKind.Shooter && GetInstanceID() % 3 != 0;
+                dormant = motion && motion.HoldPose(dormantOnFloor ? PresenceMotion.InactiveFloor : PresenceMotion.InactiveStanding);
+                return;
+            }
+            // Verteidiger steigen aus dem Boden und koennen dabei noch nicht angreifen.
+            Busy(motion ? motion.PlayPresence(PresenceMotion.SpawnGround, 1.7f, 0.9f) : 0f);
+        }
+
+        private void Busy(float seconds)
+        {
+            if (seconds <= 0f) return;
+            busyUntil = Mathf.Max(busyUntil, Time.time + seconds);
+            attackReadyAt = Mathf.Max(attackReadyAt, busyUntil + 0.2f);
         }
 
         public void Engage(bool alertCamp = true)
@@ -106,6 +126,20 @@ namespace Shatterspire
             if (state != State.Idle) return;
             state = State.Chase;
             attackReadyAt = Mathf.Max(attackReadyAt, Time.time + 0.4f);
+            if (motion && kind == EnemyKind.IronWarden)
+            {
+                // Der Warden provoziert lang, bevor der Kampf beginnt.
+                Busy(motion.PlayPresence(PresenceMotion.TauntLong, 1.1f, 1.6f));
+                CameraController.Impulse(0.12f);
+            }
+            else if (motion && dormant)
+            {
+                // Wer den Spieler bemerkt und steht, provoziert; der Rest des Lagers steht auf.
+                var wake = alertCamp && !dormantOnFloor ? PresenceMotion.Taunt
+                    : dormantOnFloor ? PresenceMotion.AwakenFloor : PresenceMotion.AwakenStanding;
+                Busy(motion.PlayPresence(wake, 1.6f, 1.1f));
+            }
+            dormant = false;
             if (alertCamp) Engaged?.Invoke(this);
         }
 
@@ -120,7 +154,7 @@ namespace Shatterspire
         {
             if (state == State.Dead || !target) return;
             ApplyKnockback();
-            if (Time.time < hitStaggerUntil) return;
+            if (Time.time < hitStaggerUntil || Time.time < busyUntil) return;
             var targetHealth = target.GetComponent<Health>();
             if (!targetHealth || !targetHealth.IsAlive) return;
             var offset = target.position - transform.position;
@@ -169,7 +203,7 @@ namespace Shatterspire
             // im selben Raum steht - nicht durch Waende hindurch.
             var toHome = home - transform.position;
             toHome.y = 0f;
-            if (toHome.sqrMagnitude > 1.6f * 1.6f)
+            if (!dormant && toHome.sqrMagnitude > 1.6f * 1.6f)
             {
                 var step = SteerTowards(home, toHome);
                 transform.position += step * (speed * 0.7f * status.SpeedMultiplier * Time.deltaTime);
@@ -409,6 +443,13 @@ namespace Shatterspire
                 PrototypeVfx.SpawnExplosion(transform.position + Vector3.up * 0.7f,
                     2.2f + phase * 0.35f, phase == 3 ? new Color(1f, 0.08f, 0.03f) : new Color(1f, 0.48f, 0.08f));
                 CameraController.Impulse(phase == 3 ? 0.24f : 0.12f);
+                if (phase > 1 && motion)
+                {
+                    // Phasenwechsel: der Warden haelt inne und provoziert, bevor er haerter angreift.
+                    var roar = motion.PlayPresence(PresenceMotion.TauntLong, 1.3f, 1.2f);
+                    if (roar > 0f) yield return new WaitForSeconds(roar);
+                    if (state == State.Dead) yield break;
+                }
             }
 
             var patternCount = phase == 1 ? 2 : 3;
@@ -513,7 +554,12 @@ namespace Shatterspire
             var bodyRenderer = GetComponentInChildren<Renderer>();
             PrototypeVfx.SpawnDeath(transform.position, bodyRenderer ? bodyRenderer.material.color : Color.magenta);
             Defeated?.Invoke(this);
-            Destroy(gameObject);
+            // Todesanimation statt sofort verschwinden. Collider und Lebensbalken aus, damit der Koerper
+            // weder im Weg steht noch als Ziel zaehlt.
+            foreach (var body in GetComponentsInChildren<Collider>()) body.enabled = false;
+            foreach (var bar in GetComponentsInChildren<Canvas>()) bar.enabled = false;
+            var fall = motion ? motion.PlayPresence(PresenceMotion.Death, 1.4f, 0.9f) : 0f;
+            Destroy(gameObject, fall);
         }
     }
 }

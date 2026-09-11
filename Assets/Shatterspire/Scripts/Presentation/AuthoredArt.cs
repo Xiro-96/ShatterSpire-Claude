@@ -335,7 +335,7 @@ namespace Shatterspire
                 : kind is EnemyKind.Brute or EnemyKind.Elite ? 1.18f : 0.78f;
             CreateGroundShadow(root, footprint);
             CreateSelectionRing(root, footprint * 1.08f, Color.Lerp(primary, new Color(0.3f, 0.02f, 0.04f), 0.24f));
-            if (animator) motion.ConfigureAuthored(visualRig, animator, EnemyBalance.For(kind).Speed);
+            if (animator) motion.ConfigureAuthored(visualRig, animator, EnemyBalance.For(kind).Speed, true);
             else motion.Configure(visualRig, kind == EnemyKind.IronWarden ? 4.2f : 7.5f);
             return true;
         }
@@ -1455,12 +1455,20 @@ namespace Shatterspire
         private AnimationClip dodgeBack;
         private AnimationClip dodgeLeft;
         private AnimationClip dodgeRight;
+        private AnimationClip spawnGround;
+        private AnimationClip awakenFloor;
+        private AnimationClip awakenStanding;
+        private AnimationClip inactiveFloor;
+        private AnimationClip inactiveStanding;
+        private AnimationClip taunt;
+        private AnimationClip tauntLong;
+        private AnimationClip death;
         private Vector3 previousPosition;
         private float moveBlend;
         private float referenceSpeed = 6f;
         private bool ready;
 
-        public void Configure(Animator target, float topSpeed = 6f)
+        public void Configure(Animator target, float topSpeed = 6f, bool undead = false)
         {
             animator = target;
             referenceSpeed = Mathf.Max(0.5f, topSpeed);
@@ -1474,19 +1482,30 @@ namespace Shatterspire
             clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/KayKit/Animations/Rig_Medium_CombatMelee"));
             clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/KayKit/Animations/Rig_Medium_CombatRanged"));
             clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/KayKit/Animations/Rig_Medium_MovementAdvanced"));
+            clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/KayKit/Animations/Rig_Medium_Special"));
             var clips = clipList.ToArray();
             // Die Namen muessen exakt zu den AnimStacks in den FBX passen. Die
             // vorherige Liste suchte nach Melee_Hook, OverhandThrow, Slide_Start,
             // Sword_Dash und Shield_OneShot - keiner dieser Clips existiert im
             // Projekt. Angriff, Dash und Ultimate waren dadurch seit jeher stumm,
             // ohne dass irgendwo eine Meldung aufgetaucht waere.
-            idle = FindClip(clips, "Idle_A", "Idle_B", "Idle_No_Loop");
+            idle = undead
+                ? FindClip(clips, "Skeletons_Idle", "Idle_A", "Idle_B", "Idle_No_Loop")
+                : FindClip(clips, "Idle_A", "Idle_B", "Idle_No_Loop");
             move = FindClip(clips, "Running_A", "Running_B", "Walking_A");
             attack = FindClip(clips, "Throw", "Use_Item", "Interact");
             roll = FindClip(clips, "Dodge_Forward", "Jump_Start", "Jump_Full_Short", "Jump_Full_Long");
             dodgeBack = FindClip(clips, "Dodge_Backward");
             dodgeLeft = FindClip(clips, "Dodge_Left");
             dodgeRight = FindClip(clips, "Dodge_Right");
+            spawnGround = FindClip(clips, "Skeletons_Spawn_Ground", "Spawn_Ground");
+            awakenFloor = FindClip(clips, "Skeletons_Awaken_Floor", "Skeletons_Awaken_Floor_Long");
+            awakenStanding = FindClip(clips, "Skeletons_Awaken_Standing");
+            inactiveFloor = FindClip(clips, "Skeletons_Inactive_Floor_Pose");
+            inactiveStanding = FindClip(clips, "Skeletons_Inactive_Standing_Pose");
+            taunt = FindClip(clips, "Skeletons_Taunt");
+            tauntLong = FindClip(clips, "Skeletons_Taunt_Longer", "Skeletons_Taunt");
+            death = undead ? FindClip(clips, "Skeletons_Death", "Death_A") : FindClip(clips, "Death_A");
             ultimate = FindClip(clips, "Spawn_Ground", "Spawn_Air", "Throw");
             hit = FindClip(clips, "Hit_A", "Hit_B", "Hit_Knockback");
             // Kampfclips aus KayKit Character Animations. Fehlen sie, bleiben Use_Item und Throw als Ersatz,
@@ -1591,6 +1610,41 @@ namespace Shatterspire
             if (!clip || clip.length <= 0f) return;
             // Der Dash selbst dauert 0,22 s; der Clip bekommt etwas mehr, damit das Aufkommen zu sehen ist.
             PlayAction(clip, 0.36f, Mathf.Clamp(clip.length * 0.85f / 0.36f, 0.8f, 3f));
+        }
+
+        private AnimationClip ClipFor(PresenceMotion kind) => kind switch
+        {
+            PresenceMotion.SpawnGround => spawnGround,
+            PresenceMotion.AwakenFloor => awakenFloor ? awakenFloor : awakenStanding,
+            PresenceMotion.AwakenStanding => awakenStanding,
+            PresenceMotion.InactiveFloor => inactiveFloor,
+            PresenceMotion.InactiveStanding => inactiveStanding,
+            PresenceMotion.Taunt => taunt,
+            PresenceMotion.TauntLong => tauntLong,
+            _ => death
+        };
+
+        /// <summary>
+        /// Spielt einen Auftritt - Auftauchen, Aufstehen, Provozieren, Tod - hoechstens maxSeconds lang und gibt
+        /// die tatsaechliche Dauer zurueck, damit das Verhalten so lange wartet. 0, wenn der Clip fehlt.
+        /// </summary>
+        public float PlayPresence(PresenceMotion kind, float preferredSpeed, float maxSeconds)
+        {
+            var clip = ClipFor(kind);
+            if (!ready || !clip || clip.length <= 0f) return 0f;
+            var speed = Mathf.Max(Mathf.Max(0.1f, preferredSpeed), clip.length / Mathf.Max(0.1f, maxSeconds));
+            var duration = clip.length / speed;
+            PlayAction(clip, duration, speed);
+            return duration;
+        }
+
+        /// <summary>Haelt eine Pose, bis die naechste Aktion sie abloest - etwa ein Skelett, das reglos am Boden liegt.</summary>
+        public bool HoldPose(PresenceMotion kind)
+        {
+            var clip = ClipFor(kind);
+            if (!ready || !clip) return false;
+            PlayAction(clip, float.PositiveInfinity, 0f, Mathf.Max(0f, clip.length - 0.01f));
+            return true;
         }
 
         public void PulseDash() => PlayAction(roll, 0.34f, 1.45f);

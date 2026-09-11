@@ -348,6 +348,9 @@ namespace Shatterspire
     /// </summary>
     public enum AttackMotion { Swing, Smash, Spin, Shot, Cast, Channel, Leap, Summon }
 
+    /// <summary>Auftritte der Skelett-Gegner aus KayKit Character Animations (Rig_Medium_Special).</summary>
+    public enum PresenceMotion { SpawnGround, AwakenFloor, AwakenStanding, InactiveFloor, InactiveStanding, Taunt, TauntLong, Death }
+
     public sealed class StylizedCharacterMotion : MonoBehaviour
     {
         private Transform chest;
@@ -375,7 +378,7 @@ namespace Shatterspire
             previousPosition = transform.position;
         }
 
-        public void ConfigureAuthored(Transform visual, Animator animator, float topSpeed = 6f)
+        public void ConfigureAuthored(Transform visual, Animator animator, float topSpeed = 6f, bool undead = false)
         {
             model = visual;
             modelOrigin = visual.localPosition;
@@ -389,7 +392,7 @@ namespace Shatterspire
                         ?? animator.GetBoneTransform(HumanBodyBones.Spine);
                 skin = visual.GetComponentInChildren<SkinnedMeshRenderer>();
                 authoredAnimation = gameObject.AddComponent<ChampionAnimationDriver>();
-                authoredAnimation.Configure(animator, topSpeed);
+                authoredAnimation.Configure(animator, topSpeed, undead);
             }
         }
 
@@ -419,6 +422,12 @@ namespace Shatterspire
 
         public void PulseDash() => authoredAnimation?.PulseDash();
         public void PulseDash(Vector3 localDirection) => authoredAnimation?.PulseDash(localDirection);
+
+        /// <summary>Auftritt spielen, hoechstens maxSeconds lang. Gibt die Dauer zurueck, 0 ohne passenden Clip.</summary>
+        public float PlayPresence(PresenceMotion kind, float preferredSpeed = 1f, float maxSeconds = 2f)
+            => authoredAnimation ? authoredAnimation.PlayPresence(kind, preferredSpeed, maxSeconds) : 0f;
+
+        public bool HoldPose(PresenceMotion kind) => authoredAnimation && authoredAnimation.HoldPose(kind);
         public void PulseUltimate() => authoredAnimation?.PulseUltimate();
         public void PulseHit() => authoredAnimation?.PulseHit();
 

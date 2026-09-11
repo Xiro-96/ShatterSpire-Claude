@@ -142,7 +142,8 @@ namespace Shatterspire.Editor
             "Assets/Shatterspire/Resources/Art3D/KayKit/Animations/Rig_Medium_MovementBasic.fbx",
             "Assets/Shatterspire/Resources/Art3D/KayKit/Animations/Rig_Medium_CombatMelee.fbx",
             "Assets/Shatterspire/Resources/Art3D/KayKit/Animations/Rig_Medium_CombatRanged.fbx",
-            "Assets/Shatterspire/Resources/Art3D/KayKit/Animations/Rig_Medium_MovementAdvanced.fbx"
+            "Assets/Shatterspire/Resources/Art3D/KayKit/Animations/Rig_Medium_MovementAdvanced.fbx",
+            "Assets/Shatterspire/Resources/Art3D/KayKit/Animations/Rig_Medium_Special.fbx"
         };
         private static readonly string[] SkeletonPaths =
         {
