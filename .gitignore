@@ -97,3 +97,6 @@ desktop.ini
 
 # Automatische Spielbilder aus dem Editor (EditorCaptureAgent)
 /Screenshots/
+
+# Lokale Sicherungskopien als Archiv (etwa Assets.rar). Der Inhalt liegt ohnehin im Repo.
+*.rar
