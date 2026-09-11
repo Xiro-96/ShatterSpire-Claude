@@ -11,6 +11,58 @@ namespace Shatterspire
         public static Sprite Hero(HeroClassId hero) => Build("hero:" + hero, hero, -1);
         public static Sprite Ability(HeroClassId hero, int slot) => Build("ability:" + hero + ":" + slot, hero, slot);
 
+        /// <summary>Ring fuer Fortschritt um Aktionsknoepfe; thickness als Anteil des Radius.</summary>
+        public static Sprite Ring(float thickness) => Shape("ring:" + thickness, thickness);
+
+        public static Sprite Disc() => Shape("disc", 1f);
+
+        private static Sprite Shape(string key, float thickness)
+        {
+            if (Cache.TryGetValue(key, out var cached) && cached) return cached;
+            const int size = 128;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "SHATTERSPIRE " + key, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp
+            };
+            var pixels = new Color32[size * size];
+            var outer = size * 0.5f - 1f;
+            var inner = thickness >= 1f ? -1f : outer * (1f - thickness);
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                var dx = x + 0.5f - size * 0.5f;
+                var dy = y + 0.5f - size * 0.5f;
+                var d = Mathf.Sqrt(dx * dx + dy * dy);
+                var alpha = Mathf.Clamp01(outer - d + 0.5f) * Mathf.Clamp01(d - inner + 0.5f);
+                pixels[y * size + x] = new Color32(255, 255, 255, (byte)(alpha * 255f));
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+            var sprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+            Cache[key] = sprite;
+            return sprite;
+        }
+
+        /// <summary>Senkrechter Verlauf, unten deckend, oben transparent. Lesbarkeit ohne Vollflaeche.</summary>
+        public static Sprite VerticalFade()
+        {
+            const string key = "fade";
+            if (Cache.TryGetValue(key, out var cached) && cached) return cached;
+            var texture = new Texture2D(4, 64, TextureFormat.RGBA32, false)
+            {
+                name = "SHATTERSPIRE fade", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp
+            };
+            var pixels = new Color32[4 * 64];
+            for (var y = 0; y < 64; y++)
+            for (var x = 0; x < 4; x++)
+                pixels[y * 4 + x] = new Color32(255, 255, 255, (byte)(255f * Mathf.SmoothStep(1f, 0f, y / 63f)));
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+            var sprite = Sprite.Create(texture, new Rect(0, 0, 4, 64), new Vector2(0.5f, 0.5f), 100f);
+            Cache[key] = sprite;
+            return sprite;
+        }
+
         private static Sprite Build(string key, HeroClassId hero, int slot)
         {
             if (Cache.TryGetValue(key, out var cached) && cached) return cached;

@@ -127,10 +127,12 @@ namespace Shatterspire
             if (spawner.IsSpawning) spawner.ResetStalledObjectiveEncounter();
             if (retryUsed)
             {
+                Debug.LogWarning("SHATTERSPIRE Core-Verteidigung haengt: freigegeben ohne gemeldetes Ende.");
                 OnDefendersCleared();
                 return;
             }
             retryUsed = true;
+            Debug.LogWarning("SHATTERSPIRE Core-Verteidigung haengt: neuer Versuch.");
             chargingSince = Time.time;
             spawner.SpawnObjectiveEncounter(charging.transform.position, floor, nodes.IndexOf(charging), roomKind);
         }
@@ -140,6 +142,7 @@ namespace Shatterspire
             if (!charging) return;
             var node = charging;
             charging = null;
+            Debug.Log($"SHATTERSPIRE Core {nodes.IndexOf(node) + 1} bereit nach {Time.time - chargingSince:0.0} s Verteidigung.");
             node.SetReady();
             GameEvents.RaiseObjectiveChanged(ActivatedCount, nodes.Count, "STAND IN THE RING TO ACTIVATE");
             PublishTarget(node);

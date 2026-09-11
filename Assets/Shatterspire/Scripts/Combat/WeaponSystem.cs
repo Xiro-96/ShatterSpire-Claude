@@ -42,6 +42,7 @@ namespace Shatterspire
         private float SkillCooldown => HeroCatalog.SkillCooldown(heroClass) * build.SkillCooldownMultiplier *
                                        (build.Has(PerkId.SkillOverdrive) ? 1.4f : 1f);
         public float SkillNormalized => Mathf.Clamp01(1f - (skillReadyAt - Time.time) / SkillCooldown);
+        public float SkillCooldownRemaining => Mathf.Max(0f, skillReadyAt - Time.time);
         public float HeavyMeterNormalized => heavyMeter / HeavyMeterMaximum;
         public float HeavyChargeNormalized => Mathf.Clamp01(heavyCharge / HeavyChargeSeconds);
         public bool HeavyReady => heavyMeter >= HeavyMeterMaximum;

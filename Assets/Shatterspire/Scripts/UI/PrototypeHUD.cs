@@ -26,11 +26,17 @@ namespace Shatterspire
         private Text navigationText;
         private Text encounterText;
         private Text buildText;
-        private Image heavyFill;
-        private Image heavyPerfectZone;
+        private ActionButtonView lightButton;
+        private ActionButtonView heavyButton;
+        private ActionButtonView skillButton;
+        private ActionButtonView dashButton;
         private Text heavyStateText;
-        private Text skillStateText;
-        private Text dashStateText;
+        private CompanionBot[] team = Array.Empty<CompanionBot>();
+        private Text[] teamStatus;
+        private Image[] teamSupportFill;
+        private bool skillWasReady = true;
+        private bool heavyWasReady;
+        private bool heavyEverReady;
         private Text knockoutText;
         private Image xpFill;
         private Text levelText;
@@ -53,9 +59,10 @@ namespace Shatterspire
         private bool selectingLevelPerk;
         private readonly System.Random perkRandom = new();
 
-        public void Configure(GameObject player, RunConfig config)
+        public void Configure(GameObject player, RunConfig config, CompanionBot[] companions = null)
         {
             runConfig = config ?? new RunConfig();
+            team = companions ?? Array.Empty<CompanionBot>();
             playerTransform = player.transform;
             playerHealth = player.GetComponent<Health>();
             build = player.GetComponent<PlayerBuild>();
@@ -165,15 +172,11 @@ namespace Shatterspire
                 new Vector2(0, -82), new Vector2(468, 21), new Vector2(0.5f, 1));
             encounterText.color = new Color(1f, 0.35f, 0.28f);
             encounterText.gameObject.SetActive(false);
-            buildText = CreateText(root.transform, "NO PERKS", 12, TextAnchor.UpperLeft, new Vector2(112, -91), new Vector2(258, 22), new Vector2(0, 1));
+            buildText = CreateText(root.transform, "NO UPGRADES YET", 12, TextAnchor.UpperLeft, new Vector2(112, -91), new Vector2(258, 22), new Vector2(0, 1));
             CreateExperienceBar(root.transform);
-            CreateTeamPanel(root.transform);
-            knockoutText = CreateText(root.transform, "TEAM LIVES  ◆ ◆ ◆", 15, TextAnchor.UpperRight,
-                new Vector2(-24, -102), new Vector2(300, 28), new Vector2(1, 1));
-            knockoutText.color = new Color(1f, 0.78f, 0.2f);
-            CreateHeavyBar(root.transform);
-            CreateDesktopAbilityBar(root.transform);
-            CreateMobileControls(root.transform);
+            CreateTeamFrames(root.transform);
+            CreateMoveStick(root.transform);
+            CreateActionCluster(root.transform);
             CreateAnnouncement(root.transform);
         }
 
@@ -195,8 +198,8 @@ namespace Shatterspire
                     announcementGroup.gameObject.SetActive(false);
             }
             if (!controller || !weapon) return;
-            if (skillStateText) skillStateText.text = weapon.SkillNormalized >= 1f ? "Q  READY" : $"Q  {weapon.SkillNormalized:P0}";
-            if (dashStateText) dashStateText.text = $"SPACE {controller.DashCharges}/{controller.MaxDashCharges}";
+            UpdateActionCluster();
+            UpdateTeamFrames();
             UpdateObjectiveNavigation();
         }
 
@@ -258,81 +261,224 @@ namespace Shatterspire
             panel.gameObject.SetActive(false);
         }
 
-        private void CreateDesktopAbilityBar(Transform parent)
+        /// <summary>
+        /// Team-Leiste oben rechts: je Bot Wappen, Name, Rolle und was er gerade tut. Lebensbalken gibt es
+        /// bewusst nicht - die Bots nehmen noch keinen Schaden, eine volle Leiste waere Deko ohne Aussage.
+        /// </summary>
+        private void CreateTeamFrames(Transform parent)
         {
-            if (Application.isMobilePlatform) return;
-            // Drei Aktionen und Dash wie in R.I.S.E. Abstand 106 fuer die Sockel (92 breit plus Rand).
-            CreateAbilityTile(parent, 0, "LMB", new Vector2(-40, 40), new Color(0.1f, 0.82f, 0.95f));
-            CreateAbilityTile(parent, 3, "RMB", new Vector2(-146, 40), new Color(1f, 0.68f, 0.12f));
-            skillStateText = CreateAbilityTile(parent, 1, "Q", new Vector2(-252, 40), new Color(0.55f, 0.3f, 1f));
-            dashStateText = CreateAbilityTile(parent, 2, "SPACE", new Vector2(-358, 40), new Color(0.18f, 0.74f, 1f));
-        }
-
-        private void CreateTeamPanel(Transform parent)
-        {
-            var panel = CreateImage(parent, "Offline Team", new Color(0.09f, 0.06f, 0.05f, 0.9f),
-                new Vector2(-22, -22), new Vector2(218, 52), new Vector2(1, 1));
-            ApplyRounded(panel);
-            var team = runConfig.Hero == HeroClassId.Arcanist ? "BRAX  ·  ORION  ·  REX"
-                : runConfig.Hero == HeroClassId.Guardian ? "REX  ·  BRAX  ·  MIRA" : "BRAX  ·  REX  ·  MIRA";
-            var text = CreateText(panel.transform, "RIFT TEAM  3/3\n" + team, 13, TextAnchor.MiddleCenter,
-                Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
-            text.color = new Color(1f, 0.86f, 0.5f);
-        }
-
-        private void CreateHeavyBar(Transform parent)
-        {
-            var back = CreateImage(parent, "Heavy Attack Meter", new Color(0.05f, 0.035f, 0.03f, 0.92f),
-                new Vector2(0, 34), new Vector2(340, 15), new Vector2(0.5f, 0));
-            ApplyRounded(back);
-            heavyFill = CreateFill(back.transform, new Color(0.15f, 0.78f, 1f));
-            ApplyRoundedFill(heavyFill);
-            heavyPerfectZone = CreateImage(back.transform, "Perfect Release Zone", new Color(1f, 0.78f, 0.12f, 0.42f),
-                Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f));
-            var zoneRect = (RectTransform)heavyPerfectZone.transform;
-            zoneRect.anchorMin = new Vector2(0.5f, 0f);
-            zoneRect.anchorMax = new Vector2(0.74f, 1f);
-            zoneRect.pivot = new Vector2(0.5f, 0.5f);
-            zoneRect.offsetMin = Vector2.zero;
-            zoneRect.offsetMax = Vector2.zero;
-            heavyPerfectZone.gameObject.SetActive(false);
-            // Der Text steht ohne Hintergrund direkt ueber dem Boden. Auf dem alten
-            // dunklen Terrakotta war hellblau lesbar, auf dem hellen Boden nach dem
-            // Grafik-Paket verschwand er. Die Kontur macht ihn unabhaengig vom
-            // Untergrund lesbar, die groessere Schrift zusaetzlich auf dem Telefon.
-            heavyStateText = CreateText(parent, weapon.LightName + " CHARGES " + weapon.HeavyName, 16, TextAnchor.LowerCenter,
-                new Vector2(0, 55), new Vector2(520, 26), new Vector2(0.5f, 0));
-            // Kontur und Schatten setzt jetzt CreateText fuer jeden Text.
-            heavyStateText.color = new Color(1f, 0.95f, 0.86f);
-        }
-
-        private Text CreateAbilityTile(Transform parent, int spriteIndex, string keyLabel, Vector2 position, Color accent)
-        {
-            // Eigener Sockel hinter dem Icon. Das Icon-Sprite ueberdeckt die Grundfarbe des Tiles
-            // (tile.color wird auf Weiss gesetzt), deshalb hatte Einfaerben bisher keine Wirkung.
-            // Groesser und mit dickem Rand in der Faehigkeitsfarbe, wie Aktionsknoepfe in
-            // Mobile-Actionspielen.
-            var socket = CreateImage(parent, "Ability Socket", new Color(0.1f, 0.07f, 0.06f, 0.94f), position,
-                new Vector2(92, 92), new Vector2(1, 0));
-            ApplyRounded(socket);
-            socket.raycastTarget = false;
-            var rim = socket.gameObject.AddComponent<Outline>();
-            rim.effectColor = accent;
-            rim.effectDistance = new Vector2(4, -4);
-
-            var tile = CreateImage(socket.transform, "Ability", new Color(0.025f, 0.045f, 0.09f, 0.95f),
-                new Vector2(0, 7), new Vector2(70, 70), new Vector2(0.5f, 0.5f));
-            if (abilitySprites != null && spriteIndex >= 0 && spriteIndex < abilitySprites.Length)
+            teamStatus = new Text[team.Length];
+            teamSupportFill = new Image[team.Length];
+            for (var i = 0; i < team.Length; i++)
             {
-                tile.sprite = abilitySprites[spriteIndex];
-                tile.color = Color.white;
-                tile.preserveAspect = true;
+                var bot = team[i];
+                if (!bot) continue;
+                var frame = CreateImage(parent, "Team Frame", new Color(0.09f, 0.06f, 0.05f, 0.9f),
+                    new Vector2(-16, -16 - i * 74), new Vector2(280, 66), new Vector2(1, 1));
+                ApplyRounded(frame);
+                frame.raycastTarget = false;
+                var outline = frame.gameObject.AddComponent<Outline>();
+                outline.effectColor = bot.Accent;
+                outline.effectDistance = new Vector2(2f, -2f);
+                var emblem = CreateImage(frame.transform, "Role Emblem", Color.white, new Vector2(8, 0), new Vector2(52, 52), new Vector2(0, 0.5f));
+                emblem.sprite = UiIconFactory.Hero(RoleHero(bot.Role));
+                emblem.preserveAspect = true;
+                emblem.raycastTarget = false;
+                CreateText(frame.transform, $"{bot.DisplayName}  <size=12>{bot.Role.ToString().ToUpperInvariant()}</size>", 18,
+                    TextAnchor.UpperLeft, new Vector2(68, -7), new Vector2(200, 24), new Vector2(0, 1)).fontStyle = FontStyle.Bold;
+                teamStatus[i] = CreateText(frame.transform, bot.Status, 13, TextAnchor.UpperLeft, new Vector2(68, -32), new Vector2(200, 18), new Vector2(0, 1));
+                teamStatus[i].color = bot.Accent;
+                if (bot.Role != CompanionRole.Support) continue;
+                var back = CreateImage(frame.transform, "Heal Charge", new Color(0.05f, 0.035f, 0.03f, 0.92f),
+                    new Vector2(68, 8), new Vector2(196, 8), new Vector2(0, 0));
+                ApplyRounded(back);
+                var fill = CreateFill(back.transform, bot.Accent);
+                ((RectTransform)fill.transform).offsetMin = new Vector2(1, 1);
+                ((RectTransform)fill.transform).offsetMax = new Vector2(-1, -1);
+                teamSupportFill[i] = fill;
             }
-            tile.raycastTarget = false;
-            var label = CreateText(socket.transform, keyLabel, 15, TextAnchor.LowerCenter, new Vector2(0, 3),
-                new Vector2(92, 20), new Vector2(0.5f, 0));
-            label.color = Color.white;
-            return label;
+            knockoutText = CreateText(parent, "TEAM LIVES  ◆◆◆", 16, TextAnchor.UpperRight,
+                new Vector2(-20, -24 - team.Length * 74), new Vector2(300, 26), new Vector2(1, 1));
+            knockoutText.color = new Color(1f, 0.78f, 0.2f);
+        }
+
+        private void UpdateTeamFrames()
+        {
+            if (teamStatus == null) return;
+            for (var i = 0; i < team.Length; i++)
+            {
+                if (!team[i]) continue;
+                if (teamStatus[i]) teamStatus[i].text = team[i].Status;
+                if (teamSupportFill[i]) teamSupportFill[i].fillAmount = team[i].SupportReadyNormalized;
+            }
+        }
+
+        private static HeroClassId RoleHero(CompanionRole role) => role switch
+        {
+            CompanionRole.Guardian => HeroClassId.Guardian,
+            CompanionRole.Support => HeroClassId.Arcanist,
+            _ => HeroClassId.Ranger
+        };
+
+        private void CreateMoveStick(Transform parent)
+        {
+            if (!Application.isMobilePlatform) return;
+            var stick = CreateImage(parent, "Move Stick", new Color(0.2f, 0.8f, 1f, 0.22f), new Vector2(190, 190), new Vector2(270, 270), Vector2.zero);
+            stick.sprite = UiIconFactory.Disc();
+            var knob = CreateImage(stick.transform, "Knob", new Color(0.25f, 0.9f, 1f, 0.7f), Vector2.zero, new Vector2(105, 105), new Vector2(0.5f, 0.5f));
+            knob.sprite = UiIconFactory.Disc();
+            stick.gameObject.AddComponent<MobileJoystick>().Configure((RectTransform)knob.transform);
+        }
+
+        /// <summary>
+        /// Aktionsknoepfe wie in Mobile-Actionspielen: grosser Angriff in der Ecke, Heavy, Skill und Dash im
+        /// Bogen darum. Auf dem Telefon sind es die Touch-Knoepfe, am PC dieselben Anzeigen mit Tastenhinweis.
+        /// Heavy zeigt seinen Balken als Ring, Skill die Abklingzeit als Fuellung, Dash die Ladungen als Punkte.
+        /// Ersetzt die Kachelreihe und den Balken mit Dauertext unten in der Mitte.
+        /// </summary>
+        private void CreateActionCluster(Transform parent)
+        {
+            var mobile = Application.isMobilePlatform;
+            lightButton = CreateActionButton(parent, 0, mobile ? weapon.LightName : "LMB", new Vector2(-150, 150), 170,
+                new Color(0.1f, 0.82f, 0.95f), MobileAction.Attack);
+            heavyButton = CreateActionButton(parent, 3, mobile ? weapon.HeavyName : "RMB", new Vector2(-345, 118), 118,
+                new Color(1f, 0.68f, 0.12f), MobileAction.Heavy);
+            skillButton = CreateActionButton(parent, 1, mobile ? weapon.SkillName : "Q", new Vector2(-300, 290), 112,
+                new Color(0.62f, 0.32f, 1f), MobileAction.Skill);
+            dashButton = CreateActionButton(parent, 2, mobile ? "DASH" : "SPACE", new Vector2(-140, 345), 100,
+                new Color(0.18f, 0.74f, 1f), MobileAction.Dash);
+
+            // Goldenes Fenster fuer den perfekten Heavy: 50 bis 76 % der Ladung.
+            heavyButton.PerfectZone = CreateRing(heavyButton.Root, "Perfect Zone", heavyButton.Size + 28f, new Color(1f, 0.8f, 0.12f, 0.6f), 0.26f);
+            heavyButton.PerfectZone.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -180f);
+            heavyButton.PerfectZone.gameObject.SetActive(false);
+            heavyStateText = CreateText(parent, string.Empty, 17, TextAnchor.LowerCenter, Vector2.zero, new Vector2(320, 24), new Vector2(1, 0));
+            heavyStateText.rectTransform.pivot = new Vector2(0.5f, 0f);
+            heavyStateText.rectTransform.anchoredPosition = new Vector2(-345f, 194f);
+
+            dashButton.Pips = new Image[5];
+            for (var k = 0; k < dashButton.Pips.Length; k++)
+            {
+                var pip = CreateImage(dashButton.Root, "Dash Charge", Color.white, Vector2.zero, new Vector2(13, 13), new Vector2(0.5f, 0.5f));
+                pip.sprite = UiIconFactory.Disc();
+                pip.raycastTarget = false;
+                pip.gameObject.SetActive(false);
+                dashButton.Pips[k] = pip;
+            }
+        }
+
+        private ActionButtonView CreateActionButton(Transform parent, int spriteIndex, string label, Vector2 center, float size,
+            Color accent, MobileAction action)
+        {
+            var socket = CreateImage(parent, "Action " + action, new Color(0.08f, 0.06f, 0.05f, 0.88f), center, new Vector2(size, size), new Vector2(1, 0));
+            socket.sprite = UiIconFactory.Disc();
+            var root = socket.rectTransform;
+            root.pivot = new Vector2(0.5f, 0.5f);
+            root.anchoredPosition = center;
+            var view = new ActionButtonView { Root = root, Size = size, Accent = accent };
+
+            CreateRing(root, "Rim", size, accent, 1f, 0.09f);
+            var icon = CreateImage(root, "Icon", Color.white, Vector2.zero, new Vector2(size * 0.74f, size * 0.74f), new Vector2(0.5f, 0.5f));
+            if (abilitySprites != null && spriteIndex >= 0 && spriteIndex < abilitySprites.Length) icon.sprite = abilitySprites[spriteIndex];
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+
+            view.Cooldown = CreateImage(root, "Cooldown", new Color(0f, 0.01f, 0.03f, 0.66f), Vector2.zero, new Vector2(size * 0.92f, size * 0.92f), new Vector2(0.5f, 0.5f));
+            view.Cooldown.sprite = UiIconFactory.Disc();
+            view.Cooldown.type = Image.Type.Filled;
+            view.Cooldown.fillMethod = Image.FillMethod.Radial360;
+            view.Cooldown.fillOrigin = (int)Image.Origin360.Top;
+            view.Cooldown.fillClockwise = true;
+            view.Cooldown.fillAmount = 0f;
+            view.Cooldown.raycastTarget = false;
+            view.Progress = CreateRing(root, "Progress", size + 12f, accent, 0f, 0.16f);
+
+            view.Center = CreateText(root, string.Empty, Mathf.RoundToInt(size * 0.3f), TextAnchor.MiddleCenter, Vector2.zero, new Vector2(size, size), new Vector2(0.5f, 0.5f));
+            view.Center.fontStyle = FontStyle.Bold;
+            CreateText(root, label, 14, TextAnchor.MiddleCenter, new Vector2(0, -size * 0.5f - 13f), new Vector2(size + 70, 20), new Vector2(0.5f, 0.5f));
+            view.Badge = CreateText(root, string.Empty, 17, TextAnchor.MiddleCenter, new Vector2(size * 0.38f, size * 0.38f), new Vector2(44, 24), new Vector2(0.5f, 0.5f));
+            view.Badge.fontStyle = FontStyle.Bold;
+            view.Badge.color = new Color(1f, 0.82f, 0.2f);
+
+            socket.raycastTarget = Application.isMobilePlatform;
+            if (Application.isMobilePlatform) socket.gameObject.AddComponent<MobileActionButton>().Configure(action);
+            return view;
+        }
+
+        private Image CreateRing(RectTransform parent, string name, float diameter, Color color, float fill, float thickness = 0.14f)
+        {
+            var ring = CreateImage(parent, name, color, Vector2.zero, new Vector2(diameter, diameter), new Vector2(0.5f, 0.5f));
+            ring.sprite = UiIconFactory.Ring(thickness);
+            ring.type = Image.Type.Filled;
+            ring.fillMethod = Image.FillMethod.Radial360;
+            ring.fillOrigin = (int)Image.Origin360.Top;
+            ring.fillClockwise = true;
+            ring.fillAmount = fill;
+            ring.raycastTarget = false;
+            return ring;
+        }
+
+        private void UpdateActionCluster()
+        {
+            if (skillButton != null)
+            {
+                var remaining = weapon.SkillCooldownRemaining;
+                var ready = remaining <= 0f;
+                skillButton.Cooldown.fillAmount = ready ? 0f : 1f - weapon.SkillNormalized;
+                skillButton.Center.text = ready ? string.Empty : remaining >= 1f ? Mathf.CeilToInt(remaining).ToString() : remaining.ToString("0.0");
+                if (ready && !skillWasReady) skillButton.Punch();
+                skillWasReady = ready;
+            }
+            if (dashButton != null)
+            {
+                var max = Mathf.Min(controller.MaxDashCharges, dashButton.Pips.Length);
+                var charges = controller.DashCharges;
+                for (var k = 0; k < dashButton.Pips.Length; k++)
+                {
+                    var pip = dashButton.Pips[k];
+                    var visible = k < max;
+                    if (pip.gameObject.activeSelf != visible) pip.gameObject.SetActive(visible);
+                    if (!visible) continue;
+                    var angle = (90f - (k - (max - 1) * 0.5f) * 22f) * Mathf.Deg2Rad;
+                    pip.rectTransform.anchoredPosition = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * (dashButton.Size * 0.5f + 15f);
+                    pip.color = k < charges ? dashButton.Accent : new Color(0.1f, 0.12f, 0.16f, 0.92f);
+                }
+                dashButton.Progress.fillAmount = charges >= controller.MaxDashCharges ? 0f : controller.DashRechargeNormalized;
+                dashButton.Cooldown.fillAmount = charges <= 0 ? 1f - controller.DashRechargeNormalized : 0f;
+            }
+            if (heavyButton != null && weapon.HeavyReady && !weapon.ChargingHeavy)
+                heavyButton.Progress.color = Color.Lerp(new Color(1f, 0.66f, 0.1f), new Color(1f, 0.95f, 0.7f),
+                    0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 8f));
+            lightButton?.Tick();
+            heavyButton?.Tick();
+            skillButton?.Tick();
+            dashButton?.Tick();
+        }
+
+        private sealed class ActionButtonView
+        {
+            public RectTransform Root;
+            public Image Cooldown;
+            public Image Progress;
+            public Image PerfectZone;
+            public Image[] Pips = Array.Empty<Image>();
+            public Text Center;
+            public Text Badge;
+            public float Size;
+            public Color Accent;
+            public int BadgeCount;
+            private float punchStarted = -10f;
+
+            public void Punch() => punchStarted = Time.unscaledTime;
+
+            /// <summary>Kurzes Aufploppen, wenn eine Aktion bereit wird oder ein Upgrade bekommt.</summary>
+            public void Tick()
+            {
+                if (!Root) return;
+                var t = (Time.unscaledTime - punchStarted) / 0.28f;
+                var scale = t >= 0f && t < 1f ? 1f + Mathf.Sin(t * Mathf.PI) * 0.14f : 1f;
+                Root.localScale = new Vector3(scale, scale, 1f);
+            }
         }
 
         private void HandleModalInput()
@@ -488,17 +634,25 @@ namespace Shatterspire
 
         private void RefreshHeavy(float meter, float charge, bool charging, bool perfect)
         {
-            if (!heavyFill) return;
-            heavyFill.fillAmount = charging ? charge : meter;
-            heavyFill.color = perfect
-                ? new Color(1f, 0.78f, 0.08f)
-                : charging ? new Color(0.15f, 0.9f, 1f) : new Color(0.15f, 0.68f, 1f);
-            if (heavyPerfectZone) heavyPerfectZone.gameObject.SetActive(charging);
+            if (heavyButton == null) return;
+            var ready = meter >= 0.999f;
+            heavyButton.Progress.fillAmount = charging ? charge : meter;
+            heavyButton.Progress.color = perfect ? new Color(1f, 0.82f, 0.12f)
+                : charging ? Color.white
+                : ready ? new Color(1f, 0.72f, 0.12f) : new Color(0.15f, 0.72f, 1f);
+            if (heavyButton.PerfectZone) heavyButton.PerfectZone.gameObject.SetActive(charging);
+            if (ready && !heavyWasReady)
+            {
+                heavyButton.Punch();
+                heavyEverReady = true;
+            }
+            heavyWasReady = ready;
             if (!heavyStateText) return;
-            var release = Application.isMobilePlatform ? "RELEASE HEAVY" : "RELEASE RMB";
-            var hold = Application.isMobilePlatform ? "HOLD HEAVY" : "HOLD RMB";
-            heavyStateText.text = perfect ? "PERFECT!  " + release : charging ? weapon.HeavyName + " · RELEASE IN GOLD ZONE"
-                : meter >= 0.999f ? weapon.HeavyName + " READY · " + hold : weapon.LightName + " COMBO CHARGES HEAVY";
+            // Der Erklaertext steht nur, bis der Heavy zum ersten Mal voll war. Danach reicht der Ring.
+            heavyStateText.text = perfect ? (Application.isMobilePlatform ? "PERFECT!  RELEASE" : "PERFECT!  RELEASE RMB")
+                : charging ? "RELEASE IN GOLD"
+                : ready ? weapon.HeavyName + " READY"
+                : heavyEverReady ? string.Empty : "LIGHT HITS CHARGE HEAVY";
             heavyStateText.color = perfect ? new Color(1f, 0.82f, 0.14f) : new Color(1f, 0.95f, 0.86f);
         }
 
@@ -524,16 +678,33 @@ namespace Shatterspire
         }
         private void OnPerkSelected(PerkDefinition _) => RefreshBuild();
 
+        /// <summary>Upgrades zeigen sich an der Aktion, die sie veraendern: "+2" am Knopf. Passive stehen unter dem Namen.</summary>
         private void RefreshBuild()
         {
-            var names = new List<string>();
+            var counts = new int[5];
+            var passives = new List<string>();
             foreach (var id in build.Perks)
             {
                 var perk = PerkCatalog.Find(id);
-                names.Add(perk == null ? id.ToString() : $"{PerkCatalog.SlotLabel(perk.Slot)} {perk.Name}");
+                if (perk == null) continue;
+                counts[(int)perk.Slot]++;
+                if (perk.Slot == ActionSlot.Passive) passives.Add(perk.Name);
             }
-            var fusion = build.IsInferno ? "\nFUSION: INFERNO" : build.IsShatter ? "\nFUSION: SHATTER" : build.IsChainStorm ? "\nFUSION: CHAIN STORM" : string.Empty;
-            buildText.text = names.Count == 0 ? "NO PERKS" : string.Join(" · ", names) + fusion;
+            SetBadge(lightButton, counts[(int)ActionSlot.Light]);
+            SetBadge(heavyButton, counts[(int)ActionSlot.Heavy]);
+            SetBadge(skillButton, counts[(int)ActionSlot.Skill]);
+            SetBadge(dashButton, counts[(int)ActionSlot.Dash]);
+            var fusion = build.IsInferno ? "  ·  FUSION: INFERNO" : build.IsShatter ? "  ·  FUSION: SHATTER" : build.IsChainStorm ? "  ·  FUSION: CHAIN STORM" : string.Empty;
+            buildText.text = passives.Count > 0 ? string.Join(" · ", passives) + fusion
+                : build.Perks.Count > 0 ? "UPGRADES SHOWN ON YOUR ACTIONS" : "NO UPGRADES YET";
+        }
+
+        private static void SetBadge(ActionButtonView view, int count)
+        {
+            if (view?.Badge == null) return;
+            view.Badge.text = count > 0 ? "+" + count : string.Empty;
+            if (count > view.BadgeCount) view.Punch();
+            view.BadgeCount = count;
         }
 
         public void ShowFloorUpgrade(Action afterSelection)
@@ -677,7 +848,7 @@ namespace Shatterspire
             var scorePanel = CreateImage(modal.transform, "Climb Score", new Color(0.035f, 0.075f, 0.12f, 0.98f),
                 new Vector2(-345, 25), new Vector2(660, 300), new Vector2(0.5f, 0.5f));
             ApplyRounded(scorePanel);
-            CreateText(scorePanel.transform, "AUFSTIEGSWERTUNG", 22, TextAnchor.UpperCenter,
+            CreateText(scorePanel.transform, "CLIMB SCORE", 22, TextAnchor.UpperCenter,
                 new Vector2(0, -16), new Vector2(600, 30), new Vector2(0.5f, 1));
             CreateText(scorePanel.transform, $"{score:N0}", 58, TextAnchor.UpperCenter,
                 new Vector2(0, -46), new Vector2(600, 70), new Vector2(0.5f, 1));
@@ -691,8 +862,8 @@ namespace Shatterspire
                 labels.AppendLine(entry.Label);
                 values.AppendLine($"{entry.Points:N0}");
             }
-            labels.AppendLine(result.Extracted ? "EXTRAHIERT" : "GEFALLEN");
-            values.AppendLine(result.Extracted ? "x1,15" : "x0,70");
+            labels.AppendLine(result.Extracted ? "EXTRACTED" : "FALLEN");
+            values.AppendLine(result.Extracted ? "x1.15" : "x0.70");
             CreateText(scorePanel.transform, labels.ToString(), 24, TextAnchor.UpperLeft,
                 new Vector2(30, -122), new Vector2(320, 150), new Vector2(0f, 1f));
             CreateText(scorePanel.transform, values.ToString(), 24, TextAnchor.UpperRight,
@@ -702,7 +873,7 @@ namespace Shatterspire
                 new Vector2(345, 25), new Vector2(660, 300), new Vector2(0.5f, 0.5f));
             ApplyRounded(rankPanel);
             var tier = RankTable.TierFor(rankPoints);
-            CreateText(rankPanel.transform, $"RANG · SHIFT {save.shiftIndex}", 22, TextAnchor.UpperCenter,
+            CreateText(rankPanel.transform, $"RANK · SHIFT {save.shiftIndex}", 22, TextAnchor.UpperCenter,
                 new Vector2(0, -16), new Vector2(600, 30), new Vector2(0.5f, 1));
             var rankLabel = CreateText(rankPanel.transform, RankTable.Name(tier), 52, TextAnchor.UpperCenter,
                 new Vector2(0, -46), new Vector2(600, 66), new Vector2(0.5f, 1));
@@ -717,17 +888,17 @@ namespace Shatterspire
 
             var toNext = RankTable.PointsToNext(rankPoints);
             var next = RankTable.IsHighest(tier)
-                ? "HOECHSTER RANG ERREICHT"
-                : $"{toNext:N0} PUNKTE BIS {RankTable.Name((RankTier)((int)tier + 1))}";
+                ? "HIGHEST RANK REACHED"
+                : $"{toNext:N0} POINTS TO {RankTable.Name((RankTier)((int)tier + 1))}";
             CreateText(rankPanel.transform,
-                $"RANGPUNKTE  {rankPoints:N0}\nAUS DEN {RankTable.ClimbCount} BESTEN AUFSTIEGEN\n{next}\n\nSHIFT ENDET IN  {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}",
+                $"RANK POINTS  {rankPoints:N0}\nFROM YOUR {RankTable.ClimbCount} BEST CLIMBS\n{next}\n\nSHIFT ENDS IN  {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}",
                 24, TextAnchor.UpperCenter, new Vector2(0, -160), new Vector2(600, 130), new Vector2(0.5f, 1));
 
             var wallet = CreateImage(modal.transform, "Wallet", new Color(0.03f, 0.06f, 0.1f, 0.96f),
                 new Vector2(0, -140), new Vector2(1010, 62), new Vector2(0.5f, 0.5f));
             ApplyRounded(wallet);
             CreateText(wallet.transform,
-                $"SHARDS  +{earned}  ·  GESAMT {save.shards}      TOKENS  {save.tokens}      ETAGE  {Mathf.Max(1, roomsCleared)}  ·  BEST {save.bestFloor}",
+                $"SHARDS  +{earned}  ·  TOTAL {save.shards}      TOKENS  {save.tokens}      FLOOR  {Mathf.Max(1, roomsCleared)}  ·  BEST {save.bestFloor}",
                 26, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
             var restart = CreateButton(modal.transform, "CLIMB AGAIN", new Vector2(225, -225), new Vector2(360, 96), new Color(0.1f, 0.86f, 0.72f));
             restart.onClick.AddListener(RestartRun);
@@ -776,35 +947,6 @@ namespace Shatterspire
             var sub = CreateText(panel.transform, subtitle, 21, TextAnchor.UpperCenter, new Vector2(0, -98), new Vector2(1100, 42), new Vector2(0.5f, 1));
             sub.color = new Color(0.55f, 0.86f, 1f);
             return blocker.gameObject;
-        }
-
-        private void CreateMobileControls(Transform parent)
-        {
-            if (!Application.isMobilePlatform) return;
-            var stick = CreateImage(parent, "Move Stick", new Color(0.2f, 0.8f, 1f, 0.22f), new Vector2(190, 190), new Vector2(270, 270), Vector2.zero);
-            var knob = CreateImage(stick.transform, "Knob", new Color(0.25f, 0.9f, 1f, 0.7f), Vector2.zero, new Vector2(105, 105), new Vector2(0.5f, 0.5f));
-            stick.gameObject.AddComponent<MobileJoystick>().Configure((RectTransform)knob.transform);
-            CreateAction(parent, weapon.LightName, new Vector2(-160, 175), 158, MobileAction.Attack, new Color(0.1f, 0.82f, 1f, 0.82f));
-            CreateAction(parent, weapon.HeavyName, new Vector2(-345, 120), 132, MobileAction.Heavy, new Color(1f, 0.66f, 0.1f, 0.82f));
-            CreateAction(parent, weapon.SkillName, new Vector2(-300, 305), 124, MobileAction.Skill, new Color(0.62f, 0.28f, 1f, 0.8f));
-            CreateAction(parent, "DASH", new Vector2(-455, 250), 112, MobileAction.Dash, new Color(0.18f, 0.74f, 1f, 0.8f));
-        }
-
-        private void CreateAction(Transform parent, string label, Vector2 pos, float size, MobileAction action, Color color)
-        {
-            var image = CreateImage(parent, label, color, pos, new Vector2(size, size), new Vector2(1, 0));
-            var spriteIndex = action switch { MobileAction.Attack => 0, MobileAction.Heavy => 3, MobileAction.Skill => 1, MobileAction.Dash => 2, _ => 0 };
-            if (abilitySprites != null && spriteIndex < abilitySprites.Length)
-            {
-                image.sprite = abilitySprites[spriteIndex];
-                image.color = Color.white;
-                image.preserveAspect = true;
-            }
-            var outline = image.gameObject.AddComponent<Outline>();
-            outline.effectColor = color;
-            outline.effectDistance = new Vector2(4, -4);
-            image.gameObject.AddComponent<MobileActionButton>().Configure(action);
-            CreateText(image.transform, label, 18, TextAnchor.LowerCenter, new Vector2(0, 7), new Vector2(size, 28), new Vector2(0.5f, 0));
         }
 
         private Image CreateImage(Transform parent, string name, Color color, Vector2 position, Vector2 size, Vector2 anchor)

@@ -39,6 +39,10 @@ namespace Shatterspire
         /// </summary>
         public int pendingShiftRank = -1;
         public int pendingShiftTokens;
+
+        /// <summary>Zuletzt in der Lobby gewaehlt. Alte Staende ohne die Felder starten mit Ranger und Heroic.</summary>
+        public int lastHero;
+        public int lastPath = (int)RunMode.Heroic;
     }
 
     public static class MetaSaveSystem
@@ -201,6 +205,15 @@ namespace Shatterspire
             var count = Mathf.Min(3, relics?.Count ?? 0);
             data.equippedRelics = new int[count];
             for (var i = 0; i < count; i++) data.equippedRelics[i] = (int)relics[i];
+            Save(data);
+        }
+
+        public static void SaveLobbySelection(HeroClassId hero, RunMode path)
+        {
+            var data = Load();
+            if (data.lastHero == (int)hero && data.lastPath == (int)path) return;
+            data.lastHero = (int)hero;
+            data.lastPath = (int)path;
             Save(data);
         }
 

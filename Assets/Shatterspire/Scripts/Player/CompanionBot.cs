@@ -32,6 +32,15 @@ namespace Shatterspire
         private Vector3 lastLeaderPosition;
         private Vector3 leaderHeading = Vector3.forward;
         private Vector3 previousPosition;
+        private float healingUntil;
+
+        public string DisplayName { get; private set; }
+        public CompanionRole Role => role;
+        public Color Accent => accent;
+        /// <summary>Was der Bot gerade tut, fuer die Team-Leiste im HUD.</summary>
+        public string Status { get; private set; } = "FOLLOWING";
+        public float SupportReadyNormalized =>
+            role != CompanionRole.Support ? 1f : Mathf.Clamp01(1f - (nextSupportPulse - Time.time) / 8f);
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetRegistry() => ActiveCompanions.Clear();
@@ -51,6 +60,7 @@ namespace Shatterspire
             side = offset.x < 0f ? -1f : 1f;
             role = companionRole;
             accent = color;
+            DisplayName = championName;
             lastLeaderPosition = player.position;
             previousPosition = transform.position;
             if (!AuthoredArt.TryBuildCompanion(transform, role, color, out muzzle))
@@ -79,6 +89,9 @@ namespace Shatterspire
             }
 
             var threat = FindEngagedEnemy(leader.position, ThreatRange, TeamId.Enemy);
+            Status = Time.time < healingUntil ? "HEALING"
+                : !threat ? "FOLLOWING"
+                : role switch { CompanionRole.Guardian => "FRONTLINE", CompanionRole.Support => "COVERING", _ => "FLANKING" };
             switch (role)
             {
                 case CompanionRole.Guardian: GuardianUpdate(threat); break;
@@ -189,6 +202,7 @@ namespace Shatterspire
 
             if (!leaderHealth || !leaderHealth.IsAlive || leaderHealth.Normalized >= 0.72f || Time.time < nextSupportPulse) return;
             nextSupportPulse = Time.time + 8f;
+            healingUntil = Time.time + 1.2f;
             leaderHealth.Heal(10f);
             PrototypeVfx.SpawnExplosion(leader.position + Vector3.up * 0.6f, 1.8f, new Color(0.3f, 1f, 0.62f));
         }

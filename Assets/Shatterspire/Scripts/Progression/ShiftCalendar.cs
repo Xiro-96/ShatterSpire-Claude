@@ -42,11 +42,11 @@ namespace Shatterspire
 
         public static TimeSpan Remaining => RemainingIn(DateTime.UtcNow);
 
-        /// <summary>Kurzform fuer die Anzeige, etwa "4T 06H" oder "06H 12M".</summary>
+        /// <summary>Kurzform fuer die Anzeige, etwa "4D 06H" oder "06H 12M".</summary>
         public static string Countdown(TimeSpan remaining)
         {
-            if (remaining <= TimeSpan.Zero) return "ENDET";
-            if (remaining.TotalDays >= 1d) return $"{remaining.Days}T {remaining.Hours:00}H";
+            if (remaining <= TimeSpan.Zero) return "ENDED";
+            if (remaining.TotalDays >= 1d) return $"{remaining.Days}D {remaining.Hours:00}H";
             if (remaining.TotalHours >= 1d) return $"{remaining.Hours:00}H {remaining.Minutes:00}M";
             return $"{remaining.Minutes:00}M";
         }

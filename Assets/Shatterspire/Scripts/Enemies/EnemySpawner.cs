@@ -67,6 +67,7 @@ namespace Shatterspire
                     agent.Engaged += OnCampEngaged;
                 }
             }
+            Debug.Log($"SHATTERSPIRE Lager: {camps.Count} Gegner auf Etage {activeFloor}.");
         }
 
         public void SpawnBoss(Vector3 position, int floorIndex)
@@ -116,6 +117,7 @@ namespace Shatterspire
             encounterTotal = count;
             PublishEncounter();
             var waveCount = count >= 5 ? 2 : 1;
+            Debug.Log($"SHATTERSPIRE Verteidiger: Core {encounterIndex + 1} auf Etage {floorIndex}, {count} Gegner in {waveCount} Welle(n).");
             var spawned = 0;
             for (var wave = 0; wave < waveCount; wave++)
             {
