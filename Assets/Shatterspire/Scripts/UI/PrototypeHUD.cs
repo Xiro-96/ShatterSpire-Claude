@@ -873,6 +873,10 @@ namespace Shatterspire
             text.alignment = alignment;
             text.color = Color.white;
             text.raycastTarget = false;
+            // Roboto hat eine hoehere Zeilenhoehe als Arial. Legacy-Text blendet Zeilen aus, die
+            // nicht ins Rechteck passen - so verschwanden Heldenname, Etagentitel, Punktzahl und
+            // Rangname. Ueberlauf statt Ausblenden.
+            text.verticalOverflow = VerticalWrapMode.Overflow;
             // Helle Schrift mit dunkler Kontur und Schlagschatten: liest sich auf jedem Untergrund
             // und gibt der UI das Gewicht, das ihr als Platzhalter gefehlt hat.
             var stroke = go.AddComponent<Outline>();

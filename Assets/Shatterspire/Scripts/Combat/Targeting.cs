@@ -89,6 +89,42 @@ namespace Shatterspire
             }
             return best;
         }
+        /// <summary>
+        /// Zielhilfe fuer gezielte Angriffe. Beruecksichtigt nur Gegner in einem schmalen Kegel um
+        /// die Zielrichtung und waehlt den, der der Richtung am naechsten liegt - nicht den
+        /// naechsten Gegner ueberhaupt. Gegner, die gerade erst erscheinen, werden ignoriert.
+        ///
+        /// Ersetzt fuer den Spieler FindActionTarget. Dort kostete der Winkel fast nichts
+        /// (0,035 je Grad) und es gab keine Winkelgrenze: ein frisch gespawnter Gegner hinter dem
+        /// Spieler schlug die Mausrichtung, und jeder Schuss flog zu ihm.
+        /// </summary>
+        public static Health FindAimAssistTarget(Vector3 point, Vector3 aimDirection, float radius,
+            float maxAngle, TeamId team)
+        {
+            aimDirection.y = 0f;
+            if (aimDirection.sqrMagnitude < 0.01f) return null;
+            aimDirection.Normalize();
+
+            Health best = null;
+            var bestAngle = maxAngle;
+            var active = Health.Active;
+            for (var i = 0; i < active.Count; i++)
+            {
+                var candidate = active[i];
+                if (!candidate || !candidate.IsAlive || candidate.Team != team) continue;
+                var agent = candidate.GetComponent<EnemyAgent>();
+                if (agent && agent.IsArriving) continue;
+                var delta = candidate.transform.position - point;
+                delta.y = 0f;
+                var distance = delta.magnitude;
+                if (distance < 0.1f || distance > radius) continue;
+                var angle = Vector3.Angle(aimDirection, delta);
+                if (angle > bestAngle) continue;
+                bestAngle = angle;
+                best = candidate;
+            }
+            return best;
+        }
     }
 
     public static class CombatUtility

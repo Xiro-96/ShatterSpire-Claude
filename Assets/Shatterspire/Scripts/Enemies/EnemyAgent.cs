@@ -11,6 +11,8 @@ namespace Shatterspire
         private enum State { Chase, Telegraph, Attack, Dead }
         private EnemyKind kind;
         private EnemyStats stats;
+        private const float ArrivalGraceSeconds = 0.75f;
+        private float spawnedAt;
         private Health health;
         private StatusReceiver status;
         private StylizedCharacterMotion motion;
@@ -29,6 +31,8 @@ namespace Shatterspire
         private Vector3 knockbackVelocity;
         public event Action<EnemyAgent> Defeated;
         public EnemyKind Kind => kind;
+        /// <summary>Kurz nach dem Erscheinen: fuer die Zielhilfe noch kein gueltiges Ziel.</summary>
+        public bool IsArriving => Time.time - spawnedAt < ArrivalGraceSeconds;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetRegistry() => ActiveAgents.Clear();
@@ -67,6 +71,7 @@ namespace Shatterspire
             health.Died += Die;
             health.Damaged += OnDamaged;
             strafeDirection = GetInstanceID() % 2 == 0 ? 1f : -1f;
+            spawnedAt = Time.time;
             attackReadyAt = Time.time + UnityEngine.Random.Range(0.35f, 0.85f);
             state = State.Chase;
         }

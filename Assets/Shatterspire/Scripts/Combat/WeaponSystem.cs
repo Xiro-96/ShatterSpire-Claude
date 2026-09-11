@@ -10,6 +10,9 @@ namespace Shatterspire
         private const float HeavyChargeSeconds = 1.2f;
         private const float PerfectStart = 0.5f;
         private const float PerfectEnd = 0.76f;
+        // Zielhilfe nur knapp neben der Ziellinie. Alles ausserhalb trifft nur, wer dorthin zielt.
+        private const float AimAssistAngle = 12f;
+        private const float AimAssistRange = 15f;
         private PlayerInputRouter input;
         private PlayerBuild build;
         private Health health;
@@ -329,7 +332,7 @@ namespace Shatterspire
 
         private Vector3 AcquireAttackDirection()
         {
-            UpdateTargetLock(true);
+            UpdateTargetLock();
             if (lockedTarget)
             {
                 var direction = lockedTarget.transform.position - transform.position;
@@ -339,12 +342,15 @@ namespace Shatterspire
             return FlatAimDirection();
         }
 
-        private void UpdateTargetLock(bool force = false)
+        /// <summary>
+        /// Zielhilfe nur in einem schmalen Kegel um die Zielrichtung. Angriffe gehen dorthin, wohin
+        /// gezielt wird; ein Gegner knapp neben der Linie wird noch getroffen, einer seitlich oder
+        /// hinter dem Spieler nie. Siehe Targeting.FindAimAssistTarget.
+        /// </summary>
+        private void UpdateTargetLock()
         {
-            var desired = FlatAimDirection();
-            if (force || !lockedTarget || !lockedTarget.IsAlive ||
-                (lockedTarget.transform.position - transform.position).sqrMagnitude > 15f * 15f)
-                lockedTarget = Targeting.FindActionTarget(transform.position, desired, 15f, TeamId.Enemy, lockedTarget);
+            lockedTarget = Targeting.FindAimAssistTarget(transform.position, FlatAimDirection(),
+                AimAssistRange, AimAssistAngle, TeamId.Enemy);
             targetIndicator?.SetTarget(lockedTarget);
         }
 
