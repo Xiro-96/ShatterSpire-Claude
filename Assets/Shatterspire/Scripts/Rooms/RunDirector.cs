@@ -12,6 +12,9 @@ namespace Shatterspire
         private GameObject roomDecor;
         private int roomIndex;
         private int shards;
+        private int floorsCleared;
+        private int bossesDefeated;
+        private int enemiesDefeated;
         private RoomKind currentKind;
         private bool ended;
         private bool transitioning;
@@ -31,6 +34,7 @@ namespace Shatterspire
             build = player.GetComponent<PlayerBuild>();
             spawner.WaveCleared += CompleteRoom;
             playerHealth.Died += OnPlayerDied;
+            GameEvents.EntityDied += OnEntityDied;
             GameEvents.RaiseKnockoutChanged(0, MaximumKnockouts, 0f, false);
             StartRoom(RoomKind.Combat);
         }
@@ -39,6 +43,7 @@ namespace Shatterspire
         {
             if (spawner) spawner.WaveCleared -= CompleteRoom;
             if (playerHealth) playerHealth.Died -= OnPlayerDied;
+            GameEvents.EntityDied -= OnEntityDied;
         }
 
         private void StartRoom(RoomKind kind)
@@ -73,6 +78,8 @@ namespace Shatterspire
             var baseReward = currentKind switch { RoomKind.Elite => 14, RoomKind.Boss => 50, RoomKind.Treasure => 8, _ => 6 };
             var tier = Mathf.Max(0, (roomIndex - 1) / 5);
             shards += Mathf.RoundToInt(baseReward * (1f + tier * 0.35f));
+            floorsCleared++;
+            if (currentKind == RoomKind.Boss) bossesDefeated++;
             GameEvents.RaiseRoomCompleted(roomIndex, currentKind);
             if (currentKind == RoomKind.Boss)
             {
@@ -131,9 +138,18 @@ namespace Shatterspire
             ended = true;
             var earned = victory ? shards : Mathf.RoundToInt(shards * 0.65f);
             if (build && build.HasFortunePrism) earned = Mathf.RoundToInt(earned * 1.25f);
-            var save = MetaSaveSystem.RecordRun(victory, earned, roomIndex);
+            var result = new ClimbResult(floorsCleared, bossesDefeated, enemiesDefeated,
+                earned, victory, config.Mode, config.Hero);
+            var record = MetaSaveSystem.RecordClimb(result, earned);
             GameEvents.RaiseRunEnded(victory, earned);
-            hud.ShowRunEnd(victory, earned, save, roomIndex);
+            hud.ShowRunEnd(victory, earned, record.Save, roomIndex, result, record.Score, record.RankPoints);
+        }
+
+        private void OnEntityDied(Health value)
+        {
+            // Fuer die Wertung zaehlen nur gefallene Gegner. Der Spieler stirbt in
+            // dieser Liste auch, deshalb die Teampruefung.
+            if (value && value.Team == TeamId.Enemy) enemiesDefeated++;
         }
 
         private void BuildLayout(int index, RoomKind kind)

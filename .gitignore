@@ -89,3 +89,8 @@ desktop.ini
 #  Project local
 # ─────────────────────────────────────────────────────────────
 /.claude/settings.local.json
+
+# Handgeschriebene Tools ausserhalb von Assets/ sind gewollt im Repo
+!/Tools/**/*.csproj
+/Tools/**/bin/
+/Tools/**/obj/

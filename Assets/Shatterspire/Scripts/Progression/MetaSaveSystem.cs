@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Shatterspire
@@ -6,7 +7,16 @@ namespace Shatterspire
     [Serializable]
     public sealed class MetaSaveData
     {
+        /// <summary>
+        /// Bewusst 0 als Standard, nicht die aktuelle Version: JsonUtility laesst
+        /// Felder unberuehrt, die im JSON fehlen. Stuende hier 3, waere ein alter
+        /// Spielstand nicht von einem neuen zu unterscheiden.
+        /// </summary>
+        public int version;
+
         public int shards;
+        /// <summary>Zweite Waehrung. Kommt ueber den Rang am Shift-Ende, nicht ueber Grind.</summary>
+        public int tokens;
         public int runs;
         public int victories;
         public int bestFloor;
@@ -14,39 +24,149 @@ namespace Shatterspire
         public int mightLevel;
         public int agilityLevel;
         public int[] equippedRelics = { 0, 1 };
+
+        /// <summary>Welchem Shift die <see cref="climbScores"/> gehoeren. -1 = noch keiner.</summary>
+        public int shiftIndex = -1;
+        /// <summary>Die besten Aufstiege des laufenden Shifts, absteigend.</summary>
+        public int[] climbScores = Array.Empty<int>();
+        /// <summary>Hoechster je erreichter Rang, ueberlebt den Shift-Reset.</summary>
+        public int bestRankTier;
+        public int lifetimeBestScore;
+
+        /// <summary>
+        /// Beim Shift-Wechsel hinterlegte Belohnung, die das Hauptmenue noch
+        /// anzeigen soll. -1 im Rang bedeutet: nichts offen.
+        /// </summary>
+        public int pendingShiftRank = -1;
+        public int pendingShiftTokens;
     }
 
     public static class MetaSaveSystem
     {
-        private const string Key = "shatterspire.meta.v2";
-        private const string LegacyKey = "shatterspire.meta.v1";
+        private const int CurrentVersion = 3;
+        private const string Key = "shatterspire.meta.v3";
+        private const string KeyV2 = "shatterspire.meta.v2";
+        private const string KeyV1 = "shatterspire.meta.v1";
 
         public static MetaSaveData Load()
         {
-            if (PlayerPrefs.HasKey(Key))
-            {
-                try { return Sanitize(JsonUtility.FromJson<MetaSaveData>(PlayerPrefs.GetString(Key))); }
-                catch { return new MetaSaveData(); }
-            }
-            if (!PlayerPrefs.HasKey(LegacyKey)) return new MetaSaveData();
-            try
-            {
-                var migrated = Sanitize(JsonUtility.FromJson<MetaSaveData>(PlayerPrefs.GetString(LegacyKey)));
-                Save(migrated);
-                return migrated;
-            }
-            catch { return new MetaSaveData(); }
+            var data = Read();
+            // Der Rollover muss beim Laden passieren, nicht beim Run-Ende: sonst
+            // waere ein Shift beliebig verlaengerbar, indem man einfach nicht
+            // mehr spielt.
+            if (ApplyShiftRollover(data)) Save(data);
+            return data;
         }
 
-        public static MetaSaveData RecordRun(bool victory, int shards, int floorReached)
+        private static MetaSaveData Read()
+        {
+            if (TryRead(Key, out var current)) return current;
+            // Aeltere Staende hochziehen statt wegwerfen. Wer schon Shards und
+            // Upgrades hat, soll sie behalten.
+            if (TryRead(KeyV2, out var v2)) return Migrate(v2);
+            if (TryRead(KeyV1, out var v1)) return Migrate(v1);
+            return new MetaSaveData { version = CurrentVersion };
+        }
+
+        private static bool TryRead(string key, out MetaSaveData data)
+        {
+            data = null;
+            if (!PlayerPrefs.HasKey(key)) return false;
+            try { data = Sanitize(JsonUtility.FromJson<MetaSaveData>(PlayerPrefs.GetString(key))); }
+            catch { data = null; }
+            return data != null;
+        }
+
+        private static MetaSaveData Migrate(MetaSaveData data)
+        {
+            // Vor Version 3 gab es Shift und Rang nicht. shiftIndex bleibt -1,
+            // damit der erste Rollover nur registriert und nichts auszahlt.
+            data.version = CurrentVersion;
+            Save(data);
+            Debug.Log("SHATTERSPIRE: Spielstand auf Version 3 migriert, Shards und Upgrades erhalten.");
+            return data;
+        }
+
+        /// <summary>Gibt true zurueck, wenn gespeichert werden muss.</summary>
+        private static bool ApplyShiftRollover(MetaSaveData data)
+        {
+            var current = ShiftCalendar.CurrentIndex;
+            if (data.shiftIndex == current) return false;
+
+            var hadPreviousShift = data.shiftIndex >= 0;
+            var closingPoints = RankTable.PointsFrom(data.climbScores);
+            if (hadPreviousShift && closingPoints > 0)
+            {
+                var tier = RankTable.TierFor(closingPoints);
+                var reward = RankTable.TokensFor(tier);
+                data.tokens += reward;
+                data.bestRankTier = Mathf.Max(data.bestRankTier, (int)tier);
+                data.pendingShiftRank = (int)tier;
+                data.pendingShiftTokens = reward;
+            }
+
+            data.shiftIndex = current;
+            data.climbScores = Array.Empty<int>();
+            return true;
+        }
+
+        /// <summary>
+        /// Traegt einen abgeschlossenen Aufstieg ein und gibt den gespeicherten
+        /// Stand samt Punktzahl zurueck, damit der Endbildschirm ihn zeigen kann.
+        /// </summary>
+        public static (MetaSaveData Save, int Score, int RankPoints) RecordClimb(
+            in ClimbResult result, int shardsEarned)
         {
             var data = Load();
+            var score = ClimbScore.Evaluate(result);
+
             data.runs++;
-            if (victory) data.victories++;
-            data.shards += Mathf.Max(0, shards);
-            data.bestFloor = Mathf.Max(data.bestFloor, floorReached);
+            if (result.Extracted) data.victories++;
+            data.shards += Mathf.Max(0, shardsEarned);
+            data.bestFloor = Mathf.Max(data.bestFloor, result.FloorsCleared);
+            data.lifetimeBestScore = Mathf.Max(data.lifetimeBestScore, score);
+
+            var scores = new List<int>(data.climbScores ?? Array.Empty<int>()) { score };
+            data.climbScores = KeepBest(scores, RankTable.ClimbCount);
+
+            var rankPoints = RankTable.PointsFrom(data.climbScores);
+            data.bestRankTier = Mathf.Max(data.bestRankTier, (int)RankTable.TierFor(rankPoints));
+
             Save(data);
-            return data;
+            return (data, score, rankPoints);
+        }
+
+        /// <summary>Rangpunkte des laufenden Shifts.</summary>
+        public static int RankPoints(MetaSaveData data) => RankTable.PointsFrom(data?.climbScores);
+
+        public static RankTier CurrentRank(MetaSaveData data) => RankTable.TierFor(RankPoints(data));
+
+        /// <summary>
+        /// Holt eine offene Shift-Belohnung ab und loescht sie. Ohne das Loeschen
+        /// wuerde das Hauptmenue sie bei jedem Start erneut ankuendigen.
+        /// </summary>
+        public static bool ConsumeShiftReward(out RankTier tier, out int tokens)
+        {
+            var data = Load();
+            tier = RankTier.Splinter;
+            tokens = 0;
+            if (data.pendingShiftRank < 0) return false;
+            tier = (RankTier)Mathf.Clamp(data.pendingShiftRank, 0, (int)RankTier.Spire);
+            tokens = data.pendingShiftTokens;
+            data.pendingShiftRank = -1;
+            data.pendingShiftTokens = 0;
+            Save(data);
+            return true;
+        }
+
+        private static int[] KeepBest(List<int> scores, int count)
+        {
+            scores.Sort();
+            scores.Reverse();
+            var keep = Mathf.Min(count, scores.Count);
+            var result = new int[keep];
+            for (var i = 0; i < keep; i++) result[i] = Mathf.Max(0, scores[i]);
+            return result;
         }
 
         public static int UpgradeLevel(MetaSaveData data, MetaUpgradeId id) => id switch
@@ -75,7 +195,7 @@ namespace Shatterspire
             return true;
         }
 
-        public static void SaveRelics(System.Collections.Generic.IReadOnlyList<RelicId> relics)
+        public static void SaveRelics(IReadOnlyList<RelicId> relics)
         {
             var data = Load();
             var count = Mathf.Min(3, relics?.Count ?? 0);
@@ -87,13 +207,16 @@ namespace Shatterspire
         private static MetaSaveData Sanitize(MetaSaveData data)
         {
             data ??= new MetaSaveData();
-            data.equippedRelics ??= System.Array.Empty<int>();
+            data.equippedRelics ??= Array.Empty<int>();
+            data.climbScores ??= Array.Empty<int>();
             return data;
         }
 
         private static void Save(MetaSaveData data)
         {
-            PlayerPrefs.SetString(Key, JsonUtility.ToJson(Sanitize(data)));
+            data = Sanitize(data);
+            data.version = CurrentVersion;
+            PlayerPrefs.SetString(Key, JsonUtility.ToJson(data));
             PlayerPrefs.Save();
         }
     }

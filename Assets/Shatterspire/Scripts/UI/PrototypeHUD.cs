@@ -634,7 +634,8 @@ namespace Shatterspire
             Time.timeScale = 1f;
         }
 
-        public void ShowRunEnd(bool victory, int earned, MetaSaveData save, int roomsCleared)
+        public void ShowRunEnd(bool victory, int earned, MetaSaveData save, int roomsCleared,
+            ClimbResult result, int score, int rankPoints)
         {
             if (modal) Destroy(modal);
             if (Camera.main)
@@ -645,10 +646,65 @@ namespace Shatterspire
             Time.timeScale = 0f;
             modal = CreateModal(victory ? "TOWER PATH CLEARED" : "CLIMB ENDED",
                 victory ? "THE TEAM RETURNS WITH SECURED SHARDS" : "A PORTION OF YOUR SHARDS SURVIVED");
-            var summary = CreateImage(modal.transform, "Run Summary", new Color(0.035f, 0.075f, 0.12f, 0.98f),
-                new Vector2(0, 25), new Vector2(700, 275), new Vector2(0.5f, 0.5f));
-            CreateText(summary.transform, $"SHARDS SECURED  +{earned}\nTOTAL SHARDS  {save.shards}\nFLOOR REACHED  {Mathf.Max(1, roomsCleared)}\nBEST FLOOR  {save.bestFloor}", 30,
-                TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
+
+            // Links die Punkte dieses Aufstiegs, rechts was er fuer den Rang
+            // bedeutet. Die Aufschluesselung steht bewusst da: ein Rang, dessen
+            // Zustandekommen man nicht sieht, motiviert nicht.
+            var scorePanel = CreateImage(modal.transform, "Climb Score", new Color(0.035f, 0.075f, 0.12f, 0.98f),
+                new Vector2(-345, 25), new Vector2(660, 300), new Vector2(0.5f, 0.5f));
+            ApplyRounded(scorePanel);
+            CreateText(scorePanel.transform, "AUFSTIEGSWERTUNG", 22, TextAnchor.UpperCenter,
+                new Vector2(0, -16), new Vector2(600, 30), new Vector2(0.5f, 1));
+            CreateText(scorePanel.transform, $"{score:N0}", 58, TextAnchor.UpperCenter,
+                new Vector2(0, -46), new Vector2(600, 70), new Vector2(0.5f, 1));
+
+            // Zwei Textspalten statt Leerzeichen-Auffuellung: die HUD-Schrift ist
+            // proportional, ausgerichtet wird deshalb ueber die Rechtecke.
+            var labels = new System.Text.StringBuilder();
+            var values = new System.Text.StringBuilder();
+            foreach (var entry in ClimbScore.Breakdown(result))
+            {
+                labels.AppendLine(entry.Label);
+                values.AppendLine($"{entry.Points:N0}");
+            }
+            labels.AppendLine(result.Extracted ? "EXTRAHIERT" : "GEFALLEN");
+            values.AppendLine(result.Extracted ? "x1,15" : "x0,70");
+            CreateText(scorePanel.transform, labels.ToString(), 24, TextAnchor.UpperLeft,
+                new Vector2(30, -122), new Vector2(320, 150), new Vector2(0f, 1f));
+            CreateText(scorePanel.transform, values.ToString(), 24, TextAnchor.UpperRight,
+                new Vector2(-30, -122), new Vector2(260, 150), new Vector2(1f, 1f));
+
+            var rankPanel = CreateImage(modal.transform, "Rank", new Color(0.035f, 0.075f, 0.12f, 0.98f),
+                new Vector2(345, 25), new Vector2(660, 300), new Vector2(0.5f, 0.5f));
+            ApplyRounded(rankPanel);
+            var tier = RankTable.TierFor(rankPoints);
+            CreateText(rankPanel.transform, $"RANG · SHIFT {save.shiftIndex}", 22, TextAnchor.UpperCenter,
+                new Vector2(0, -16), new Vector2(600, 30), new Vector2(0.5f, 1));
+            var rankLabel = CreateText(rankPanel.transform, RankTable.Name(tier), 52, TextAnchor.UpperCenter,
+                new Vector2(0, -46), new Vector2(600, 66), new Vector2(0.5f, 1));
+            rankLabel.color = RankTable.Accent(tier);
+
+            var barBack = CreateImage(rankPanel.transform, "Rank Bar", new Color(0.05f, 0.09f, 0.14f, 1f),
+                new Vector2(0, -126), new Vector2(560, 22), new Vector2(0.5f, 1));
+            ApplyRounded(barBack);
+            var barFill = CreateFill(barBack.transform, RankTable.Accent(tier));
+            ApplyRoundedFill(barFill);
+            barFill.fillAmount = RankTable.ProgressInTier(rankPoints);
+
+            var toNext = RankTable.PointsToNext(rankPoints);
+            var next = RankTable.IsHighest(tier)
+                ? "HOECHSTER RANG ERREICHT"
+                : $"{toNext:N0} PUNKTE BIS {RankTable.Name((RankTier)((int)tier + 1))}";
+            CreateText(rankPanel.transform,
+                $"RANGPUNKTE  {rankPoints:N0}\nAUS DEN {RankTable.ClimbCount} BESTEN AUFSTIEGEN\n{next}\n\nSHIFT ENDET IN  {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}",
+                24, TextAnchor.UpperCenter, new Vector2(0, -160), new Vector2(600, 130), new Vector2(0.5f, 1));
+
+            var wallet = CreateImage(modal.transform, "Wallet", new Color(0.03f, 0.06f, 0.1f, 0.96f),
+                new Vector2(0, -140), new Vector2(1010, 62), new Vector2(0.5f, 0.5f));
+            ApplyRounded(wallet);
+            CreateText(wallet.transform,
+                $"SHARDS  +{earned}  ·  GESAMT {save.shards}      TOKENS  {save.tokens}      ETAGE  {Mathf.Max(1, roomsCleared)}  ·  BEST {save.bestFloor}",
+                26, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
             var restart = CreateButton(modal.transform, "CLIMB AGAIN", new Vector2(225, -225), new Vector2(360, 96), new Color(0.1f, 0.86f, 0.72f));
             restart.onClick.AddListener(RestartRun);
             modalButtons.Add(restart);

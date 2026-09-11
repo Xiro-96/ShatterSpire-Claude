@@ -76,12 +76,51 @@ namespace Shatterspire
             Button(screen.transform, "[3]  META FORGE\nPERMANENT POWER",
                 new Vector2(150, -606), new Vector2(520, 82), new Vector2(0, 1), new Color(1f, 0.55f, 0.08f), ShowForge);
 
-            var profile = Panel(screen.transform, new Vector2(-92, -82), new Vector2(430, 208), new Vector2(1, 1),
+            // Rang und Shift-Restlaufzeit gehoeren nach oben rechts, weil sie der
+            // Grund sind, ueberhaupt noch einen Aufstieg zu starten.
+            var rankPoints = MetaSaveSystem.RankPoints(save);
+            var tier = RankTable.TierFor(rankPoints);
+            var rankPanel = Panel(screen.transform, new Vector2(-92, -82), new Vector2(430, 212), new Vector2(1, 1),
+                new Color(0.018f, 0.035f, 0.07f, 0.95f), RankTable.Accent(tier));
+            Text(rankPanel.transform, $"SHIFT {save.shiftIndex}  ·  ENDET IN {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}",
+                18, TextAnchor.UpperLeft, new Vector2(30, -16), new Vector2(370, 26), new Vector2(0, 1))
+                .color = new Color(0.62f, 0.72f, 0.84f);
+            var rankName = Text(rankPanel.transform, RankTable.Name(tier), 46, TextAnchor.UpperLeft,
+                new Vector2(28, -44), new Vector2(370, 56), new Vector2(0, 1));
+            rankName.fontStyle = FontStyle.Bold;
+            rankName.color = RankTable.Accent(tier);
+            var next = RankTable.IsHighest(tier)
+                ? "HOECHSTER RANG"
+                : $"{RankTable.PointsToNext(rankPoints):N0} BIS {RankTable.Name((RankTier)((int)tier + 1))}";
+            Text(rankPanel.transform,
+                $"{rankPoints:N0} RANGPUNKTE\n{next}\n\nSHARDS  {save.shards}     TOKENS  {save.tokens}",
+                21, TextAnchor.UpperLeft, new Vector2(30, -104), new Vector2(370, 100), new Vector2(0, 1));
+
+            var profile = Panel(screen.transform, new Vector2(-92, -306), new Vector2(430, 118), new Vector2(1, 1),
                 new Color(0.018f, 0.035f, 0.07f, 0.95f), new Color(0.66f, 0.3f, 1f));
-            Text(profile.transform, $"RIFTKEEPER\n\nSHARDS   {save.shards}\nBEST FLOOR   {save.bestFloor}\nRUNS   {save.runs}", 25,
-                TextAnchor.MiddleLeft, new Vector2(32, -8), new Vector2(360, 180), new Vector2(0, 1));
+            Text(profile.transform, $"BEST FLOOR   {save.bestFloor}\nRUNS   {save.runs}\nBESTER AUFSTIEG   {save.lifetimeBestScore:N0}", 21,
+                TextAnchor.MiddleLeft, new Vector2(30, -6), new Vector2(370, 96), new Vector2(0, 1));
+
+            AnnounceShiftRewardOnce();
             Text(screen.transform, "THREE HEROES. THREE COMBAT IDENTITIES. ONE TOWER THAT NEVER STAYS THE SAME.", 20,
                 TextAnchor.LowerLeft, new Vector2(122, 72), new Vector2(1180, 40), new Vector2(0, 0)).color = new Color(0.65f, 0.75f, 0.86f);
+        }
+
+        /// <summary>
+        /// Ist zwischen zwei Sitzungen ein Shift abgelaufen, gibt es die Tokens
+        /// dafuer genau einmal zu sehen. <see cref="MetaSaveSystem.ConsumeShiftReward"/>
+        /// loescht die Meldung beim Abholen, sonst stuende sie bei jedem Start da.
+        /// </summary>
+        private void AnnounceShiftRewardOnce()
+        {
+            if (!MetaSaveSystem.ConsumeShiftReward(out var tier, out var tokens)) return;
+            var banner = Panel(screen.transform, new Vector2(0, 184), new Vector2(880, 104), new Vector2(0.5f, 0),
+                new Color(0.03f, 0.06f, 0.05f, 0.97f), RankTable.Accent(tier));
+            var headline = Text(banner.transform, "SHIFT ABGESCHLOSSEN", 24, TextAnchor.UpperCenter,
+                new Vector2(0, -14), new Vector2(820, 30), new Vector2(0.5f, 1));
+            headline.color = RankTable.Accent(tier);
+            Text(banner.transform, $"RANG {RankTable.Name(tier)}  ·  +{tokens} TOKENS GUTGESCHRIEBEN",
+                26, TextAnchor.UpperCenter, new Vector2(0, -50), new Vector2(820, 36), new Vector2(0.5f, 1));
         }
 
         private void ShowPreparation(RunMode mode)
