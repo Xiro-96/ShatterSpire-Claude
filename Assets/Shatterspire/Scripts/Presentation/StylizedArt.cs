@@ -25,9 +25,10 @@ namespace Shatterspire
         public static void ConfigureWorld()
         {
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.22f, 0.3f, 0.46f);
-            RenderSettings.ambientEquatorColor = new Color(0.12f, 0.18f, 0.3f);
-            RenderSettings.ambientGroundColor = new Color(0.035f, 0.045f, 0.08f);
+            // Heller und kuehler als vorher: Schatten sollen blau werden, nicht schwarz.
+            RenderSettings.ambientSkyColor = new Color(0.36f, 0.48f, 0.74f);
+            RenderSettings.ambientEquatorColor = new Color(0.28f, 0.32f, 0.42f);
+            RenderSettings.ambientGroundColor = new Color(0.16f, 0.13f, 0.12f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogColor = new Color(0.035f, 0.055f, 0.12f);
@@ -38,8 +39,10 @@ namespace Shatterspire
             var keyGo = new GameObject("Warm Spire Sun");
             var key = keyGo.AddComponent<Light>();
             key.type = LightType.Directional;
-            key.color = new Color(1f, 0.9f, 0.76f);
-            key.intensity = 1.08f;
+            // Goldene Sonne als klares Hauptlicht. Warm gegen die kuehlen Schatten aus dem
+            // Umgebungslicht - der Kontrast, auf dem der Clash-Look beruht.
+            key.color = new Color(1f, 0.87f, 0.68f);
+            key.intensity = 1.25f;
             key.shadows = LightShadows.Soft;
             key.shadowResolution = LightShadowResolution.Medium;
             keyGo.transform.rotation = Quaternion.Euler(51f, -34f, 0f);
@@ -48,10 +51,25 @@ namespace Shatterspire
             var fill = fillGo.AddComponent<Light>();
             fill.type = LightType.Directional;
             fill.color = new Color(0.45f, 0.7f, 1f);
-            fill.intensity = 0.2f;
+            fill.intensity = 0.22f;
             fill.shadows = LightShadows.None;
             fillGo.transform.rotation = Quaternion.Euler(58f, 142f, 0f);
 
+            // Kantenlicht von schraeg hinten. Das ist der Unterschied zwischen
+            // "Figur steht auf dem Boden" und "Figur klebt am Boden": aus der
+            // Distanz trennt erst die helle Kante die Silhouette vom Untergrund.
+            var rimGo = new GameObject("Rim Light");
+            var rim = rimGo.AddComponent<Light>();
+            rim.type = LightType.Directional;
+            rim.color = new Color(0.62f, 0.82f, 1f);
+            // Ein gerichtetes Licht ist nur eine Naeherung an Kantenlicht: es trifft
+            // auch den Boden. Bei 0,85 hat es die Szene sichtbar aufgehellt und den
+            // Boden ausgewaschen. 0,45 trennt die Silhouetten noch, ohne das.
+            rim.intensity = 0.45f;
+            rim.shadows = LightShadows.None;
+            rimGo.transform.rotation = Quaternion.Euler(14f, 196f, 0f);
+
+            PostFx.Build();
         }
 
         public static void ConfigureCamera(Camera camera)
@@ -60,13 +78,16 @@ namespace Shatterspire
             // Keep the whole combat formation readable on a 16:9 display. The
             // previous framing made the hero attractive in screenshots, but hid
             // incoming waves and made the arena feel smaller than it really is.
-            camera.orthographicSize = 7.4f;
+            // Naeher heran. Bei 7,4 lag im Spielbild rund ein Viertel der Flaeche
+            // ausserhalb der Arena und damit schwarz brach.
+            camera.orthographicSize = 6.35f;
             camera.fieldOfView = 36f;
             camera.nearClipPlane = 0.1f;
             camera.farClipPlane = 110f;
             camera.backgroundColor = new Color(0.022f, 0.035f, 0.09f);
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.allowHDR = true;
+            PostFx.EnableOn(camera);
         }
 
         public static void BuildArena()
@@ -325,9 +346,11 @@ namespace Shatterspire
     {
         private Transform model;
         private Vector3 modelOrigin;
+        private Vector3 modelBaseScale = Vector3.one;
         private Vector3 previousPosition;
         private float stepFrequency;
         private float recoil;
+        private Vector2 lean;
         private ChampionAnimationDriver authoredAnimation;
         private bool authored;
 
@@ -335,20 +358,22 @@ namespace Shatterspire
         {
             model = visual;
             modelOrigin = visual.localPosition;
+            modelBaseScale = visual.localScale;
             stepFrequency = frequency;
             previousPosition = transform.position;
         }
 
-        public void ConfigureAuthored(Transform visual, Animator animator)
+        public void ConfigureAuthored(Transform visual, Animator animator, float topSpeed = 6f)
         {
             model = visual;
             modelOrigin = visual.localPosition;
+            modelBaseScale = visual.localScale;
             previousPosition = transform.position;
             authored = true;
             if (animator)
             {
                 authoredAnimation = gameObject.AddComponent<ChampionAnimationDriver>();
-                authoredAnimation.Configure(animator);
+                authoredAnimation.Configure(animator, topSpeed);
             }
         }
 
@@ -372,8 +397,29 @@ namespace Shatterspire
             recoil = Mathf.MoveTowards(recoil, 0f, 7f * Time.deltaTime);
             if (authored)
             {
-                model.localPosition = modelOrigin + new Vector3(0f, 0f, -recoil * 0.055f);
-                model.localRotation = Quaternion.Euler(recoil * -3.5f, 0f, 0f);
+                // Vorher 0,055 Einheiten Versatz und 3,5 Grad Neigung - das lag
+                // unter der Wahrnehmungsschwelle, der Effekt war praktisch
+                // unsichtbar. Jetzt mit echtem Squash: beim Schlag kurz tiefer
+                // und breiter, Volumen bleibt dabei etwa erhalten.
+                var squash = 1f - recoil * 0.11f;
+                var stretch = 1f + recoil * 0.07f;
+
+                // Neigung in die Laufrichtung. Kostet nichts und ist der
+                // Unterschied zwischen "gleitet" und "laeuft".
+                var local = transform.InverseTransformDirection(
+                    new Vector3(delta.x, 0f, delta.z) / Mathf.Max(0.0001f, Time.deltaTime));
+                var desiredLean = new Vector2(
+                    Mathf.Clamp(local.z / 7f, -1f, 1f),
+                    Mathf.Clamp(local.x / 7f, -1f, 1f));
+                lean = Vector2.Lerp(lean, desiredLean, 1f - Mathf.Exp(-9f * Time.deltaTime));
+
+                model.localPosition = modelOrigin + new Vector3(0f, 0f, -recoil * 0.17f);
+                model.localRotation = Quaternion.Euler(
+                    recoil * -11f + lean.x * 5.5f, 0f, lean.y * -5.5f);
+                model.localScale = new Vector3(
+                    modelBaseScale.x * stretch,
+                    modelBaseScale.y * squash,
+                    modelBaseScale.z * stretch);
                 return;
             }
             var bob = Mathf.Abs(Mathf.Sin(Time.time * stepFrequency)) * 0.075f * movement;

@@ -11,7 +11,7 @@ namespace Shatterspire.Tests
             var original = new RunConfig
             {
                 Hero = HeroClassId.Guardian,
-                Mode = RunMode.EndlessTower,
+                Mode = RunMode.Legendary,
                 Relics = new List<RelicId> { RelicId.WindstepSigil, RelicId.EmberLens }
             };
 
@@ -19,7 +19,7 @@ namespace Shatterspire.Tests
             clone.Relics.RemoveAt(0);
 
             Assert.That(clone.Hero, Is.EqualTo(HeroClassId.Guardian));
-            Assert.That(clone.Mode, Is.EqualTo(RunMode.EndlessTower));
+            Assert.That(clone.Mode, Is.EqualTo(RunMode.Legendary));
             Assert.That(original.Relics, Has.Count.EqualTo(2));
             Assert.That(clone.Relics, Has.Count.EqualTo(1));
         }

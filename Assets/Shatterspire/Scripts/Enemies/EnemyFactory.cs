@@ -8,10 +8,11 @@ namespace Shatterspire
         {
             var root = new GameObject(kind.ToString());
             root.transform.position = position;
+            var stats = EnemyBalance.For(kind);
             var collider = root.AddComponent<CapsuleCollider>();
             collider.center = Vector3.up * 0.65f;
-            collider.height = kind == EnemyKind.IronWarden ? 3.2f : kind == EnemyKind.Brute || kind == EnemyKind.Elite ? 2.2f : 1.3f;
-            collider.radius = kind == EnemyKind.IronWarden ? 1.1f : kind == EnemyKind.Brute || kind == EnemyKind.Elite ? 0.7f : 0.42f;
+            collider.height = stats.ColliderHeight;
+            collider.radius = stats.ColliderRadius;
             var body = root.AddComponent<Rigidbody>();
             body.isKinematic = true;
             body.useGravity = false;

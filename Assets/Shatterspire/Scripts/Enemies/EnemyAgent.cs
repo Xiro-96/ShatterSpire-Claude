@@ -8,8 +8,15 @@ namespace Shatterspire
     public sealed class EnemyAgent : MonoBehaviour
     {
         private static readonly System.Collections.Generic.List<EnemyAgent> ActiveAgents = new();
-        private enum State { Chase, Telegraph, Attack, Dead }
+        private enum State { Idle, Chase, Telegraph, Attack, Dead }
         private EnemyKind kind;
+        private EnemyStats stats;
+        private const float ArrivalGraceSeconds = 0.75f;
+        private float spawnedAt;
+        private const float LeashRadius = 18f;
+        private FloorNavigation navigation;
+        private Vector3 home;
+        private float aggroRadius = 8f;
         private Health health;
         private StatusReceiver status;
         private StylizedCharacterMotion motion;
@@ -27,7 +34,13 @@ namespace Shatterspire
         private float strafeDirection;
         private Vector3 knockbackVelocity;
         public event Action<EnemyAgent> Defeated;
+        /// <summary>Wird aufmerksam und greift an. Der Spawner alarmiert darueber das restliche Lager.</summary>
+        public event Action<EnemyAgent> Engaged;
         public EnemyKind Kind => kind;
+        /// <summary>Kurz nach dem Erscheinen: fuer die Zielhilfe noch kein gueltiges Ziel.</summary>
+        public bool IsArriving => Time.time - spawnedAt < ArrivalGraceSeconds;
+        /// <summary>Wartet im Lager und hat noch niemanden bemerkt.</summary>
+        public bool IsIdle => state == State.Idle;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetRegistry() => ActiveAgents.Clear();
@@ -46,27 +59,54 @@ namespace Shatterspire
             health = GetComponent<Health>();
             status = GetComponent<StatusReceiver>();
             motion = GetComponent<StylizedCharacterMotion>();
-            switch (kind)
+            stats = EnemyBalance.For(kind);
+            speed = stats.Speed;
+            attackRange = stats.AttackRange;
+            attackDamage = stats.AttackDamage;
+            health.Configure(TeamId.Enemy, stats.Health);
+            if (kind == EnemyKind.Elite)
             {
-                case EnemyKind.Crawler: speed = 3.5f; attackRange = 1.35f; attackDamage = 10f; health.Configure(TeamId.Enemy, 28f); break;
-                case EnemyKind.Shooter: speed = 2.5f; attackRange = 8.5f; attackDamage = 8f; health.Configure(TeamId.Enemy, 24f); break;
-                case EnemyKind.Brute: speed = 1.65f; attackRange = 1.8f; attackDamage = 18f; health.Configure(TeamId.Enemy, 85f); break;
-                case EnemyKind.Elite:
-                    speed = 2.25f; attackRange = 2.1f; attackDamage = 22f; health.Configure(TeamId.Enemy, 260f);
-                    eliteExplosive = UnityEngine.Random.value < 0.5f; eliteVampiric = !eliteExplosive; break;
-                case EnemyKind.IronWarden: speed = 1.75f; attackRange = 2.5f; attackDamage = 24f; health.Configure(TeamId.Enemy, 1100f); break;
+                eliteExplosive = UnityEngine.Random.value < 0.5f;
+                eliteVampiric = !eliteExplosive;
             }
+
             var depth = Mathf.Max(0, floor - 1);
-            var healthScale = 1f + depth * 0.13f;
-            var damageScale = 1f + depth * 0.065f;
+            var healthScale = 1f + depth * EnemyBalance.HealthPerFloor;
+            var damageScale = 1f + depth * EnemyBalance.DamagePerFloor;
             health.IncreaseMaximum(health.Maximum * (healthScale - 1f), true);
             attackDamage *= damageScale;
-            speed *= 1f + Mathf.Min(0.22f, depth * 0.012f);
+            speed *= 1f + Mathf.Min(EnemyBalance.MaximumSpeedBonus, depth * EnemyBalance.SpeedPerFloor);
             health.Died += Die;
             health.Damaged += OnDamaged;
             strafeDirection = GetInstanceID() % 2 == 0 ? 1f : -1f;
+            spawnedAt = Time.time;
             attackReadyAt = Time.time + UnityEngine.Random.Range(0.35f, 0.85f);
             state = State.Chase;
+        }
+
+        /// <summary>
+        /// Ordnet den Gegner einer Etage zu. Lagergegner starten ruhend und greifen erst an, wenn jemand
+        /// in ihren Aggro-Radius kommt oder sie getroffen werden.
+        /// </summary>
+        public void SetBehaviour(FloorNavigation floorNavigation, Vector3 homePosition, bool startIdle)
+        {
+            navigation = floorNavigation;
+            home = homePosition;
+            aggroRadius = kind switch
+            {
+                EnemyKind.Shooter => 10f,
+                EnemyKind.IronWarden => 12f,
+                _ => 8f
+            };
+            if (startIdle) state = State.Idle;
+        }
+
+        public void Engage(bool alertCamp = true)
+        {
+            if (state != State.Idle) return;
+            state = State.Chase;
+            attackReadyAt = Mathf.Max(attackReadyAt, Time.time + 0.4f);
+            if (alertCamp) Engaged?.Invoke(this);
         }
 
         private void OnDestroy()
@@ -86,9 +126,19 @@ namespace Shatterspire
             var offset = target.position - transform.position;
             offset.y = 0f;
             var distance = offset.magnitude;
+            if (state == State.Idle)
+            {
+                IdleUpdate(distance);
+                return;
+            }
+            if (state == State.Chase && ShouldReturnHome())
+            {
+                state = State.Idle;
+                return;
+            }
             if (state == State.Chase)
             {
-                var direction = offset.sqrMagnitude > 0.01f ? offset.normalized : transform.forward;
+                var direction = SteerTowards(target.position, offset);
                 var movement = Vector3.zero;
                 if (kind == EnemyKind.Shooter)
                 {
@@ -113,17 +163,62 @@ namespace Shatterspire
             }
         }
 
+        private void IdleUpdate(float distanceToTarget)
+        {
+            // Ruhend: zum Lager zurueck und dort warten. Angriff erst, wenn der Spieler nahe kommt und
+            // im selben Raum steht - nicht durch Waende hindurch.
+            var toHome = home - transform.position;
+            toHome.y = 0f;
+            if (toHome.sqrMagnitude > 1.6f * 1.6f)
+            {
+                var step = SteerTowards(home, toHome);
+                transform.position += step * (speed * 0.7f * status.SpeedMultiplier * Time.deltaTime);
+                ClampToArena();
+                if (step.sqrMagnitude > 0.01f)
+                    transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(step), 6f * Time.deltaTime);
+            }
+            if (distanceToTarget > aggroRadius) return;
+            if (navigation != null && navigation.RoomAt(target.position) != navigation.RoomAt(transform.position) &&
+                distanceToTarget > aggroRadius * 0.45f) return;
+            Engage();
+        }
+
+        private bool ShouldReturnHome()
+        {
+            if (navigation == null || kind == EnemyKind.IronWarden) return false;
+            // Nur umkehren, wenn der Spieler das Lager weit hinter sich gelassen hat.
+            return FlatDistance(target.position, home) > LeashRadius &&
+                   FlatDistance(transform.position, home) > LeashRadius * 0.6f;
+        }
+
+        private Vector3 SteerTowards(Vector3 destination, Vector3 fallback)
+        {
+            if (navigation != null)
+            {
+                var waypoint = navigation.NextWaypoint(transform.position, destination);
+                var delta = waypoint - transform.position;
+                delta.y = 0f;
+                if (delta.sqrMagnitude > 0.0004f) return delta.normalized;
+            }
+            fallback.y = 0f;
+            return fallback.sqrMagnitude > 0.01f ? fallback.normalized : transform.forward;
+        }
+
+        private static float FlatDistance(Vector3 a, Vector3 b)
+        {
+            var dx = a.x - b.x;
+            var dz = a.z - b.z;
+            return Mathf.Sqrt(dx * dx + dz * dz);
+        }
+
         private void OnDamaged(DamageInfo damage)
         {
             if (state == State.Dead) return;
+            if (state == State.Idle) Engage();
             var force = damage.Force;
             force.y = 0f;
-            var resistance = kind == EnemyKind.IronWarden ? 0.08f
-                : kind == EnemyKind.Elite ? 0.18f : kind == EnemyKind.Brute ? 0.28f : 0.58f;
-            knockbackVelocity += force * resistance;
-            var stagger = kind == EnemyKind.IronWarden ? 0.025f
-                : kind == EnemyKind.Elite ? 0.045f : kind == EnemyKind.Brute ? 0.065f : 0.09f;
-            hitStaggerUntil = Mathf.Max(hitStaggerUntil, Time.time + stagger);
+            knockbackVelocity += force * stats.KnockbackResistance;
+            hitStaggerUntil = Mathf.Max(hitStaggerUntil, Time.time + stats.StaggerSeconds);
         }
 
         private void ApplyKnockback()
@@ -137,7 +232,7 @@ namespace Shatterspire
         private Vector3 SeparationForce()
         {
             var force = Vector3.zero;
-            var desiredSpacing = kind is EnemyKind.Brute or EnemyKind.Elite or EnemyKind.IronWarden ? 1.65f : 1.05f;
+            var desiredSpacing = stats.SeparationSpacing;
             for (var i = 0; i < ActiveAgents.Count; i++)
             {
                 var other = ActiveAgents[i];
@@ -153,6 +248,11 @@ namespace Shatterspire
 
         private void ClampToArena()
         {
+            if (navigation != null)
+            {
+                transform.position = navigation.ClampToWalkable(transform.position, 0.45f);
+                return;
+            }
             const float radius = 14.55f;
             var flat = new Vector2(transform.position.x, transform.position.z);
             if (flat.sqrMagnitude <= radius * radius) return;
@@ -190,7 +290,7 @@ namespace Shatterspire
             state = State.Telegraph;
             var direction = FlatDirectionToTarget();
             var telegraph = PrototypeVfx.SpawnTelegraphLine(transform.position, direction, 2.8f, 0.72f);
-            yield return new WaitForSeconds(0.32f);
+            yield return new WaitForSeconds(stats.TelegraphSeconds);
             if (!BeginAttack(telegraph)) yield break;
 
             motion?.PulseAttack(0.9f);
@@ -204,7 +304,7 @@ namespace Shatterspire
             }
             CombatUtility.Explode(transform.position + direction * 0.45f, 1.15f,
                 attackDamage, TeamId.Player, DamageType.Physical, gameObject);
-            FinishAttack(1.05f);
+            FinishAttack(stats.AttackCooldown);
         }
 
         private IEnumerator ShooterBurst()
@@ -212,7 +312,7 @@ namespace Shatterspire
             state = State.Telegraph;
             var direction = FlatDirectionToTarget();
             var telegraph = PrototypeVfx.SpawnTelegraphLine(transform.position, direction, 9.5f, 0.5f);
-            yield return new WaitForSeconds(0.58f);
+            yield return new WaitForSeconds(stats.TelegraphSeconds);
             if (!BeginAttack(telegraph)) yield break;
 
             motion?.PulseAttack(0.8f);
@@ -224,14 +324,14 @@ namespace Shatterspire
             }
             transform.position += Vector3.Cross(Vector3.up, direction) * strafeDirection * 0.75f;
             ClampToArena();
-            FinishAttack(1.85f);
+            FinishAttack(stats.AttackCooldown);
         }
 
         private IEnumerator BruteSlam()
         {
             state = State.Telegraph;
             var telegraph = PrototypeVfx.SpawnTelegraph(transform.position, 2.45f, false);
-            yield return new WaitForSeconds(0.82f);
+            yield return new WaitForSeconds(stats.TelegraphSeconds);
             if (!BeginAttack(telegraph)) yield break;
 
             motion?.PulseAttack(1.25f);
@@ -239,7 +339,7 @@ namespace Shatterspire
                 TeamId.Player, DamageType.Physical, gameObject);
             PrototypeVfx.SpawnShockwave(transform.position, 2.7f, new Color(1f, 0.42f, 0.08f));
             CameraController.Impulse(0.11f);
-            FinishAttack(2.25f);
+            FinishAttack(stats.AttackCooldown);
         }
 
         private IEnumerator EliteAttack()
@@ -249,7 +349,7 @@ namespace Shatterspire
             var telegraph = eliteExplosive
                 ? PrototypeVfx.SpawnTelegraph(transform.position, 3.25f, false)
                 : PrototypeVfx.SpawnTelegraphLine(transform.position, direction, 5.6f, 1.15f);
-            yield return new WaitForSeconds(0.78f);
+            yield return new WaitForSeconds(stats.TelegraphSeconds);
             if (!BeginAttack(telegraph)) yield break;
 
             motion?.PulseAttack(1.45f);
@@ -273,7 +373,7 @@ namespace Shatterspire
                 health.Heal(16f);
             }
             CameraController.Impulse(0.14f);
-            FinishAttack(2.05f);
+            FinishAttack(stats.AttackCooldown);
         }
 
         private bool BeginAttack(GameObject telegraph)
@@ -329,7 +429,9 @@ namespace Shatterspire
             else
                 telegraph = PrototypeVfx.SpawnTelegraph(transform.position, phase == 3 ? 5.8f : 4.8f, false);
 
-            var warning = phase == 3 ? 0.58f : phase == 2 ? 0.72f : 0.86f;
+            // Phase 1 kommt aus dem Statblock, die Verkürzung in Phase 2 und 3 ist
+            // Verhalten und bleibt bewusst hier.
+            var warning = phase == 3 ? 0.58f : phase == 2 ? 0.72f : stats.TelegraphSeconds;
             yield return new WaitForSeconds(warning);
             if (state == State.Dead)
             {
@@ -349,6 +451,7 @@ namespace Shatterspire
             {
                 var dashDistance = phase == 3 ? 7.2f : 5.4f;
                 transform.position += direction * dashDistance;
+                ClampToArena();
                 CombatUtility.Explode(transform.position, phase == 3 ? 2.7f : 2.15f,
                     attackDamage, TeamId.Player, DamageType.Fire, gameObject);
             }
@@ -399,7 +502,7 @@ namespace Shatterspire
             }, 10f);
         }
 
-        private float BossCooldown() => health.Normalized > 0.33f ? 1.8f : 1.15f;
+        private float BossCooldown() => health.Normalized > 0.33f ? stats.AttackCooldown : 1.15f;
 
         private void Die()
         {

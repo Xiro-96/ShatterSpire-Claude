@@ -1,37 +1,50 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using UnityEngine.Rendering;
 using UnityEngine.UI;
 
 namespace Shatterspire
 {
-    /// <summary>Complete runtime front end: mode, hero, relic loadout and permanent forge.</summary>
+    /// <summary>
+    /// Lobby statt Textliste: der gewaehlte Held steht gross in der Mitte, daneben die zwei Bots der
+    /// Party. Links Held und Relics, rechts Pfad und CLIMB, oben Waehrung und Rang. Vorher lag eine
+    /// zu 76 % deckende Flaeche ueber der Szene und die Helden waren kaum zu sehen.
+    /// </summary>
     public sealed class MainMenuUI : MonoBehaviour
     {
+        private static readonly HeroClassId[] Heroes = { HeroClassId.Ranger, HeroClassId.Guardian, HeroClassId.Arcanist };
+        private static readonly RunMode[] Paths = { RunMode.Brave, RunMode.Heroic, RunMode.Legendary };
+
+        private readonly List<Button> buttons = new();
+        private readonly Dictionary<KeyCode, Action> shortcuts = new();
+        private readonly RunConfig config = new();
         private Font font;
         private Canvas canvas;
         private GameObject screen;
-        private readonly List<Button> buttons = new();
-        private RunConfig config = new();
+        private LobbyStage stage;
         private Action backAction;
+        private RectTransform[] plates;
 
-        public void Configure()
+        public void Configure(LobbyStage lobbyStage)
         {
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            stage = lobbyStage;
+            // Roboto Black statt Arial: kraeftige Buchstaben wie in Mobile-Actionspielen.
+            font = Resources.Load<Font>("Fonts/Roboto-Black") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             var save = MetaSaveSystem.Load();
             config.Relics.Clear();
             foreach (var value in save.equippedRelics)
                 if (Enum.IsDefined(typeof(RelicId), value) && config.Relics.Count < 3)
                     config.Relics.Add((RelicId)value);
+            if (Enum.IsDefined(typeof(HeroClassId), save.lastHero)) config.Hero = (HeroClassId)save.lastHero;
+            if (Enum.IsDefined(typeof(RunMode), save.lastPath)) config.Mode = (RunMode)save.lastPath;
             BuildCanvas();
-            ShowHome();
+            ShowLobby();
         }
 
         private void BuildCanvas()
         {
-            // Input is handled directly below so mouse and touch remain reliable even
-            // when a project uses a different EventSystem/input package.
+            // Eingaben laufen direkt ueber Update, damit Maus und Touch unabhaengig vom EventSystem gehen.
             var root = new GameObject("SHATTERSPIRE Front End", typeof(Canvas), typeof(CanvasScaler));
             root.transform.SetParent(transform, false);
             canvas = root.GetComponent<Canvas>();
@@ -46,144 +59,332 @@ namespace Shatterspire
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.Escape) && backAction != null) { backAction.Invoke(); return; }
-            for (var i = 0; i < Mathf.Min(9, buttons.Count); i++)
-                if (Input.GetKeyDown((KeyCode)((int)KeyCode.Alpha1 + i))) { Invoke(i); return; }
+            foreach (var shortcut in shortcuts)
+            {
+                if (!Input.GetKeyDown(shortcut.Key)) continue;
+                shortcut.Value.Invoke();
+                return;
+            }
             if (Input.GetMouseButtonDown(0)) TryClick(Input.mousePosition);
             if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began) TryClick(Input.GetTouch(0).position);
+            UpdatePlates();
         }
 
-        private void ShowHome()
+        // ── Lobby ───────────────────────────────────────────────────────────
+
+        private void ShowLobby()
         {
-            BeginScreen(new Color(0.006f, 0.014f, 0.035f, 0.76f));
+            BeginScreen(false);
             backAction = null;
             var save = MetaSaveSystem.Load();
-            var title = Text(screen.transform, "SHATTERSPIRE", 82, TextAnchor.MiddleLeft,
-                new Vector2(120, -118), new Vector2(900, 100), new Vector2(0, 1));
+            var hero = config.Hero;
+            var accent = HeroCatalog.Accent(hero);
+            stage.Show(hero);
+
+            Fade(true, 260f, 0.85f);
+            Fade(false, 360f, 0.9f);
+
+            var title = Text(screen.transform, "SHATTERSPIRE", 46, TextAnchor.UpperLeft, new Vector2(56, -28), new Vector2(620, 60), new Vector2(0, 1));
             title.fontStyle = FontStyle.Bold;
-            title.color = new Color(0.92f, 0.97f, 1f);
-            var subtitle = Text(screen.transform, "CLIMB  ·  ADAPT  ·  RISK IT ALL", 25, TextAnchor.MiddleLeft,
-                new Vector2(126, -208), new Vector2(800, 42), new Vector2(0, 1));
-            subtitle.color = new Color(0.16f, 0.92f, 0.86f);
+            Text(screen.transform, "CLIMB  ·  ADAPT  ·  RISK IT ALL", 18, TextAnchor.UpperLeft, new Vector2(60, -86),
+                new Vector2(620, 26), new Vector2(0, 1)).color = new Color(0.16f, 0.92f, 0.86f);
+            BuildTopRight(save);
+            BuildHeroColumn(hero, accent);
+            BuildRelicSlots(accent);
+            BuildPathColumn();
+            BuildPartyPlates(hero, accent);
+            AnnounceShiftRewardOnce();
 
-            Panel(screen.transform, new Vector2(120, -284), new Vector2(580, 430), new Vector2(0, 1),
-                new Color(0.02f, 0.045f, 0.08f, 0.96f), new Color(0.12f, 0.72f, 0.72f));
-            Button(screen.transform, "[1]  STANDARD SPIRE\n15 FLOORS · EXTRACT AFTER BOSSES",
-                new Vector2(150, -330), new Vector2(520, 112), new Vector2(0, 1), new Color(0.06f, 0.86f, 0.72f),
-                () => ShowPreparation(RunMode.StandardSpire));
-            Button(screen.transform, "[2]  ENDLESS TOWER\nUNLIMITED TIERS · RISING REWARDS",
-                new Vector2(150, -468), new Vector2(520, 112), new Vector2(0, 1), new Color(0.65f, 0.28f, 1f),
-                () => ShowPreparation(RunMode.EndlessTower));
-            Button(screen.transform, "[3]  META FORGE\nPERMANENT POWER",
-                new Vector2(150, -606), new Vector2(520, 82), new Vector2(0, 1), new Color(1f, 0.55f, 0.08f), ShowForge);
+            if (!Application.isMobilePlatform)
+                Text(screen.transform, "← →  HERO      ↑ ↓  PATH      R  RELICS      F  FORGE      ENTER  CLIMB", 15,
+                    TextAnchor.LowerCenter, new Vector2(0, 14), new Vector2(900, 24), new Vector2(0.5f, 0)).color = new Color(0.62f, 0.7f, 0.8f);
 
-            var profile = Panel(screen.transform, new Vector2(-92, -82), new Vector2(430, 208), new Vector2(1, 1),
-                new Color(0.018f, 0.035f, 0.07f, 0.95f), new Color(0.66f, 0.3f, 1f));
-            Text(profile.transform, $"RIFTKEEPER\n\nSHARDS   {save.shards}\nBEST FLOOR   {save.bestFloor}\nRUNS   {save.runs}", 25,
-                TextAnchor.MiddleLeft, new Vector2(32, -8), new Vector2(360, 180), new Vector2(0, 1));
-            Text(screen.transform, "THREE HEROES. THREE COMBAT IDENTITIES. ONE TOWER THAT NEVER STAYS THE SAME.", 20,
-                TextAnchor.LowerLeft, new Vector2(122, 72), new Vector2(1180, 40), new Vector2(0, 0)).color = new Color(0.65f, 0.75f, 0.86f);
+            shortcuts[KeyCode.LeftArrow] = () => CycleHero(-1);
+            shortcuts[KeyCode.A] = () => CycleHero(-1);
+            shortcuts[KeyCode.RightArrow] = () => CycleHero(1);
+            shortcuts[KeyCode.D] = () => CycleHero(1);
+            shortcuts[KeyCode.UpArrow] = () => CyclePath(-1);
+            shortcuts[KeyCode.W] = () => CyclePath(-1);
+            shortcuts[KeyCode.DownArrow] = () => CyclePath(1);
+            shortcuts[KeyCode.S] = () => CyclePath(1);
+            for (var i = 0; i < Heroes.Length; i++)
+            {
+                var choice = Heroes[i];
+                shortcuts[KeyCode.Alpha1 + i] = () => SelectHero(choice);
+            }
+            shortcuts[KeyCode.R] = ShowRelics;
+            shortcuts[KeyCode.F] = ShowForge;
+            shortcuts[KeyCode.Return] = BeginRun;
+            shortcuts[KeyCode.KeypadEnter] = BeginRun;
+            shortcuts[KeyCode.Space] = BeginRun;
         }
 
-        private void ShowPreparation(RunMode mode)
+        private void BuildTopRight(MetaSaveData save)
         {
-            config.Mode = mode;
-            BeginScreen(new Color(0.006f, 0.014f, 0.035f, 0.88f));
-            backAction = ShowHome;
-            var accent = mode == RunMode.EndlessTower ? new Color(0.66f, 0.28f, 1f) : new Color(0.06f, 0.86f, 0.72f);
-            Header(mode == RunMode.EndlessTower ? "ENDLESS TOWER" : "STANDARD SPIRE",
-                "CHOOSE A HERO AND UP TO THREE RELICS", accent);
+            var rankPoints = MetaSaveSystem.RankPoints(save);
+            var tier = RankTable.TierFor(rankPoints);
+            var rank = Panel(screen.transform, new Vector2(-48, -26), new Vector2(380, 116), new Vector2(1, 1),
+                new Color(0.018f, 0.035f, 0.07f, 0.92f), RankTable.Accent(tier));
+            Text(rank.transform, $"SHIFT {save.shiftIndex}  ·  ENDS IN {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}", 15,
+                TextAnchor.UpperLeft, new Vector2(24, -12), new Vector2(340, 22), new Vector2(0, 1)).color = new Color(0.62f, 0.72f, 0.84f);
+            var rankName = Text(rank.transform, RankTable.Name(tier), 38, TextAnchor.UpperLeft, new Vector2(22, -34), new Vector2(340, 46), new Vector2(0, 1));
+            rankName.fontStyle = FontStyle.Bold;
+            rankName.color = RankTable.Accent(tier);
+            var next = RankTable.IsHighest(tier)
+                ? "HIGHEST RANK"
+                : $"{RankTable.PointsToNext(rankPoints):N0} TO {RankTable.Name((RankTier)((int)tier + 1))}";
+            Text(rank.transform, $"{rankPoints:N0} RANK POINTS  ·  {next}", 15, TextAnchor.UpperLeft,
+                new Vector2(24, -84), new Vector2(340, 22), new Vector2(0, 1));
 
-            var heroes = new[] { HeroClassId.Ranger, HeroClassId.Guardian, HeroClassId.Arcanist };
-            for (var i = 0; i < heroes.Length; i++)
+            Chip(new Vector2(-448, -26), "SHARDS", save.shards.ToString("N0"), new Color(0.3f, 0.78f, 1f));
+            Chip(new Vector2(-448, -86), "TOKENS", save.tokens.ToString("N0"), new Color(1f, 0.74f, 0.2f));
+        }
+
+        private void Chip(Vector2 position, string label, string value, Color color)
+        {
+            var chip = Panel(screen.transform, position, new Vector2(220, 52), new Vector2(1, 1), new Color(0.018f, 0.035f, 0.07f, 0.9f), color);
+            Text(chip.transform, label, 14, TextAnchor.MiddleLeft, new Vector2(18, 0), new Vector2(90, 40), new Vector2(0, 0.5f)).color = color;
+            var amount = Text(chip.transform, value, 24, TextAnchor.MiddleRight, new Vector2(-18, 0), new Vector2(120, 40), new Vector2(1, 0.5f));
+            amount.fontStyle = FontStyle.Bold;
+        }
+
+        private void BuildHeroColumn(HeroClassId hero, Color accent)
+        {
+            for (var i = 0; i < Heroes.Length; i++)
             {
-                var hero = heroes[i];
-                var selected = config.Hero == hero;
-                var panel = Button(screen.transform,
-                    $"[{i + 1}]  {HeroCatalog.Name(hero)}\n{HeroCatalog.Role(hero)}\n\n{HeroCatalog.Kit(hero)}\n\nHP {HeroCatalog.BaseHealth(hero):0}",
-                    new Vector2(255 + i * 520, -245), new Vector2(450, 270), new Vector2(0, 1),
-                    selected ? Color.white : HeroCatalog.Accent(hero), () => { config.Hero = hero; ShowPreparation(mode); });
-                var icon = CreateImage(panel.transform, "Class Emblem", Color.white, new Vector2(28, -28), new Vector2(86, 86), new Vector2(0, 1));
-                icon.sprite = UiIconFactory.Hero(hero);
+                var candidate = Heroes[i];
+                var selected = candidate == hero;
+                var tab = Button(screen.transform, string.Empty, new Vector2(56 + i * 108, -150), new Vector2(92, 92), new Vector2(0, 1),
+                    selected ? Color.white : new Color(0.36f, 0.44f, 0.54f), () => SelectHero(candidate), selected);
+                var icon = CreateImage(tab.transform, "Hero Emblem", Color.white, Vector2.zero, new Vector2(78, 78), new Vector2(0.5f, 0.5f));
+                icon.sprite = UiIconFactory.Hero(candidate);
                 icon.preserveAspect = true;
-                Text(panel.transform, selected ? "SELECTED" : "", 17, TextAnchor.UpperRight,
-                    new Vector2(-22, -20), new Vector2(130, 28), new Vector2(1, 1)).color = accent;
+                icon.raycastTarget = false;
             }
 
-            Text(screen.transform, $"RELIC LOADOUT  {config.Relics.Count}/3", 27, TextAnchor.MiddleLeft,
-                new Vector2(255, -558), new Vector2(620, 42), new Vector2(0, 1)).fontStyle = FontStyle.Bold;
+            var name = Text(screen.transform, HeroCatalog.Name(hero), 78, TextAnchor.UpperLeft, new Vector2(52, -262), new Vector2(560, 92), new Vector2(0, 1));
+            name.fontStyle = FontStyle.Bold;
+            Text(screen.transform, HeroCatalog.Role(hero), 22, TextAnchor.UpperLeft, new Vector2(58, -350), new Vector2(560, 30), new Vector2(0, 1)).color = accent;
+            Text(screen.transform,
+                $"LIGHT   {HeroCatalog.LightAttackName(hero)}\nHEAVY   {HeroCatalog.HeavyAttackName(hero)}\nSKILL   {HeroCatalog.SkillName(hero)}\n\nHP   {HeroCatalog.BaseHealth(hero):0}",
+                19, TextAnchor.UpperLeft, new Vector2(58, -396), new Vector2(520, 150), new Vector2(0, 1)).color = new Color(0.86f, 0.92f, 0.98f);
+        }
+
+        private void BuildRelicSlots(Color accent)
+        {
+            Text(screen.transform, $"RELICS  {config.Relics.Count}/3", 18, TextAnchor.LowerLeft, new Vector2(58, 214), new Vector2(400, 26), new Vector2(0, 0))
+                .color = new Color(0.62f, 0.72f, 0.84f);
+            for (var i = 0; i < 3; i++)
+            {
+                var filled = i < config.Relics.Count;
+                var label = filled ? RelicCatalog.Name(config.Relics[i]) : "+ EMPTY";
+                Button(screen.transform, label, new Vector2(56 + i * 166, 108), new Vector2(154, 96), new Vector2(0, 0),
+                    filled ? accent : new Color(0.32f, 0.4f, 0.5f), ShowRelics, labelSize: 16);
+            }
+            Button(screen.transform, "META FORGE", new Vector2(56, 28), new Vector2(486, 62), new Vector2(0, 0),
+                new Color(1f, 0.55f, 0.08f), ShowForge, labelSize: 20);
+        }
+
+        private void BuildPathColumn()
+        {
+            Text(screen.transform, "CHOOSE YOUR PATH", 18, TextAnchor.LowerRight, new Vector2(-56, 420), new Vector2(460, 26), new Vector2(1, 0))
+                .color = new Color(0.62f, 0.72f, 0.84f);
+            for (var i = 0; i < Paths.Length; i++)
+            {
+                var path = Paths[i];
+                var selected = path == config.Mode;
+                Button(screen.transform, $"{PathCatalog.Name(path)}\n<size=16>{PathCatalog.Summary(path)}</size>",
+                    new Vector2(-56, 326 - i * 94), new Vector2(460, 84), new Vector2(1, 0),
+                    selected ? PathCatalog.Accent(path) : new Color(0.32f, 0.4f, 0.5f), () => SelectPath(path), selected);
+            }
+            var climb = Button(screen.transform, $"CLIMB\n<size=18>{PathCatalog.Name(config.Mode)}  ·  {PathCatalog.Summary(config.Mode)}</size>",
+                new Vector2(-56, 28), new Vector2(460, 112), new Vector2(1, 0), PathCatalog.Accent(config.Mode), BeginRun, true, 42);
+            climb.GetComponentInChildren<Text>().color = Color.white;
+        }
+
+        private void BuildPartyPlates(HeroClassId hero, Color accent)
+        {
+            var team = PrototypeBootstrap.OfflineTeamFor(hero);
+            plates = new RectTransform[1 + team.Length];
+            plates[0] = Plate("YOU", HeroCatalog.Name(hero), accent);
+            for (var i = 0; i < team.Length; i++)
+                plates[i + 1] = Plate("BOT", $"{team[i].Name}  {team[i].Role.ToString().ToUpperInvariant()}", team[i].Accent);
+            UpdatePlates();
+        }
+
+        private RectTransform Plate(string tag, string name, Color color)
+        {
+            var plate = Panel(screen.transform, Vector2.zero, new Vector2(230, 58), new Vector2(0.5f, 0.5f),
+                new Color(0.018f, 0.035f, 0.07f, 0.88f), color);
+            var rect = (RectTransform)plate.transform;
+            rect.pivot = new Vector2(0.5f, 1f);
+            Text(plate.transform, tag, 13, TextAnchor.UpperCenter, new Vector2(0, -6), new Vector2(210, 18), new Vector2(0.5f, 1)).color = color;
+            Text(plate.transform, name, 19, TextAnchor.UpperCenter, new Vector2(0, -24), new Vector2(220, 26), new Vector2(0.5f, 1)).fontStyle = FontStyle.Bold;
+            return rect;
+        }
+
+        private void UpdatePlates()
+        {
+            if (plates == null || !stage || !stage.View || !screen) return;
+            var area = (RectTransform)screen.transform;
+            for (var i = 0; i < plates.Length; i++)
+            {
+                if (!plates[i]) continue;
+                var point = stage.View.WorldToScreenPoint(stage.FootOf(i));
+                if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(area, point, null, out var local)) continue;
+                plates[i].anchoredPosition = local + new Vector2(0f, -18f);
+            }
+        }
+
+        private void CycleHero(int step)
+        {
+            var index = Array.IndexOf(Heroes, config.Hero);
+            SelectHero(Heroes[(index + step + Heroes.Length) % Heroes.Length]);
+        }
+
+        private void CyclePath(int step)
+        {
+            var index = Array.IndexOf(Paths, config.Mode);
+            SelectPath(Paths[Mathf.Clamp(index + step, 0, Paths.Length - 1)]);
+        }
+
+        private void SelectHero(HeroClassId hero)
+        {
+            config.Hero = hero;
+            MetaSaveSystem.SaveLobbySelection(config.Hero, config.Mode);
+            ShowLobby();
+        }
+
+        private void SelectPath(RunMode path)
+        {
+            config.Mode = path;
+            MetaSaveSystem.SaveLobbySelection(config.Hero, config.Mode);
+            ShowLobby();
+        }
+
+        /// <summary>Ist zwischen zwei Sitzungen ein Shift abgelaufen, gibt es die Tokens dafuer genau einmal zu sehen.</summary>
+        private void AnnounceShiftRewardOnce()
+        {
+            if (!MetaSaveSystem.ConsumeShiftReward(out var tier, out var tokens)) return;
+            var banner = Panel(screen.transform, new Vector2(0, -150), new Vector2(760, 96), new Vector2(0.5f, 1),
+                new Color(0.03f, 0.06f, 0.05f, 0.96f), RankTable.Accent(tier));
+            Text(banner.transform, "SHIFT COMPLETE", 22, TextAnchor.UpperCenter, new Vector2(0, -12), new Vector2(700, 28), new Vector2(0.5f, 1))
+                .color = RankTable.Accent(tier);
+            Text(banner.transform, $"RANK {RankTable.Name(tier)}  ·  +{tokens} TOKENS", 26, TextAnchor.UpperCenter,
+                new Vector2(0, -46), new Vector2(700, 34), new Vector2(0.5f, 1));
+        }
+
+        // ── Relics ──────────────────────────────────────────────────────────
+
+        private void ShowRelics()
+        {
+            BeginScreen(true);
+            backAction = CloseRelics;
+            var accent = HeroCatalog.Accent(config.Hero);
+            Header("RELIC LOADOUT", $"{config.Relics.Count}/3 EQUIPPED  ·  CARRIED INTO EVERY CLIMB", accent);
             var relics = (RelicId[])Enum.GetValues(typeof(RelicId));
             for (var i = 0; i < relics.Length; i++)
             {
                 var relic = relics[i];
                 var selected = config.Relics.Contains(relic);
-                var x = 255 + (i % 3) * 520;
-                var y = -620 - (i / 3) * 116;
-                Button(screen.transform, $"[{i + 4}]  {(selected ? "◆ " : "◇ ")}{RelicCatalog.Name(relic)}\n{RelicCatalog.Description(relic)}",
-                    new Vector2(x, y), new Vector2(450, 92), new Vector2(0, 1), selected ? accent : new Color(0.32f, 0.42f, 0.54f),
-                    () => ToggleRelic(relic, mode));
+                Button(screen.transform, $"{(selected ? "◆  " : "◇  ")}{RelicCatalog.Name(relic)}\n<size=17>{RelicCatalog.Description(relic)}</size>",
+                    new Vector2(-510 + (i % 3) * 510, 90 - (i / 3) * 150), new Vector2(470, 124), new Vector2(0.5f, 0.5f),
+                    selected ? accent : new Color(0.32f, 0.42f, 0.54f), () => ToggleRelic(relic), selected);
+                shortcuts[KeyCode.Alpha1 + i] = () => ToggleRelic(relic);
             }
-            Button(screen.transform, "BACK", new Vector2(255, 64), new Vector2(250, 74), new Vector2(0, 0), new Color(0.34f, 0.42f, 0.52f), ShowHome);
-            Button(screen.transform, "BEGIN CLIMB", new Vector2(-255, 64), new Vector2(390, 82), new Vector2(1, 0), accent, BeginRun);
+            Button(screen.transform, "DONE", new Vector2(0, -330), new Vector2(360, 88), new Vector2(0.5f, 0.5f), accent, CloseRelics, true);
+            shortcuts[KeyCode.R] = CloseRelics;
+            shortcuts[KeyCode.Return] = CloseRelics;
         }
 
-        private void ToggleRelic(RelicId relic, RunMode mode)
+        private void ToggleRelic(RelicId relic)
         {
             if (config.Relics.Contains(relic)) config.Relics.Remove(relic);
             else if (config.Relics.Count < 3) config.Relics.Add(relic);
-            ShowPreparation(mode);
+            ShowRelics();
         }
+
+        private void CloseRelics()
+        {
+            MetaSaveSystem.SaveRelics(config.Relics);
+            ShowLobby();
+        }
+
+        // ── Forge ───────────────────────────────────────────────────────────
 
         private void ShowForge()
         {
-            BeginScreen(new Color(0.006f, 0.014f, 0.035f, 0.9f));
-            backAction = ShowHome;
+            BeginScreen(true);
+            backAction = ShowLobby;
             var save = MetaSaveSystem.Load();
-            Header("META FORGE", $"SHARDS  {save.shards}  ·  PERMANENT, CAPPED BONUSES", new Color(1f, 0.55f, 0.08f));
+            Header("META FORGE", $"SHARDS  {save.shards:N0}  ·  PERMANENT, CAPPED BONUSES", new Color(1f, 0.55f, 0.08f));
             var upgrades = new[] { MetaUpgradeId.Vitality, MetaUpgradeId.Might, MetaUpgradeId.Agility };
             var names = new[] { "VITAL CORE", "TEMPERED EDGE", "WIND GLYPH" };
             var effects = new[] { "+5 MAX HP / LEVEL", "+4% DAMAGE / LEVEL", "+2% MOVE SPEED / LEVEL" };
+            var colors = new[] { new Color(0.1f, 0.88f, 0.58f), new Color(1f, 0.42f, 0.08f), new Color(0.16f, 0.72f, 1f) };
             for (var i = 0; i < upgrades.Length; i++)
             {
                 var id = upgrades[i];
                 var level = MetaSaveSystem.UpgradeLevel(save, id);
                 var cost = MetaSaveSystem.UpgradeCost(save, id);
-                Button(screen.transform, $"[{i + 1}]  {names[i]}\n\n{effects[i]}\n\nLEVEL {level} / 10\n{(level >= 10 ? "MAXIMUM" : "UPGRADE  " + cost + " SHARDS")}",
-                    new Vector2(270 + i * 510, -300), new Vector2(430, 400), new Vector2(0, 1),
-                    i == 0 ? new Color(0.1f, 0.88f, 0.58f) : i == 1 ? new Color(1f, 0.42f, 0.08f) : new Color(0.16f, 0.72f, 1f),
-                    () => { MetaSaveSystem.Purchase(id); ShowForge(); });
+                Action buy = () => { MetaSaveSystem.Purchase(id); ShowForge(); };
+                Button(screen.transform, $"{names[i]}\n\n<size=19>{effects[i]}\n\nLEVEL {level} / 10\n{(level >= 10 ? "MAXIMUM" : "UPGRADE  " + cost + " SHARDS")}</size>",
+                    new Vector2(-510 + i * 510, 0), new Vector2(430, 400), new Vector2(0.5f, 0.5f), colors[i], buy);
+                shortcuts[KeyCode.Alpha1 + i] = buy;
             }
-            Button(screen.transform, "BACK TO TOWER", new Vector2(270, 90), new Vector2(350, 82), new Vector2(0, 0),
-                new Color(0.34f, 0.42f, 0.52f), ShowHome);
+            Button(screen.transform, "BACK TO LOBBY", new Vector2(0, -330), new Vector2(360, 88), new Vector2(0.5f, 0.5f),
+                new Color(0.34f, 0.42f, 0.52f), ShowLobby);
+            shortcuts[KeyCode.F] = ShowLobby;
         }
 
         private void BeginRun()
         {
             MetaSaveSystem.SaveRelics(config.Relics);
+            MetaSaveSystem.SaveLobbySelection(config.Hero, config.Mode);
             RunLaunchSettings.Prepare(config);
-            Time.timeScale = 1f;
-            GameEvents.Reset();
-            var scene = SceneManager.GetActiveScene();
-            if (!string.IsNullOrEmpty(scene.name)) SceneManager.LoadScene(scene.name);
+            PrototypeBootstrap.Reload();
         }
 
-        private void Header(string title, string subtitle, Color accent)
-        {
-            var header = Panel(screen.transform, new Vector2(0, -28), new Vector2(1530, 132), new Vector2(0.5f, 1),
-                new Color(0.018f, 0.035f, 0.07f, 0.97f), accent);
-            var titleText = Text(header.transform, title, 46, TextAnchor.UpperCenter, new Vector2(0, -18), new Vector2(1200, 56), new Vector2(0.5f, 1));
-            titleText.fontStyle = FontStyle.Bold;
-            Text(header.transform, subtitle, 20, TextAnchor.UpperCenter, new Vector2(0, -78), new Vector2(1200, 34), new Vector2(0.5f, 1)).color = accent;
-        }
+        // ── Bausteine ───────────────────────────────────────────────────────
 
-        private void BeginScreen(Color shade)
+        private void BeginScreen(bool shaded)
         {
             if (screen) Destroy(screen);
             buttons.Clear();
-            screen = CreateImage(canvas.transform, "Front End Screen", shade, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f)).gameObject;
+            shortcuts.Clear();
+            plates = null;
+            var image = CreateImage(canvas.transform, "Front End Screen",
+                shaded ? new Color(0.006f, 0.014f, 0.035f, 0.9f) : Color.clear, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f));
+            image.raycastTarget = shaded;
+            screen = image.gameObject;
             var rect = (RectTransform)screen.transform;
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.offsetMin = rect.offsetMax = Vector2.zero;
+        }
+
+        /// <summary>Dunkler Verlauf am oberen oder unteren Rand: Text bleibt lesbar, die Szene bleibt hell.</summary>
+        private void Fade(bool top, float height, float alpha)
+        {
+            var image = CreateImage(screen.transform, top ? "Top Fade" : "Bottom Fade", new Color(0.01f, 0.02f, 0.05f, alpha),
+                Vector2.zero, Vector2.zero, new Vector2(0.5f, top ? 1f : 0f));
+            image.sprite = UiIconFactory.VerticalFade();
+            image.raycastTarget = false;
+            var rect = (RectTransform)image.transform;
+            rect.anchorMin = new Vector2(0f, top ? 1f : 0f);
+            rect.anchorMax = new Vector2(1f, top ? 1f : 0f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(0f, height);
+            rect.anchoredPosition = new Vector2(0f, top ? -height * 0.5f : height * 0.5f);
+            if (top) rect.localRotation = Quaternion.Euler(0f, 0f, 180f);
+        }
+
+        private void Header(string title, string subtitle, Color accent)
+        {
+            var header = Panel(screen.transform, new Vector2(0, -40), new Vector2(1530, 132), new Vector2(0.5f, 1),
+                new Color(0.018f, 0.035f, 0.07f, 0.97f), accent);
+            Text(header.transform, title, 46, TextAnchor.UpperCenter, new Vector2(0, -18), new Vector2(1200, 56), new Vector2(0.5f, 1)).fontStyle = FontStyle.Bold;
+            Text(header.transform, subtitle, 20, TextAnchor.UpperCenter, new Vector2(0, -78), new Vector2(1200, 34), new Vector2(0.5f, 1)).color = accent;
         }
 
         private Image Panel(Transform parent, Vector2 pos, Vector2 size, Vector2 anchor, Color fill, Color outlineColor)
@@ -197,18 +398,20 @@ namespace Shatterspire
             return panel;
         }
 
-        private Button Button(Transform parent, string label, Vector2 pos, Vector2 size, Vector2 anchor, Color color, Action action)
+        private Button Button(Transform parent, string label, Vector2 pos, Vector2 size, Vector2 anchor, Color color, Action action,
+            bool filled = false, int labelSize = 22)
         {
-            var panel = Panel(parent, pos, size, anchor, new Color(color.r * 0.14f, color.g * 0.14f, color.b * 0.14f, 0.97f), color);
+            var strength = filled ? 0.5f : 0.14f;
+            var panel = Panel(parent, pos, size, anchor, new Color(color.r * strength, color.g * strength, color.b * strength, 0.96f), color);
             var button = panel.gameObject.AddComponent<Button>();
             button.onClick.AddListener(() => action?.Invoke());
             var colors = button.colors;
             colors.highlightedColor = Color.Lerp(Color.white, color, 0.45f);
             colors.pressedColor = color;
             button.colors = colors;
-            var text = Text(panel.transform, label, 22, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero,
-                new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
-            text.fontStyle = FontStyle.Bold;
+            if (!string.IsNullOrEmpty(label))
+                Text(panel.transform, label, labelSize, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero,
+                    new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one).fontStyle = FontStyle.Bold;
             buttons.Add(button);
             return button;
         }
@@ -249,6 +452,14 @@ namespace Shatterspire
             text.alignment = align;
             text.color = Color.white;
             text.raycastTarget = false;
+            // Roboto hat eine hoehere Zeilenhoehe als Arial; Ueberlauf statt Ausblenden.
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            var stroke = go.AddComponent<Outline>();
+            stroke.effectColor = new Color(0.04f, 0.025f, 0.02f, 0.9f);
+            stroke.effectDistance = new Vector2(1.6f, -1.6f);
+            var drop = go.AddComponent<Shadow>();
+            drop.effectColor = new Color(0f, 0f, 0f, 0.5f);
+            drop.effectDistance = new Vector2(0f, -2.6f);
             return text;
         }
 
@@ -263,10 +474,83 @@ namespace Shatterspire
                 return;
             }
         }
+    }
 
-        private void Invoke(int index)
+    /// <summary>
+    /// 3D-Buehne der Lobby: eigene Kamera, der gewaehlte Held in der Mitte mit Blick zur Kamera,
+    /// die zwei Bots leicht versetzt dahinter, jeweils mit Lichtring am Boden.
+    /// </summary>
+    public sealed class LobbyStage : MonoBehaviour
+    {
+        private static readonly Vector3 HeroSpot = Vector3.zero;
+        private static readonly Vector3[] BotSpots = { new(-1.8f, 0f, 1.1f), new(1.8f, 0f, 1.1f) };
+        private readonly List<GameObject> actors = new();
+        private Camera view;
+        private bool built;
+        private HeroClassId hero;
+
+        public Camera View => view;
+
+        private void Awake()
         {
-            if (index >= 0 && index < buttons.Count && buttons[index]) buttons[index].onClick.Invoke();
+            var go = new GameObject("Main Camera") { tag = "MainCamera" };
+            go.transform.SetParent(transform, false);
+            view = go.AddComponent<Camera>();
+            StylizedArt.ConfigureCamera(view);
+            // Naeher und flacher als im Kampf: hier sind die Figuren das Thema, nicht die Arena.
+            view.orthographicSize = 2.9f;
+            go.transform.rotation = Quaternion.Euler(24f, 0f, 0f);
+            go.transform.position = new Vector3(0f, 0.95f, 0.35f) - go.transform.forward * 16f;
+            go.AddComponent<AudioListener>();
+        }
+
+        /// <summary>Fusspunkt fuer das Namensschild: 0 ist der Held, danach die Bots.</summary>
+        public Vector3 FootOf(int index)
+            => transform.TransformPoint(index <= 0 ? HeroSpot : BotSpots[Mathf.Min(index - 1, BotSpots.Length - 1)]);
+
+        public void Show(HeroClassId selected)
+        {
+            if (built && selected == hero) return;
+            var changed = built;
+            built = true;
+            hero = selected;
+            foreach (var actor in actors)
+                if (actor) Destroy(actor);
+            actors.Clear();
+
+            actors.Add(Actor(HeroCatalog.Name(selected) + " · Lobby", HeroSpot, 180f, HeroCatalog.Accent(selected), 2.3f, 0.85f,
+                root => AuthoredArt.TryBuildHero(root, selected, out _)));
+            var team = PrototypeBootstrap.OfflineTeamFor(selected);
+            for (var i = 0; i < team.Length; i++)
+            {
+                var member = team[i];
+                actors.Add(Actor(member.Name + " · Lobby Bot", BotSpots[i], i == 0 ? 160f : 200f, member.Accent, 1.6f, 0.45f,
+                    root => AuthoredArt.TryBuildCompanion(root, member.Role, member.Accent, out _)));
+            }
+            if (changed) PrototypeVfx.SpawnExplosion(transform.TransformPoint(HeroSpot) + Vector3.up * 0.6f, 1.5f, HeroCatalog.Accent(selected));
+        }
+
+        private GameObject Actor(string name, Vector3 spot, float yaw, Color accent, float ringSize, float ringAlpha,
+            Func<Transform, bool> build)
+        {
+            var root = new GameObject(name);
+            root.transform.SetParent(transform, false);
+            root.transform.localPosition = spot;
+            root.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+            if (!build(root.transform)) StylizedArt.BuildRex(root.transform);
+
+            var ring = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            ring.name = "Lobby Pedestal";
+            PrototypeFactory.RemoveCollider(ring.GetComponent<Collider>());
+            ring.transform.SetParent(root.transform, false);
+            ring.transform.localPosition = Vector3.up * 0.04f;
+            ring.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            ring.transform.localScale = new Vector3(ringSize, ringSize, 1f);
+            var renderer = ring.GetComponent<Renderer>();
+            renderer.sharedMaterial = PrototypeFactory.CreateRadialDecal(new Color(accent.r, accent.g, accent.b, ringAlpha), 0.68f);
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            return root;
         }
     }
 }

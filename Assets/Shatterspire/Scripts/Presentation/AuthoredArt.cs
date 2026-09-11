@@ -10,7 +10,7 @@ namespace Shatterspire
     /// Runtime bridge for authored FBX content. Gameplay code only knows about
     /// roots and colliders, so visual assets can continue to be replaced later.
     /// </summary>
-    public static class AuthoredArt
+    public static partial class AuthoredArt
     {
         private const string RexModel = "Art3D/KayKit/Characters/Ranger";
         private const string ForgeModels = "Art3D/Forge/Models/";
@@ -30,6 +30,34 @@ namespace Shatterspire
         private static readonly Dictionary<string, Material> MaterialCache = new();
         private static Mesh crystalMesh;
 
+        private const float CourtTileSpacing = 4.22f;
+
+        /// <summary>
+        /// Helligkeitsverlauf des Hofbodens: hell in der Mitte, dunkler zum Rand. Liegt hier
+        /// als einzige Quelle, weil ApplyFloorTheme den Verlauf vorher auf jeder Etage mit
+        /// einer einzigen hellen Farbe ueberschrieben hat - der Boden war dadurch von Kante
+        /// zu Kante ein Farbwert und Hindernisse hoben sich nicht ab.
+        /// </summary>
+        private static Color CourtTileTint(int x, int z)
+        {
+            var distanceFromCenter = Mathf.Max(Mathf.Abs(x - 3), Mathf.Abs(z - 3));
+            // Warm und nah an Weiss: die KayKit-Modelle sind auf ihre eigenen Atlasfarben
+            // ausgelegt - Sandstein, Terrakotta, Holz. Kuehles Einfaerben hat die ganze
+            // Szene in einen einzigen Blauton gedrueckt. Stimmung kommt jetzt aus dem Licht.
+            var tint = distanceFromCenter <= 1 ? new Color(0.94f, 0.9f, 0.84f)
+                : distanceFromCenter == 2 ? new Color(0.82f, 0.78f, 0.72f)
+                : new Color(0.66f, 0.62f, 0.58f);
+            // Leichte Unruhe im Muster, damit der Boden nicht wie eine Fliesenflaeche wirkt.
+            if ((x + z) % 4 == 0) tint = Color.Lerp(tint, new Color(0.96f, 0.84f, 0.68f), 0.3f);
+            // Deterministische Streuung je Kachel: ohne sie ist jede Ringstufe exakt gleich hell,
+            // und der Boden liest sich als Flaeche statt als verlegter Stein.
+            var hash = (x * 73856093) ^ (z * 19349663);
+            var jitter = ((hash & 0xFF) / 255f - 0.5f) * 0.12f;
+            tint = new Color(Mathf.Clamp01(tint.r + jitter), Mathf.Clamp01(tint.g + jitter * 0.9f),
+                Mathf.Clamp01(tint.b + jitter * 0.75f));
+            return tint;
+        }
+
         public static bool TryBuildArena()
         {
             if (!LoadModel(DungeonModels + "floor_tile_large")) return false;
@@ -37,11 +65,9 @@ namespace Shatterspire
             // V14 art target: chunky fantasy silhouettes over a saturated magical-tech
             // court. Large color regions and landmarks read clearly on a phone screen.
             var root = new GameObject("THE FORGOTTEN COURT · V15 TOWER FOUNDATIONS").transform;
-            var abyss = new Color(0.018f, 0.025f, 0.065f);
-            var rim = new Color(0.055f, 0.09f, 0.17f);
-            var deepStone = new Color(0.34f, 0.43f, 0.62f);
-            var courtStone = new Color(0.55f, 0.66f, 0.82f);
-            var heroStone = new Color(0.72f, 0.79f, 0.9f);
+            var abyss = new Color(0.05f, 0.045f, 0.06f);
+            var rim = new Color(0.22f, 0.17f, 0.14f);
+            var deepStone = new Color(0.66f, 0.62f, 0.58f);
             var cyan = new Color(0.03f, 0.92f, 1f);
             var violet = new Color(0.72f, 0.22f, 1f);
             var ember = new Color(1f, 0.48f, 0.08f);
@@ -52,19 +78,22 @@ namespace Shatterspire
                 new Vector3(30.4f, 0.32f, 30.4f), rim, false, 0.04f, false);
 
             const int tileCount = 7;
-            const float spacing = 4.22f;
+            const float spacing = CourtTileSpacing;
             for (var x = 0; x < tileCount; x++)
             for (var z = 0; z < tileCount; z++)
             {
                 var edge = x == 0 || z == 0 || x == tileCount - 1 || z == tileCount - 1;
-                var distanceFromCenter = Mathf.Max(Mathf.Abs(x - 3), Mathf.Abs(z - 3));
-                var tileName = (x == 3 && z == 3) || ((x + z * 2) % 11 == 0)
+                // Grates nur noch als Eckdetail. Vorher lagen fuenf davon im Feld, zwei direkt
+                // gestapelt in der Mitte - mit ihren hohen Rahmen dominierten sie jedes Spielbild
+                // und liessen die Arena wie einen Prototyp aus Kloetzen wirken. Verzierte
+                // Kacheln im Inneren geben dem Boden stattdessen Struktur.
+                var tileName = (x == 0 && z == 0) || (x == tileCount - 1 && z == tileCount - 1)
                     ? "floor_tile_big_grate"
-                    : edge && (x + z) % 3 == 0 ? "floor_tile_large_rocks" : "floor_tile_large";
+                    : edge && (x + z) % 3 == 0 ? "floor_tile_large_rocks"
+                    : !edge && (x * 3 + z * 5) % 7 == 0 ? "floor_tile_small_decorated"
+                    : "floor_tile_large";
                 var position = new Vector3((x - 3) * spacing, 0f, (z - 3) * spacing);
-                var tint = distanceFromCenter <= 1 ? heroStone
-                    : distanceFromCenter == 2 ? courtStone : deepStone;
-                if ((x + z) % 4 == 0) tint = Color.Lerp(tint, new Color(0.48f, 0.4f, 0.72f), 0.22f);
+                var tint = CourtTileTint(x, z);
                 SpawnDungeonModel(root, tileName, position, ((x + z) & 1) * 90f, 4.34f, FitAxis.Horizontal,
                     tint);
             }
@@ -123,7 +152,7 @@ namespace Shatterspire
             StylizeHumanoidProportions(animator, 1.1f, 1.08f);
 
             var motion = root.gameObject.AddComponent<StylizedCharacterMotion>();
-            motion.ConfigureAuthored(model.transform, animator);
+            motion.ConfigureAuthored(model.transform, animator, HeroCatalog.BaseSpeed(HeroClassId.Ranger));
 
             CreateGroundShadow(root, 1.42f);
             CreateSelectionRing(root, 1.46f, new Color(0.06f, 0.92f, 0.96f));
@@ -140,7 +169,8 @@ namespace Shatterspire
         {
             if (hero == HeroClassId.Ranger) return TryBuildRex(root, out muzzle);
             var role = hero == HeroClassId.Guardian ? CompanionRole.Guardian : CompanionRole.Support;
-            if (!TryBuildCompanion(root, role, HeroCatalog.Accent(hero), out muzzle)) return false;
+            if (!TryBuildCompanion(root, role, HeroCatalog.Accent(hero), out muzzle,
+                    HeroCatalog.BaseSpeed(hero))) return false;
             var model = root.childCount > 0 ? root.GetChild(0) : null;
             if (model) model.name = HeroCatalog.Name(hero) + " · " + HeroCatalog.Role(hero);
             return true;
@@ -152,35 +182,43 @@ namespace Shatterspire
             var arenaObject = GameObject.Find("THE FORGOTTEN COURT · V15 TOWER FOUNDATIONS");
             if (arenaObject)
             {
-                var tint = theme switch
+                // Das Thema verschiebt nur den Farbton des warmen Verlaufs. Stimmung kommt aus
+                // dem Licht, nicht aus dunkel eingefaerbtem Stein.
+                var themeTint = theme switch
                 {
-                    FloorTheme.EmberFoundry => new Color(0.72f, 0.48f, 0.36f),
-                    FloorTheme.AstralArchive => new Color(0.58f, 0.48f, 0.82f),
-                    _ => new Color(0.78f, 0.86f, 1f)
+                    FloorTheme.EmberFoundry => new Color(1f, 0.84f, 0.72f),
+                    FloorTheme.AstralArchive => new Color(0.9f, 0.86f, 1f),
+                    _ => new Color(1f, 0.98f, 0.94f)
                 };
                 for (var i = 0; i < arenaObject.transform.childCount; i++)
                 {
                     var child = arenaObject.transform.GetChild(i);
-                    if (child.name.Contains("floor_tile")) ApplyKayKitMaterials(child.gameObject, DungeonTexture, tint);
+                    if (!child.name.Contains("floor_tile")) continue;
+                    var x = Mathf.RoundToInt(child.localPosition.x / CourtTileSpacing) + 3;
+                    var z = Mathf.RoundToInt(child.localPosition.z / CourtTileSpacing) + 3;
+                    ApplyKayKitMaterials(child.gameObject, DungeonTexture, CourtTileTint(x, z) * themeTint);
                 }
             }
 
             RenderSettings.fogColor = theme switch
             {
-                FloorTheme.EmberFoundry => new Color(0.13f, 0.035f, 0.02f),
-                FloorTheme.AstralArchive => new Color(0.075f, 0.025f, 0.14f),
-                _ => new Color(0.025f, 0.05f, 0.1f)
+                FloorTheme.EmberFoundry => new Color(0.18f, 0.09f, 0.06f),
+                FloorTheme.AstralArchive => new Color(0.12f, 0.08f, 0.18f),
+                _ => new Color(0.1f, 0.13f, 0.2f)
             };
+            // Der Himmelsanteil des Umgebungslichts faerbt die Schatten. Kuehl gegen die
+            // warme Sonne ist genau der Kontrast, der dem Bild bisher fehlte.
             RenderSettings.ambientSkyColor = theme switch
             {
-                FloorTheme.EmberFoundry => new Color(0.48f, 0.19f, 0.08f),
-                FloorTheme.AstralArchive => new Color(0.28f, 0.12f, 0.52f),
-                _ => new Color(0.22f, 0.3f, 0.46f)
+                FloorTheme.EmberFoundry => new Color(0.5f, 0.44f, 0.52f),
+                FloorTheme.AstralArchive => new Color(0.42f, 0.42f, 0.76f),
+                _ => new Color(0.36f, 0.48f, 0.74f)
             };
             if (Camera.main) Camera.main.backgroundColor = RenderSettings.fogColor;
         }
 
-        public static bool TryBuildCompanion(Transform root, CompanionRole role, Color accent, out Transform muzzle)
+        public static bool TryBuildCompanion(Transform root, CompanionRole role, Color accent,
+            out Transform muzzle, float topSpeed = 6.5f)
         {
             muzzle = null;
             var resource = role switch
@@ -210,7 +248,7 @@ namespace Shatterspire
             StylizeHumanoidProportions(animator, role == CompanionRole.Guardian ? 1.08f : 1.12f, 1.08f);
 
             var motion = root.gameObject.AddComponent<StylizedCharacterMotion>();
-            motion.ConfigureAuthored(model.transform, animator);
+            motion.ConfigureAuthored(model.transform, animator, topSpeed);
             CreateGroundShadow(root, role == CompanionRole.Guardian ? 1.72f : 1.34f);
             CreateSelectionRing(root, role == CompanionRole.Guardian ? 1.76f : 1.38f, accent);
 
@@ -297,7 +335,7 @@ namespace Shatterspire
                 : kind is EnemyKind.Brute or EnemyKind.Elite ? 1.18f : 0.78f;
             CreateGroundShadow(root, footprint);
             CreateSelectionRing(root, footprint * 1.08f, Color.Lerp(primary, new Color(0.3f, 0.02f, 0.04f), 0.24f));
-            if (animator) motion.ConfigureAuthored(visualRig, animator);
+            if (animator) motion.ConfigureAuthored(visualRig, animator, EnemyBalance.For(kind).Speed);
             else motion.Configure(visualRig, kind == EnemyKind.IronWarden ? 4.2f : 7.5f);
             return true;
         }
@@ -340,7 +378,7 @@ namespace Shatterspire
                 var target = propName == "pillar_decorated" ? 2.9f : 2.35f;
                 SpawnDungeonModel(root, propName, position, i * 47f + index * 19f, target,
                     propName == "pillar_decorated" ? FitAxis.Height : FitAxis.Horizontal,
-                    i % 2 == 0 ? new Color(0.82f, 0.86f, 0.9f) : new Color(0.74f, 0.8f, 0.86f));
+                    i % 2 == 0 ? Color.white : new Color(0.96f, 0.92f, 0.86f));
                 CrystalPart(root, "Prop Rift Crystal", position + new Vector3(0f, propName == "pillar_decorated" ? 2.25f : 1.1f, 0.36f),
                     new Vector3(0.14f, 0.46f, 0.14f), new Vector3(0f, 0f, 0f), accent);
                 CreateObstacle(root, new Vector3(position.x, 0.9f, position.z), new Vector3(1.15f, 1.8f, 1.15f));
@@ -454,9 +492,9 @@ namespace Shatterspire
         private static void BuildDungeonPortal(Transform root, Vector3 position, float yaw, Color accent)
         {
             SpawnDungeonModel(root, "wall_doorway", position, yaw, 4.25f, FitAxis.Horizontal,
-                new Color(0.76f, 0.82f, 0.88f));
+                new Color(0.96f, 0.93f, 0.88f));
             var pad = ArenaPart(root, PrimitiveType.Cylinder, "Portal Socket", position + Vector3.up * 0.045f,
-                new Vector3(2.75f, 0.035f, 2.25f), new Color(0.08f, 0.12f, 0.2f), false, 0.05f, false);
+                new Vector3(2.75f, 0.035f, 2.25f), new Color(0.2f, 0.15f, 0.12f), false, 0.05f, false);
             pad.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
             ArenaPart(root, PrimitiveType.Cylinder, "Portal Rune", position + Vector3.up * 0.09f,
                 new Vector3(1.1f, 0.016f, 1.1f), accent, true, 0.28f, false);
@@ -495,7 +533,7 @@ namespace Shatterspire
         private static void BuildCourtBastion(Transform root, Vector3 position, float yaw, Color accent)
         {
             SpawnDungeonModel(root, "pillar_decorated", position, yaw, 3.3f,
-                FitAxis.Height, new Color(0.52f, 0.6f, 0.76f));
+                FitAxis.Height, new Color(0.94f, 0.9f, 0.84f));
             var direction = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
             SpawnDungeonModel(root, "torch_lit", position + direction * 0.72f + Vector3.up * 1.38f,
                 yaw + 180f, 1.15f, FitAxis.Height, new Color(1f, 0.78f, 0.52f));
@@ -981,7 +1019,11 @@ namespace Shatterspire
             return material;
         }
 
-        private static void ApplyForgeMaterials(GameObject root)
+        // internal statt private: der Tower Lift in FloorObjectiveController baut
+        // dasselbe Platform_Round1-Modell auf und konnte die Materialien bisher
+        // nicht zuweisen - er blieb deshalb mit dem untexturierten FBX-Standard
+        // als grosse weisse Scheibe im Bild.
+        internal static void ApplyForgeMaterials(GameObject root)
         {
             if (!root) return;
             foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
@@ -1371,10 +1413,31 @@ namespace Shatterspire
     /// </summary>
     public sealed class ChampionAnimationDriver : MonoBehaviour
     {
+        // Blendzeiten. Kurz genug, dass die Steuerung direkt bleibt, lang genug,
+        // dass kein Schnitt mehr sichtbar ist.
+        private const float LocomotionBlendSeconds = 0.16f;
+        private const float ActionFadeInSeconds = 0.07f;
+        private const float ActionFadeOutSeconds = 0.17f;
+
         private Animator animator;
         private PlayableGraph graph;
         private AnimationPlayableOutput output;
-        private AnimationClipPlayable playable;
+
+        // Aufbau des Graphen:
+        //   output -> topMixer [0] locomotion [0] idle  [1] move
+        //                      [1] Action-Slot A
+        //                      [2] Action-Slot B
+        // Zwei Action-Slots, weil sonst ein Combo-Schlag in den naechsten
+        // schneiden wuerde statt hinueberzublenden.
+        private AnimationMixerPlayable topMixer;
+        private AnimationMixerPlayable locomotion;
+        private AnimationClipPlayable idlePlayable;
+        private AnimationClipPlayable movePlayable;
+        private readonly AnimationClipPlayable[] actionPlayables = new AnimationClipPlayable[2];
+        private readonly float[] actionWeights = new float[2];
+        private int activeSlot = -1;
+        private float actionHoldUntil;
+
         private AnimationClip idle;
         private AnimationClip move;
         private AnimationClip attack;
@@ -1382,13 +1445,14 @@ namespace Shatterspire
         private AnimationClip ultimate;
         private AnimationClip hit;
         private Vector3 previousPosition;
-        private string currentState;
-        private bool loopCurrent;
-        private float actionLockedUntil;
+        private float moveBlend;
+        private float referenceSpeed = 6f;
+        private bool ready;
 
-        public void Configure(Animator target)
+        public void Configure(Animator target, float topSpeed = 6f)
         {
             animator = target;
+            referenceSpeed = Mathf.Max(0.5f, topSpeed);
             if (!animator || !animator.avatar || !animator.avatar.isValid) return;
 
             var clipList = new List<AnimationClip>();
@@ -1396,56 +1460,165 @@ namespace Shatterspire
             clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/KayKit/Animations/Rig_Medium_MovementBasic"));
             clipList.AddRange(Resources.LoadAll<AnimationClip>("Art3D/Animations/UAL2_Standard"));
             var clips = clipList.ToArray();
-            idle = FindClip(clips, "Idle_A", "Idle_B", "NinjaJump_Idle_Loop", "Idle_Rail_Loop");
-            move = FindClip(clips, "Running_A", "Running_B", "Walking_A", "Walk_Carry_Loop");
-            attack = FindClip(clips, "Melee_Hook", "OverhandThrow");
-            roll = FindClip(clips, "Slide_Start", "Sword_Dash", "Shield_Dash");
-            ultimate = FindClip(clips, "OverhandThrow", "Shield_OneShot");
-            hit = FindClip(clips, "Hit_Knockback");
+            // Die Namen muessen exakt zu den AnimStacks in den FBX passen. Die
+            // vorherige Liste suchte nach Melee_Hook, OverhandThrow, Slide_Start,
+            // Sword_Dash und Shield_OneShot - keiner dieser Clips existiert im
+            // Projekt. Angriff, Dash und Ultimate waren dadurch seit jeher stumm,
+            // ohne dass irgendwo eine Meldung aufgetaucht waere.
+            idle = FindClip(clips, "Idle_A", "Idle_B", "Idle_No_Loop");
+            move = FindClip(clips, "Running_A", "Running_B", "Walking_A");
+            attack = FindClip(clips, "Throw", "Use_Item", "Interact");
+            roll = FindClip(clips, "Jump_Start", "Jump_Full_Short", "Jump_Full_Long");
+            ultimate = FindClip(clips, "Spawn_Ground", "Spawn_Air", "Throw");
+            hit = FindClip(clips, "Hit_A", "Hit_B", "Hit_Knockback");
+            WarnAboutMissingClips();
             if (!idle) return;
 
             animator.applyRootMotion = false;
             animator.cullingMode = AnimatorCullingMode.CullUpdateTransforms;
-            graph = PlayableGraph.Create("Rex Humanoid Animation");
+            graph = PlayableGraph.Create("Shatterspire Humanoid Animation");
             graph.SetTimeUpdateMode(DirectorUpdateMode.GameTime);
-            output = AnimationPlayableOutput.Create(graph, "Rex Pose", animator);
+            output = AnimationPlayableOutput.Create(graph, "Pose", animator);
+
+            idlePlayable = CreateLoop(idle);
+            movePlayable = CreateLoop(move ? move : idle);
+            locomotion = AnimationMixerPlayable.Create(graph, 2);
+            graph.Connect(idlePlayable, 0, locomotion, 0);
+            graph.Connect(movePlayable, 0, locomotion, 1);
+            locomotion.SetInputWeight(0, 1f);
+            locomotion.SetInputWeight(1, 0f);
+
+            topMixer = AnimationMixerPlayable.Create(graph, 3);
+            graph.Connect(locomotion, 0, topMixer, 0);
+            topMixer.SetInputWeight(0, 1f);
+            topMixer.SetInputWeight(1, 0f);
+            topMixer.SetInputWeight(2, 0f);
+
+            output.SetSourcePlayable(topMixer);
             graph.Play();
             previousPosition = transform.position;
-            Play(idle, "Idle", true, 0f, 1f);
+            ready = true;
         }
 
-        public void PulseAttack(float strength) => Play(attack, "Attack", false, 0.28f + strength * 0.08f, 1.15f);
-        public void PulseDash() => Play(roll, "Roll", false, 0.34f, 1.45f);
-        public void PulseUltimate() => Play(ultimate, "Ultimate", false, 0.72f, 1.05f);
-        public void PulseHit() => Play(hit, "Hit", false, 0.2f, 1.4f);
+        public void PulseAttack(float strength) => PlayAction(attack, 0.28f + strength * 0.08f, 1.15f);
+        public void PulseDash() => PlayAction(roll, 0.34f, 1.45f);
+        public void PulseUltimate() => PlayAction(ultimate, 0.72f, 1.05f);
+        public void PulseHit() => PlayAction(hit, 0.2f, 1.4f);
 
         private void Update()
         {
-            if (!graph.IsValid() || !playable.IsValid()) return;
-            if (loopCurrent && playable.GetTime() >= playable.GetAnimationClip().length)
-                playable.SetTime(0d);
+            if (!ready || !graph.IsValid()) return;
+            var delta = Time.deltaTime;
 
             var displacement = transform.position - previousPosition;
+            displacement.y = 0f;
             previousPosition = transform.position;
-            if (Time.time < actionLockedUntil) return;
+            var speed = delta > 0f ? displacement.magnitude / delta : 0f;
 
-            var moving = Time.deltaTime > 0f && displacement.sqrMagnitude / (Time.deltaTime * Time.deltaTime) > 0.06f;
-            if (moving && currentState != "Move") Play(move ? move : idle, "Move", true, 0f, 1.1f);
-            else if (!moving && currentState != "Idle") Play(idle, "Idle", true, 0f, 1f);
+            // Locomotion ist ein kontinuierlicher Blend, kein Schalter: bei halbem
+            // Stick sieht die Figur auch halb so schnell aus.
+            var desired = Mathf.Clamp01(speed / referenceSpeed);
+            moveBlend = Mathf.MoveTowards(moveBlend, desired, delta / LocomotionBlendSeconds);
+            locomotion.SetInputWeight(0, 1f - moveBlend);
+            locomotion.SetInputWeight(1, moveBlend);
+            // Clip-Tempo mitziehen, sonst rutschen die Fuesse ueber den Boden.
+            movePlayable.SetSpeed(Mathf.Lerp(0.75f, 1.35f, moveBlend));
+
+            WrapLoop(idlePlayable);
+            WrapLoop(movePlayable);
+
+            if (activeSlot >= 0 && Time.time >= actionHoldUntil) activeSlot = -1;
+
+            for (var slot = 0; slot < actionWeights.Length; slot++)
+            {
+                var rising = slot == activeSlot;
+                var seconds = rising ? ActionFadeInSeconds : ActionFadeOutSeconds;
+                actionWeights[slot] = Mathf.MoveTowards(actionWeights[slot], rising ? 1f : 0f, delta / seconds);
+                if (!rising && actionWeights[slot] <= 0f) ReleaseSlot(slot);
+            }
+
+            // Explizit normalisieren: der Mixer rechnet Gewichte nicht selbst auf
+            // eins, und beim schnellen Combo-Wechsel koennte die Summe kurz
+            // darueber liegen.
+            var first = actionWeights[0];
+            var second = actionWeights[1];
+            var total = first + second;
+            if (total > 1f)
+            {
+                first /= total;
+                second /= total;
+                total = 1f;
+            }
+            topMixer.SetInputWeight(0, 1f - total);
+            topMixer.SetInputWeight(1, first);
+            topMixer.SetInputWeight(2, second);
         }
 
-        private void Play(AnimationClip clip, string state, bool loop, float lockSeconds, float speed)
+        private void PlayAction(AnimationClip clip, float holdSeconds, float speed)
         {
-            if (!clip || !graph.IsValid()) return;
-            if (playable.IsValid()) playable.Destroy();
-            playable = AnimationClipPlayable.Create(graph, clip);
-            playable.SetApplyFootIK(true);
+            if (!ready || !clip || !graph.IsValid()) return;
+            // In den jeweils anderen Slot legen, damit der laufende Schlag
+            // ausblenden kann statt abgeschnitten zu werden.
+            var slot = activeSlot == 0 ? 1 : 0;
+            ReleaseSlot(slot);
+            var playable = AnimationClipPlayable.Create(graph, clip);
+            playable.SetApplyFootIK(false);
             playable.SetApplyPlayableIK(false);
             playable.SetSpeed(speed);
-            output.SetSourcePlayable(playable);
-            currentState = state;
-            loopCurrent = loop;
-            actionLockedUntil = Time.time + lockSeconds;
+            graph.Connect(playable, 0, topMixer, slot + 1);
+            actionPlayables[slot] = playable;
+            activeSlot = slot;
+            actionHoldUntil = Time.time + Mathf.Max(0.05f, holdSeconds);
+        }
+
+        private void ReleaseSlot(int slot)
+        {
+            if (!actionPlayables[slot].IsValid()) return;
+            if (graph.IsValid())
+            {
+                graph.Disconnect(topMixer, slot + 1);
+                topMixer.SetInputWeight(slot + 1, 0f);
+            }
+            actionPlayables[slot].Destroy();
+            actionPlayables[slot] = default;
+            actionWeights[slot] = 0f;
+        }
+
+        private AnimationClipPlayable CreateLoop(AnimationClip clip)
+        {
+            var playable = AnimationClipPlayable.Create(graph, clip);
+            playable.SetApplyFootIK(true);
+            playable.SetApplyPlayableIK(false);
+            return playable;
+        }
+
+        private static void WrapLoop(AnimationClipPlayable playable)
+        {
+            if (!playable.IsValid()) return;
+            var clip = playable.GetAnimationClip();
+            if (!clip || clip.length <= 0f) return;
+            var time = playable.GetTime();
+            // Modulo statt auf null setzen, damit an der Naht kein Frame verloren geht.
+            if (time >= clip.length) playable.SetTime(time % clip.length);
+        }
+
+        /// <summary>
+        /// Ein fehlender Clip macht die betroffene Aktion stumm, ohne dass irgendwo
+        /// etwas auffaellt — genau so waren Angriff, Dash und Ultimate lange Zeit
+        /// unbemerkt tot. Deshalb wird das Fehlen jetzt einmal pro Figur gemeldet.
+        /// </summary>
+        private void WarnAboutMissingClips()
+        {
+            var missing = new List<string>();
+            if (!idle) missing.Add("Idle");
+            if (!move) missing.Add("Laufen");
+            if (!attack) missing.Add("Angriff");
+            if (!roll) missing.Add("Dash");
+            if (!ultimate) missing.Add("Ultimate");
+            if (!hit) missing.Add("Trefferreaktion");
+            if (missing.Count == 0) return;
+            Debug.LogWarning($"ChampionAnimationDriver auf '{name}': kein Clip für " +
+                             string.Join(", ", missing) + ". Diese Aktionen bleiben unanimiert.", this);
         }
 
         private static AnimationClip FindClip(AnimationClip[] clips, params string[] candidates)

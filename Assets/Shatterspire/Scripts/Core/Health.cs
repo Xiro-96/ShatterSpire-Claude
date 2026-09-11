@@ -71,6 +71,9 @@ namespace Shatterspire
             DamageNumber.Spawn(damage.HitPoint, damage.Amount, damage.IsCritical, damage.Type);
             if (damage.Force.sqrMagnitude > 0.01f || damage.IsCritical)
                 PrototypeVfx.SpawnHit(damage.HitPoint, damage.Force, damage.Type, damage.IsCritical);
+            // Nur bei kritischen Treffern auf Gegner. Ein Stop bei jedem Schaden
+            // waere Dauerzeitlupe, und Treffer am Spieler sollen nicht belohnen.
+            if (damage.IsCritical && team == TeamId.Enemy) Hitstop.Freeze(0.045f, 0.08f);
             if (isActiveAndEnabled) StartCoroutine(Flash());
             if (current <= 0f)
             {

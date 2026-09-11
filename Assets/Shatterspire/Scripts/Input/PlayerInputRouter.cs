@@ -2,6 +2,7 @@ using UnityEngine;
 
 namespace Shatterspire
 {
+    /// <summary>Drei Aktionen und Dash wie in R.I.S.E. Die Ultimate auf E gibt es nicht mehr.</summary>
     public interface IPlayerInputSource
     {
         Vector2 Move { get; }
@@ -12,7 +13,6 @@ namespace Shatterspire
         bool HeavyReleased { get; }
         bool SkillPressed { get; }
         bool DashPressed { get; }
-        bool UltimatePressed { get; }
     }
 
     [DisallowMultipleComponent]
@@ -28,7 +28,6 @@ namespace Shatterspire
         public bool HeavyReleased { get; private set; }
         public bool SkillPressed { get; private set; }
         public bool DashPressed { get; private set; }
-        public bool UltimatePressed { get; private set; }
 
         private void Start()
         {
@@ -46,7 +45,6 @@ namespace Shatterspire
             HeavyHeld = Input.GetMouseButton(1) || MobileInput.Heavy;
             SkillPressed = Input.GetKeyDown(KeyCode.Q) || MobileInput.ConsumeSkill();
             DashPressed = Input.GetKeyDown(KeyCode.Space) || MobileInput.ConsumeDash();
-            UltimatePressed = Input.GetKeyDown(KeyCode.E) || MobileInput.ConsumeUltimate();
 
             if (worldCamera && !Application.isMobilePlatform)
             {
@@ -68,7 +66,6 @@ namespace Shatterspire
         public static bool Heavy;
         private static bool skill;
         private static bool dash;
-        private static bool ultimate;
         private static bool heavyPressed;
         private static bool heavyReleased;
         public static void SetHeavy(bool value)
@@ -79,17 +76,15 @@ namespace Shatterspire
         }
         public static void PressSkill() => skill = true;
         public static void PressDash() => dash = true;
-        public static void PressUltimate() => ultimate = true;
         public static bool ConsumeSkill() { var value = skill; skill = false; return value; }
         public static bool ConsumeDash() { var value = dash; dash = false; return value; }
-        public static bool ConsumeUltimate() { var value = ultimate; ultimate = false; return value; }
         public static bool ConsumeHeavyPressed() { var value = heavyPressed; heavyPressed = false; return value; }
         public static bool ConsumeHeavyReleased() { var value = heavyReleased; heavyReleased = false; return value; }
         public static void Reset()
         {
             Move = Vector2.zero;
             Attack = Heavy = false;
-            skill = dash = ultimate = heavyPressed = heavyReleased = false;
+            skill = dash = heavyPressed = heavyReleased = false;
         }
     }
 }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Shatterspire
@@ -5,22 +6,41 @@ namespace Shatterspire
     public enum CompanionRole { Guardian, Support, Ranger }
 
     /// <summary>
-    /// Offline stand-in for a three-player party. The two roles deliberately behave
-    /// differently so the prototype demonstrates team composition instead of three
-    /// identical shooters. They use the same damage and targeting contracts as players.
+    /// Offline-Stellvertreter fuer die zwei Mitspieler. Jede Rolle hat im Kampf ihren eigenen Platz,
+    /// statt dass alle drei als Klumpen um den Spieler stehen:
+    /// der Guardian geht vorn zwischen Spieler und Gegner, der Ranger haelt Abstand von der Seite,
+    /// der Support bleibt hinter dem Spieler und heilt. Bewegung laeuft ueber die Raumnavigation
+    /// der Etage, damit die Bots durch Gaenge folgen statt durch Waende.
     /// </summary>
     public sealed class CompanionBot : MonoBehaviour
     {
-        private static readonly System.Collections.Generic.List<CompanionBot> ActiveCompanions = new();
+        private const float PartySpacing = 2.2f;
+        private const float LeaderSpacing = 1.8f;
+        private const float ThreatRange = 11f;
+
+        private static readonly List<CompanionBot> ActiveCompanions = new();
         private Transform leader;
         private Transform muzzle;
         private StylizedCharacterMotion motion;
         private Health leaderHealth;
-        private Vector3 formationOffset;
+        private FloorNavigation navigation;
         private CompanionRole role;
         private Color accent;
+        private float side = 1f;
         private float nextAttack;
         private float nextSupportPulse;
+        private Vector3 lastLeaderPosition;
+        private Vector3 leaderHeading = Vector3.forward;
+        private Vector3 previousPosition;
+        private float healingUntil;
+
+        public string DisplayName { get; private set; }
+        public CompanionRole Role => role;
+        public Color Accent => accent;
+        /// <summary>Was der Bot gerade tut, fuer die Team-Leiste im HUD.</summary>
+        public string Status { get; private set; } = "FOLLOWING";
+        public float SupportReadyNormalized =>
+            role != CompanionRole.Support ? 1f : Mathf.Clamp01(1f - (nextSupportPulse - Time.time) / 8f);
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetRegistry() => ActiveCompanions.Clear();
@@ -37,40 +57,74 @@ namespace Shatterspire
         {
             leader = player;
             leaderHealth = player.GetComponent<Health>();
-            formationOffset = offset;
+            side = offset.x < 0f ? -1f : 1f;
             role = companionRole;
             accent = color;
+            DisplayName = championName;
+            lastLeaderPosition = player.position;
+            previousPosition = transform.position;
             if (!AuthoredArt.TryBuildCompanion(transform, role, color, out muzzle))
                 muzzle = StylizedArt.BuildRex(transform);
             motion = GetComponent<StylizedCharacterMotion>();
         }
 
+        public void SetNavigation(FloorNavigation value) => navigation = value;
+
+        public void Teleport(Vector3 position)
+        {
+            transform.position = position;
+            previousPosition = position;
+            if (leader) lastLeaderPosition = leader.position;
+        }
+
         private void Update()
         {
             if (!leader || Time.timeScale <= 0f) return;
-            if (role == CompanionRole.Guardian) GuardianUpdate();
-            else if (role == CompanionRole.Support) SupportUpdate();
-            else RangerUpdate();
+            TrackLeaderHeading();
+            // Zurueckgeblieben, etwa nach einem Etagenwechsel: nicht quer ueber die Etage laufen.
+            if (FlatDistance(transform.position, leader.position) > 30f)
+            {
+                var fallback = leader.position - leaderHeading * 2f + Vector3.Cross(Vector3.up, leaderHeading) * side * 2f;
+                Teleport(navigation != null ? navigation.ClampToWalkable(fallback, 0.5f) : fallback);
+            }
+
+            var threat = FindEngagedEnemy(leader.position, ThreatRange, TeamId.Enemy);
+            Status = Time.time < healingUntil ? "HEALING"
+                : !threat ? "FOLLOWING"
+                : role switch { CompanionRole.Guardian => "FRONTLINE", CompanionRole.Support => "COVERING", _ => "FLANKING" };
+            switch (role)
+            {
+                case CompanionRole.Guardian: GuardianUpdate(threat); break;
+                case CompanionRole.Support: SupportUpdate(threat); break;
+                default: RangerUpdate(threat); break;
+            }
         }
 
-        private void GuardianUpdate()
+        private void LateUpdate() => previousPosition = transform.position;
+
+        private void TrackLeaderHeading()
         {
-            var target = Targeting.FindClosest(transform.position, 8f, TeamId.Enemy);
-            if (!target)
+            var moved = leader.position - lastLeaderPosition;
+            moved.y = 0f;
+            lastLeaderPosition = leader.position;
+            if (moved.sqrMagnitude > 0.0004f)
+                leaderHeading = Vector3.Slerp(leaderHeading, moved.normalized, 0.08f).normalized;
+        }
+
+        private void GuardianUpdate(Health threat)
+        {
+            // Vorn zwischen Spieler und Gegner. Laeuft nicht weiter als 12 Einheiten vom Spieler weg.
+            if (!threat || FlatDistance(transform.position, leader.position) > 12f)
             {
-                FollowFormation(6.1f);
+                MoveTo(Slot(), 6.1f);
+                FaceMovement();
                 return;
             }
 
-            var delta = target.transform.position - transform.position;
+            var delta = threat.transform.position - transform.position;
             delta.y = 0f;
             if (delta.sqrMagnitude > 2.3f * 2.3f)
-            {
-                var approach = target.transform.position - delta.normalized * 1.75f;
-                approach.y = 0f;
-                transform.position = Vector3.MoveTowards(transform.position, approach, 6.5f * Time.deltaTime);
-                ApplyPartySeparation();
-            }
+                MoveTo(threat.transform.position - delta.normalized * 1.75f, 6.5f);
             Face(delta);
             if (Time.time < nextAttack || delta.sqrMagnitude > 2.75f * 2.75f) return;
 
@@ -82,10 +136,42 @@ namespace Shatterspire
             CameraController.Impulse(0.045f);
         }
 
-        private void SupportUpdate()
+        private void RangerUpdate(Health threat)
         {
-            FollowFormation(5.7f);
-            var target = Targeting.FindClosest(transform.position, 10f, TeamId.Enemy);
+            // Seitlich zur Bedrohung, mit Abstand - schiesst an Guardian und Spieler vorbei.
+            MoveTo(threat ? FlankSlot(threat.transform.position, 3.6f) : Slot(), 6.2f);
+            var target = FindEngagedEnemy(transform.position, 12f, TeamId.Enemy);
+            if (!target)
+            {
+                FaceMovement();
+                return;
+            }
+            var delta = target.transform.position - transform.position;
+            delta.y = 0f;
+            Face(delta);
+            if (Time.time < nextAttack) return;
+            nextAttack = Time.time + 0.58f;
+            var direction = delta.sqrMagnitude > 0.01f ? delta.normalized : transform.forward;
+            var start = muzzle ? muzzle.position : transform.position + Vector3.up + direction * 0.7f;
+            Projectile.Spawn(start, direction, new Projectile.Payload
+            {
+                Owner = gameObject,
+                TargetTeam = TeamId.Enemy,
+                Damage = 5.5f,
+                Type = DamageType.Physical,
+                RemainingPierces = 1,
+                VisualScale = 0.92f,
+                VisualKind = ProjectileVisualKind.Arrow
+            }, 21f);
+            PrototypeVfx.SpawnMuzzle(start, direction);
+            motion?.PulseAttack(0.7f);
+        }
+
+        private void SupportUpdate(Health threat)
+        {
+            // Hinter dem Spieler, von der Bedrohung abgewandt.
+            MoveTo(threat ? CoverSlot(threat.transform.position, 3.4f) : Slot(), 5.7f);
+            var target = FindEngagedEnemy(transform.position, 10f, TeamId.Enemy);
             if (target)
             {
                 var delta = target.transform.position - transform.position;
@@ -109,49 +195,56 @@ namespace Shatterspire
                     motion?.PulseAttack(0.68f);
                 }
             }
+            else
+            {
+                FaceMovement();
+            }
 
             if (!leaderHealth || !leaderHealth.IsAlive || leaderHealth.Normalized >= 0.72f || Time.time < nextSupportPulse) return;
             nextSupportPulse = Time.time + 8f;
+            healingUntil = Time.time + 1.2f;
             leaderHealth.Heal(10f);
             PrototypeVfx.SpawnExplosion(leader.position + Vector3.up * 0.6f, 1.8f, new Color(0.3f, 1f, 0.62f));
         }
 
-        private void RangerUpdate()
+        /// <summary>Ruhige Aufstellung, ausgerichtet an der Laufrichtung des Spielers.</summary>
+        private Vector3 Slot()
         {
-            FollowFormation(6.2f);
-            var target = Targeting.FindClosest(transform.position, 12f, TeamId.Enemy);
-            if (!target) return;
-            var delta = target.transform.position - transform.position;
-            delta.y = 0f;
-            Face(delta);
-            if (Time.time < nextAttack) return;
-            nextAttack = Time.time + 0.58f;
-            var direction = delta.sqrMagnitude > 0.01f ? delta.normalized : transform.forward;
-            var start = muzzle ? muzzle.position : transform.position + Vector3.up + direction * 0.7f;
-            Projectile.Spawn(start, direction, new Projectile.Payload
+            var right = Vector3.Cross(Vector3.up, leaderHeading);
+            return role switch
             {
-                Owner = gameObject,
-                TargetTeam = TeamId.Enemy,
-                Damage = 5.5f,
-                Type = DamageType.Physical,
-                RemainingPierces = 1,
-                VisualScale = 0.92f,
-                VisualKind = ProjectileVisualKind.Arrow
-            }, 21f);
-            PrototypeVfx.SpawnMuzzle(start, direction);
-            motion?.PulseAttack(0.7f);
+                CompanionRole.Guardian => leader.position + leaderHeading * 2.6f + right * side * 1.6f,
+                CompanionRole.Support => leader.position - leaderHeading * 3.2f + right * side * 0.8f,
+                _ => leader.position - leaderHeading * 0.8f + right * side * 3.4f
+            };
         }
 
-        private void FollowFormation(float speed)
+        private Vector3 FlankSlot(Vector3 threat, float distance)
         {
-            // Formation is world-aligned so aiming never spins both companions on
-            // top of Rex. This keeps all three silhouettes readable on screen.
-            var destination = leader.position + Vector3.right * formationOffset.x + Vector3.forward * formationOffset.z;
+            var toThreat = FlatDirection(threat - leader.position);
+            var right = Vector3.Cross(Vector3.up, toThreat);
+            return leader.position + right * side * distance - toThreat * 1.2f;
+        }
+
+        private Vector3 CoverSlot(Vector3 threat, float distance)
+        {
+            var toThreat = FlatDirection(threat - leader.position);
+            return leader.position - toThreat * distance + Vector3.Cross(Vector3.up, toThreat) * side * 0.8f;
+        }
+
+        private void MoveTo(Vector3 destination, float speed)
+        {
             destination.y = 0f;
-            var distance = Vector3.Distance(transform.position, destination);
-            transform.position = Vector3.MoveTowards(transform.position, destination,
-                (distance > 6f ? 12f : speed) * Time.deltaTime);
+            if (FlatDistance(transform.position, destination) > 0.25f)
+            {
+                var waypoint = navigation != null ? navigation.NextWaypoint(transform.position, destination) : destination;
+                var distance = FlatDistance(transform.position, destination);
+                var step = (distance > 8f ? 12f : speed) * Time.deltaTime;
+                transform.position = Vector3.MoveTowards(transform.position,
+                    new Vector3(waypoint.x, transform.position.y, waypoint.z), step);
+            }
             ApplyPartySeparation();
+            if (navigation != null) transform.position = navigation.ClampToWalkable(transform.position, 0.45f);
         }
 
         private void ApplyPartySeparation()
@@ -161,7 +254,7 @@ namespace Shatterspire
             {
                 var fromLeader = transform.position - leader.position;
                 fromLeader.y = 0f;
-                if (fromLeader.sqrMagnitude < 1.45f * 1.45f)
+                if (fromLeader.sqrMagnitude < LeaderSpacing * LeaderSpacing)
                     correction += (fromLeader.sqrMagnitude > 0.01f ? fromLeader.normalized : Vector3.right) * 0.16f;
             }
 
@@ -171,10 +264,17 @@ namespace Shatterspire
                 if (!other || other == this) continue;
                 var away = transform.position - other.transform.position;
                 away.y = 0f;
-                if (away.sqrMagnitude < 0.01f || away.sqrMagnitude >= 1.7f * 1.7f) continue;
+                if (away.sqrMagnitude < 0.01f || away.sqrMagnitude >= PartySpacing * PartySpacing) continue;
                 correction += away.normalized * 0.13f;
             }
             transform.position += correction;
+        }
+
+        private void FaceMovement()
+        {
+            var moved = transform.position - previousPosition;
+            moved.y = 0f;
+            if (moved.sqrMagnitude > 0.0004f) Face(moved);
         }
 
         private void Face(Vector3 direction)
@@ -184,6 +284,41 @@ namespace Shatterspire
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(direction), 15f * Time.deltaTime);
         }
 
+        /// <summary>
+        /// Naechster Gegner, der schon kaempft. Ruhende Lager bleiben unberuehrt, bis der Spieler sie
+        /// weckt - sonst schoessen die Bots durch Waende und zoegen Lager aus dem Nachbarraum.
+        /// </summary>
+        private static Health FindEngagedEnemy(Vector3 point, float radius, TeamId team)
+        {
+            Health best = null;
+            var bestDistance = radius * radius;
+            foreach (var candidate in Health.Active)
+            {
+                if (!candidate || !candidate.IsAlive || candidate.Team != team) continue;
+                var offset = candidate.transform.position - point;
+                offset.y = 0f;
+                var distance = offset.sqrMagnitude;
+                if (distance > bestDistance) continue;
+                var agent = candidate.GetComponent<EnemyAgent>();
+                if (agent && agent.IsIdle) continue;
+                best = candidate;
+                bestDistance = distance;
+            }
+            return best;
+        }
+
+        private static Vector3 FlatDirection(Vector3 value)
+        {
+            value.y = 0f;
+            return value.sqrMagnitude > 0.0001f ? value.normalized : Vector3.forward;
+        }
+
+        private static float FlatDistance(Vector3 a, Vector3 b)
+        {
+            var dx = a.x - b.x;
+            var dz = a.z - b.z;
+            return Mathf.Sqrt(dx * dx + dz * dz);
+        }
     }
 
     public sealed class WorldFacingLabel : MonoBehaviour

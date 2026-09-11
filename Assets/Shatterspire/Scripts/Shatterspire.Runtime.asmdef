@@ -1,7 +1,11 @@
 {
   "name": "Shatterspire.Runtime",
   "rootNamespace": "Shatterspire",
-  "references": ["Unity.ugui"],
+  "references": [
+    "Unity.ugui",
+    "Unity.RenderPipelines.Core.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
