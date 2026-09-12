@@ -131,6 +131,34 @@ namespace Shatterspire
         }
 
         /// <summary>
+        /// Der weiteste begehbare Punkt auf der Strecke von <paramref name="from"/> nach
+        /// <paramref name="to"/>. Anders als <see cref="ClampToWalkable"/> springt das Ergebnis nicht
+        /// zurueck, wenn das Ziel im Abgrund oder hinter einer Wand liegt - es bleibt an der Kante
+        /// stehen.
+        ///
+        /// Gebraucht wird das von Spruengen: wer auf eine Wand zielt, soll bis an die Wand kommen.
+        /// Mit reinem Klemmen wurde ein Sprung von 7,5 Metern gemessen zu 2,1 Metern, weil der
+        /// naechstgelegene begehbare Punkt hinter dem Springer lag.
+        /// </summary>
+        public Vector3 FurthestWalkableAlong(Vector3 from, Vector3 to, float radius, float step = 0.5f)
+        {
+            var delta = to - from;
+            delta.y = 0f;
+            var distance = delta.magnitude;
+            if (distance < 0.001f) return ClampToWalkable(from, radius);
+            var direction = delta / distance;
+            var best = ClampToWalkable(from, radius);
+            var steps = Mathf.Max(1, Mathf.CeilToInt(distance / Mathf.Max(0.05f, step)));
+            for (var i = 1; i <= steps; i++)
+            {
+                var candidate = from + direction * (distance * i / steps);
+                if (!IsWalkable(candidate, radius)) break;
+                best = candidate;
+            }
+            return best;
+        }
+
+        /// <summary>
         /// Naechster Zwischenpunkt auf dem Weg von <paramref name="from"/> nach <paramref name="to"/>.
         /// Die gerade Strecke dorthin ist immer begehbar.
         /// </summary>

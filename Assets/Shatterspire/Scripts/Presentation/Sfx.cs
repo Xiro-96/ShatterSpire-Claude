@@ -85,7 +85,10 @@ namespace Shatterspire
 
         private static void Fire(AudioSource source, Sound sound, float gain)
         {
-            source.clip = ProceduralSound.For(sound);
+            // Zufaellige Fassung: bei drei echten Fassungen klingt der hundertste Treffer nicht mehr
+            // wie der erste. Die Tonhoehenstreuung kommt zusaetzlich dazu.
+            var variants = ProceduralSound.VariantsFor(sound);
+            source.clip = ProceduralSound.For(sound, variants > 1 ? Random.Range(0, variants) : 0);
             source.loop = false;
             source.volume = Mathf.Clamp01(gain) * volume;
             var spread = ProceduralSound.PitchSpreadFor(sound);

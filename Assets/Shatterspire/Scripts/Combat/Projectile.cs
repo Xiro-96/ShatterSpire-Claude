@@ -12,6 +12,27 @@ namespace Shatterspire
         private static readonly RaycastHit[] SweepHits = new RaycastHit[SweepCapacity];
         private static readonly Collider[] OverlapHits = new Collider[SweepCapacity];
 
+        /// <summary>
+        /// Alle fliegenden Geschosse. Gebraucht wird das vom Zeitriss, der Geschosse aus der Luft
+        /// nimmt - dafuer muss man sie finden koennen. Gleiches Muster wie Health.Active und
+        /// EnemyAgent: Liste der Instanzen, beim Start des Spiels geleert.
+        /// </summary>
+        private static readonly List<Projectile> Flying = new();
+        public static IReadOnlyList<Projectile> Active => Flying;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetRegistry() => Flying.Clear();
+
+        /// <summary>Wessen Geschoss das ist - der Zeitriss nimmt nur die der Gegner.</summary>
+        public TeamId TargetTeam => payload.TargetTeam;
+
+        private void OnEnable()
+        {
+            if (!Flying.Contains(this)) Flying.Add(this);
+        }
+
+        private void OnDisable() => Flying.Remove(this);
+
         public struct Payload
         {
             public GameObject Owner;

@@ -22,6 +22,7 @@ namespace Shatterspire
         private int dashCharges;
         private float nextRecharge;
         private bool rolling;
+        private bool airborne;
         private Vector3 rollDirection;
         private Vector3 velocity;
         private Vector3 acceleration;
@@ -36,6 +37,30 @@ namespace Shatterspire
         public void ConfigureClass(HeroClassId value) => heroClass = value;
 
         public void SetNavigation(FloorNavigation value) => navigation = value;
+
+        /// <summary>Wegenetz der Etage. Der Schmiedesturz braucht es, um im begehbaren Bereich zu landen.</summary>
+        public FloorNavigation Navigation => navigation;
+
+        /// <summary>
+        /// Setzt den Helden waehrend eines Sprungs frei im Raum. Der Motor ist dabei aus: eine
+        /// CharacterController-Bewegung wuerde ihn sofort wieder auf den Boden ziehen.
+        /// </summary>
+        public void Airborne(Vector3 position)
+        {
+            airborne = true;
+            motor.enabled = false;
+            transform.position = position;
+        }
+
+        /// <summary>Beendet einen Sprung und setzt den Helden auf den Boden zurueck.</summary>
+        public void Land(Vector3 position)
+        {
+            transform.position = position;
+            motor.enabled = true;
+            airborne = false;
+            velocity = Vector3.zero;
+            acceleration = Vector3.zero;
+        }
 
         public void Teleport(Vector3 position)
         {
@@ -64,6 +89,8 @@ namespace Shatterspire
         {
             RechargeDash();
             if (!health.IsAlive || Time.timeScale <= 0f) return;
+            // Im Sprung steuert die Ultimate die Position; Eingaben wuerden sie sonst verreissen.
+            if (airborne) return;
             if (input.DashPressed && !rolling && dashCharges > 0) StartCoroutine(Roll());
             if (!rolling) MoveAndAim();
         }
@@ -141,6 +168,7 @@ namespace Shatterspire
 
         private void LateUpdate()
         {
+            if (airborne) return;
             // Sicherung fuer Faelle, in denen die Wandkollision nicht greift - etwa beim Bull Rush,
             // der die Position direkt versetzt. Die Etage kennt ihre begehbare Flaeche.
             var position = transform.position;

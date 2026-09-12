@@ -11,7 +11,9 @@ namespace Shatterspire
         HitLight, HitHeavy, HitCritical, Explosion, Shockwave,
         Death, EnemyArrival, Block, GuardBreak, Telegraph,
         HeavyReady, UltimateRise, CoreActivated, FloorCleared,
-        UiClick, UiConfirm, PlayerHurt, Ambience
+        UiClick, UiConfirm, PlayerHurt, Ambience,
+        // Die drei Ultimates vom 12.09.
+        PlungeRise, PlungeImpact, RiftOpen, FocusEnter, FocusExtend, FocusEnd
     }
 
     /// <summary>
@@ -33,17 +35,32 @@ namespace Shatterspire
 
         private enum Wave { Sine, Triangle, Square, Saw }
 
-        private static readonly Dictionary<Sound, AudioClip> Cache = new();
+        private static readonly Dictionary<int, AudioClip> Cache = new();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetCache() => Cache.Clear();
 
-        /// <summary>Erzeugt den Klang beim ersten Abruf und behaelt ihn danach.</summary>
-        public static AudioClip For(Sound sound)
+        /// <summary>
+        /// Wie viele echte Fassungen es von einem Klang gibt. Die haeufigsten bekommen mehrere: eine
+        /// bloss verstimmte Wiederholung erkennt das Ohr als dieselbe Aufnahme, eine mit anderem
+        /// Rauschverlauf nicht. Genau daran merkt man in einem langen Kampf den Unterschied.
+        /// </summary>
+        public static int VariantsFor(Sound sound) => sound switch
         {
-            if (Cache.TryGetValue(sound, out var cached) && cached) return cached;
-            var clip = Build(sound);
-            Cache[sound] = clip;
+            Sound.HitLight or Sound.Footstep or Sound.Swing or Sound.HitHeavy or Sound.Block => 3,
+            Sound.Smash or Sound.Shot or Sound.Release or Sound.Stab or Sound.Shockwave => 2,
+            _ => 1
+        };
+
+        /// <summary>Erzeugt den Klang beim ersten Abruf und behaelt ihn danach.</summary>
+        public static AudioClip For(Sound sound, int variant = 0)
+        {
+            var count = VariantsFor(sound);
+            variant = count <= 1 ? 0 : ((variant % count) + count) % count;
+            var key = (int)sound * 8 + variant;
+            if (Cache.TryGetValue(key, out var cached) && cached) return cached;
+            var clip = Build(sound, variant);
+            Cache[key] = clip;
             return clip;
         }
 
@@ -61,6 +78,10 @@ namespace Shatterspire
             Sound.HitLight => 0.55f,
             Sound.Shockwave or Sound.HitHeavy => 0.8f,
             Sound.Explosion or Sound.GuardBreak or Sound.UltimateRise => 0.9f,
+            Sound.PlungeImpact => 1f,
+            Sound.PlungeRise => 0.5f,
+            Sound.FocusExtend => 0.3f,
+            Sound.FocusEnd => 0.4f,
             _ => 0.65f
         };
 
@@ -70,23 +91,27 @@ namespace Shatterspire
             Sound.Ambience => 0f,
             Sound.CoreActivated or Sound.FloorCleared or Sound.UiConfirm or Sound.HeavyReady => 0.01f,
             Sound.Footstep or Sound.HitLight or Sound.Swing => 0.1f,
+            // Die Ultimate-Klaenge sollen jedes Mal gleich klingen: sie sind ein Ereignis, kein Treffer.
+            Sound.PlungeImpact or Sound.RiftOpen or Sound.FocusEnter or Sound.FocusEnd => 0.01f,
             _ => 0.055f
         };
 
         public static bool Loops(Sound sound) => sound == Sound.Ambience;
 
-        private static AudioClip Build(Sound sound)
+        private static AudioClip Build(Sound sound, int variant)
         {
             var length = LengthOf(sound);
             var buffer = new float[Mathf.Max(64, Mathf.RoundToInt(length * SampleRate))];
-            var noise = new Noise((uint)(sound.GetHashCode() * 2654435761u + 12345u));
+            // Anderer Startwert je Fassung: gleicher Aufbau, anderer Rauschverlauf.
+            var noise = new Noise((uint)(sound.GetHashCode() * 2654435761u + 12345u + variant * 7919u));
             Compose(sound, buffer, ref noise);
             var room = RoomFor(sound);
             if (room > 0f) ApplyRoom(buffer, room);
-            Normalize(buffer, PeakFor(sound));
+            Normalize(buffer, PeakFor(sound), DriveFor(sound));
             if (Loops(sound)) CrossfadeEnds(buffer, 0.25f);
             else FadeTail(buffer, 0.01f);
-            var clip = AudioClip.Create("SHATTERSPIRE " + sound, buffer.Length, 1, SampleRate, false);
+            var clip = AudioClip.Create("SHATTERSPIRE " + sound + (variant > 0 ? " " + variant : string.Empty),
+                buffer.Length, 1, SampleRate, false);
             clip.SetData(buffer, 0);
             return clip;
         }
@@ -100,6 +125,9 @@ namespace Shatterspire
             Sound.UiClick or Sound.UiConfirm or Sound.Ambience => 0f,
             Sound.Footstep => 0.2f,
             Sound.Explosion or Sound.GuardBreak or Sound.UltimateRise => 0.42f,
+            Sound.PlungeImpact => 0.5f,
+            Sound.RiftOpen => 0.4f,
+            Sound.PlungeRise or Sound.FocusEnter => 0.2f,
             Sound.Block or Sound.Shockwave or Sound.HitHeavy or Sound.Death => 0.32f,
             Sound.CoreActivated or Sound.FloorCleared or Sound.HeavyReady => 0.3f,
             _ => 0.24f
@@ -127,6 +155,12 @@ namespace Shatterspire
             Sound.UltimateRise => 1.3f,
             Sound.FloorCleared => 1.9f,
             Sound.Ambience => 5f,
+            Sound.PlungeRise => 0.7f,
+            Sound.PlungeImpact => 1.4f,
+            Sound.RiftOpen => 1.2f,
+            Sound.FocusEnter => 0.7f,
+            Sound.FocusExtend => 0.14f,
+            Sound.FocusEnd => 0.5f,
             _ => 0.4f
         };
 
@@ -204,7 +238,8 @@ namespace Shatterspire
                     // Stiefel auf Stein: ein kurzer Schabgeraeusch-Anteil, darunter der dumpfe Koerper.
                     Strike(buffer, ref noise, 0f, 0.003f, 2600f, 0.5f);
                     AddResonator(buffer, ref noise, 0f, 86f, 0.09f, 1f, 0.004f);
-                    AddResonator(buffer, ref noise, 0f, 148f, 0.06f, 0.55f, 0.003f);
+                    // Auch der Schritt braucht seine Mitte, sonst ist er am Telefon nicht da.
+                    Knock(buffer, ref noise, 0f, 520f, 0.05f, 0.4f);
                     AddSweptNoise(buffer, ref noise, 0.001f, 0.05f, 0.3f, 0.002f, 40f, 1800f, 500f, 260f);
                     break;
 
@@ -214,20 +249,21 @@ namespace Shatterspire
                     Strike(buffer, ref noise, 0f, 0.002f, 6000f, 1f);
                     AddResonator(buffer, ref noise, 0f, 318f, 0.09f, 0.9f, 0.002f);
                     AddResonator(buffer, ref noise, 0f, 547f, 0.07f, 0.6f, 0.002f);
-                    AddResonator(buffer, ref noise, 0f, 892f, 0.05f, 0.35f, 0.002f);
-                    AddResonator(buffer, ref noise, 0f, 132f, 0.11f, 0.55f, 0.003f);
+                    Knock(buffer, ref noise, 0f, 1180f, 0.06f, 0.5f);
+                    Body(buffer, ref noise, 0f, 132f, 0.06f, 0.22f, 0.55f);
                     break;
                 case Sound.HitHeavy:
                     Strike(buffer, ref noise, 0f, 0.004f, 4200f, 1f);
-                    AddResonator(buffer, ref noise, 0f, 62f, 0.4f, 1f, 0.005f);
+                    Body(buffer, ref noise, 0f, 62f, 0.13f, 0.42f, 1f);
                     AddResonator(buffer, ref noise, 0f, 118f, 0.3f, 0.8f, 0.004f);
                     AddResonator(buffer, ref noise, 0f, 231f, 0.16f, 0.5f, 0.003f);
-                    AddResonator(buffer, ref noise, 0f, 402f, 0.1f, 0.3f, 0.002f);
+                    Knock(buffer, ref noise, 0f, 820f, 0.1f, 0.62f);
                     break;
                 case Sound.HitCritical:
                     Strike(buffer, ref noise, 0f, 0.002f, 9000f, 1f);
-                    AddResonator(buffer, ref noise, 0f, 96f, 0.3f, 0.9f, 0.004f);
+                    Body(buffer, ref noise, 0f, 96f, 0.09f, 0.32f, 0.9f);
                     AddResonator(buffer, ref noise, 0f, 276f, 0.14f, 0.7f, 0.002f);
+                    Knock(buffer, ref noise, 0f, 1080f, 0.09f, 0.55f);
                     // Zwei helle Moden mehr als beim normalen Treffer: so hebt sich der Krit ab,
                     // ohne einfach lauter zu sein.
                     AddResonator(buffer, ref noise, 0.004f, 1560f, 0.3f, 0.5f, 0.0015f);
@@ -238,14 +274,16 @@ namespace Shatterspire
                     // Rollen, statt einfach leiser zu werden.
                     Strike(buffer, ref noise, 0f, 0.004f, 9000f, 1f);
                     AddSweptNoise(buffer, ref noise, 0f, 0.75f, 1f, 0.006f, 4.2f, 4200f, 160f, 40f);
-                    AddResonator(buffer, ref noise, 0f, 44f, 0.55f, 1f, 0.008f);
+                    Body(buffer, ref noise, 0f, 44f, 0.18f, 0.6f, 1f);
                     AddResonator(buffer, ref noise, 0f, 79f, 0.4f, 0.6f, 0.006f);
+                    Knock(buffer, ref noise, 0f, 640f, 0.16f, 0.55f);
                     break;
                 case Sound.Shockwave:
                     Strike(buffer, ref noise, 0f, 0.003f, 5000f, 0.8f);
                     AddSweptNoise(buffer, ref noise, 0f, 0.4f, 0.7f, 0.004f, 8f, 2400f, 200f, 60f);
-                    AddResonator(buffer, ref noise, 0f, 54f, 0.42f, 1f, 0.006f);
+                    Body(buffer, ref noise, 0f, 54f, 0.14f, 0.44f, 1f);
                     AddResonator(buffer, ref noise, 0f, 101f, 0.26f, 0.55f, 0.004f);
+                    Knock(buffer, ref noise, 0f, 760f, 0.12f, 0.6f);
                     break;
                 case Sound.PlayerHurt:
                     // Eigener Schaden: dumpfer Einschlag plus ein kurzer, tiefer Laut.
@@ -345,6 +383,52 @@ namespace Shatterspire
                     break;
 
                 // ── Hintergrund ─────────────────────────────────────────
+                case Sound.PlungeRise:
+                    // Absprung: Luft, die unter dem Helden wegzieht, und eine steigende Spannung.
+                    AddSweptNoise(buffer, ref noise, 0f, 0.62f, 0.8f, 0.1f, 1.6f, 300f, 2600f, 180f);
+                    AddTone(buffer, 0f, 0.6f, 120f, 360f, Wave.Sine, 0.5f, 0.12f, 1.2f);
+                    AddResonator(buffer, ref noise, 0f, 210f, 0.2f, 0.5f, 0.006f);
+                    break;
+                case Sound.PlungeImpact:
+                    // Der schwerste Klang im Spiel: Knall, rollender Bass, dann nachfallendes Gestein.
+                    Strike(buffer, ref noise, 0f, 0.006f, 9000f, 1f);
+                    Body(buffer, ref noise, 0f, 38f, 0.22f, 0.85f, 1f);
+                    Body(buffer, ref noise, 0f, 71f, 0.18f, 0.6f, 0.7f);
+                    Knock(buffer, ref noise, 0f, 700f, 0.2f, 0.8f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.9f, 0.9f, 0.006f, 3.4f, 5000f, 120f, 35f);
+                    for (var i = 0; i < 11; i++)
+                    {
+                        var at = 0.08f + i * 0.045f + Mathf.Abs(noise.Next()) * 0.02f;
+                        AddResonator(buffer, ref noise, at, 300f + Mathf.Abs(noise.Next()) * 1300f,
+                            0.06f, 0.3f - i * 0.022f, 0.0015f);
+                    }
+                    break;
+                case Sound.RiftOpen:
+                    // Ein Einatmen: die Partiale steigen, statt abzufallen. Deshalb liest es sich als
+                    // Oeffnen und nicht als Einschlag.
+                    AddTone(buffer, 0f, 0.85f, 900f, 220f, Wave.Sine, 0.45f, 0.4f, 0.9f);
+                    AddTone(buffer, 0f, 0.85f, 906f, 218f, Wave.Sine, 0.35f, 0.4f, 0.9f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.9f, 0.55f, 0.5f, 1.1f, 6000f, 400f, 220f);
+                    AddBell(buffer, ref noise, 0.55f, 1320f, 0.6f, 0.5f);
+                    AddResonator(buffer, ref noise, 0.55f, 55f, 0.7f, 0.6f, 0.008f);
+                    break;
+                case Sound.FocusEnter:
+                    // Anspannung, kein Knall: ein Einatmen und ein gehaltener Ton.
+                    AddSweptNoise(buffer, ref noise, 0f, 0.32f, 0.5f, 0.22f, 3f, 400f, 3000f, 300f);
+                    AddTone(buffer, 0.05f, 0.6f, 660f, 990f, Wave.Sine, 0.6f, 0.06f, 1.6f);
+                    AddBell(buffer, ref noise, 0.06f, 990f, 0.5f, 0.55f);
+                    break;
+                case Sound.FocusExtend:
+                    // Kurzer heller Tick: muss im Kampf durchkommen, ohne zu stoeren.
+                    AddResonator(buffer, ref noise, 0f, 1980f, 0.08f, 1f, 0.001f);
+                    AddResonator(buffer, ref noise, 0f, 2970f, 0.05f, 0.4f, 0.001f);
+                    break;
+                case Sound.FocusEnd:
+                    // Derselbe Ton faellt ab: man hoert, dass der Zustand weg ist.
+                    AddTone(buffer, 0f, 0.42f, 880f, 420f, Wave.Sine, 0.6f, 0.01f, 4f);
+                    AddResonator(buffer, ref noise, 0f, 420f, 0.3f, 0.4f, 0.002f);
+                    break;
+
                 case Sound.Ambience:
                     // Ein Turm unter Spannung: tiefe Grundstimme, verstimmte Partiale, dazu ein Zug
                     // von Luft, der die Flaeche atmen laesst.
@@ -405,6 +489,31 @@ namespace Shatterspire
             AddResonator(buffer, ref noise, start, hz * 2.76f, decay * 0.72f, gain * 0.5f, 0.0012f);
             AddResonator(buffer, ref noise, start, hz * 5.4f, decay * 0.45f, gain * 0.26f, 0.001f);
             AddResonator(buffer, ref noise, start, hz * 8.93f, decay * 0.3f, gain * 0.12f, 0.001f);
+        }
+
+        /// <summary>
+        /// Mittenlage eines Einschlags: zwei Moden zwischen 700 und 2500 Hz.
+        ///
+        /// Das ist keine Klangfarbe, sondern Zweck. Ein Telefonlautsprecher gibt unter etwa 400 Hz
+        /// praktisch nichts wieder - ein Treffer, dessen ganze Wucht bei 60 Hz sitzt, ist am Geraet
+        /// schlicht nicht da. Die Wucht muss deshalb zusaetzlich in den Mitten stehen. Am Kopfhoerer
+        /// kommt beides.
+        /// </summary>
+        private static void Knock(float[] buffer, ref Noise noise, float start, float hz, float decay, float gain)
+        {
+            AddResonator(buffer, ref noise, start, hz, decay, gain, 0.002f);
+            AddResonator(buffer, ref noise, start, hz * 1.47f, decay * 0.7f, gain * 0.55f, 0.002f);
+        }
+
+        /// <summary>
+        /// Zweistufiger Abfall auf derselben Frequenz: ein kurzer, lauter Teil und ein langer, leiser.
+        /// Echte Koerper klingen so ab, eine einzelne Exponentialkurve nie.
+        /// </summary>
+        private static void Body(float[] buffer, ref Noise noise, float start, float hz, float shortDecay,
+            float longDecay, float gain)
+        {
+            AddResonator(buffer, ref noise, start, hz, shortDecay, gain, 0.003f);
+            AddResonator(buffer, ref noise, start, hz * 1.004f, longDecay, gain * 0.38f, 0.004f);
         }
 
         /// <summary>Der Anschlag selbst: sehr kurzer, sehr heller Stoss. Ohne ihn klingt jeder Treffer weich.</summary>
@@ -512,6 +621,14 @@ namespace Shatterspire
             int[] delays = { 1237, 1619, 2029, 2503 };
             float[] feedback = { 0.62f, 0.58f, 0.54f, 0.5f };
             var wet = new float[buffer.Length];
+
+            // Erste Reflexionen: drei einzelne, frueh eintreffende Kopien (7 bis 24 ms). Sie sagen dem
+            // Ohr, wie gross der Raum ist. Ohne sie ist die Fahne nur ein Schleier ohne Ort.
+            int[] early = { 309, 617, 1061 };
+            float[] earlyGain = { 0.34f, 0.24f, 0.17f };
+            for (var line = 0; line < early.Length; line++)
+            for (var i = early[line]; i < buffer.Length; i++)
+                wet[i] += buffer[i - early[line]] * earlyGain[line];
             for (var line = 0; line < delays.Length; line++)
             {
                 var delay = delays[line];
@@ -528,14 +645,51 @@ namespace Shatterspire
             for (var i = 0; i < buffer.Length; i++) buffer[i] += wet[i] * mix;
         }
 
-        private static void Normalize(float[] buffer, float peak)
+        /// <summary>
+        /// Bringt den Klang auf Lautheit und begrenzt die Spitzen weich, danach exakt auf den Zielpegel.
+        ///
+        /// Reine Spitzen-Normierung war zu wenig: sobald der Raum dazukam, stieg die hoechste Spitze,
+        /// alles andere wurde heruntergezogen, und die Klaenge wirkten duenn - gemessen fiel der
+        /// Mittelwert von 0,08 auf 0,04, obwohl die Spitze gleich blieb. Ein Begrenzer loest das, weil
+        /// er den Abstand zwischen Spitze und Mittel verkleinert statt alles leiser zu machen.
+        /// Genau das macht in Spielen den Unterschied zwischen "da war ein Geraeusch" und "das hat
+        /// gesessen", besonders auf einem Telefonlautsprecher.
+        /// </summary>
+        private static void Normalize(float[] buffer, float peak, float drive)
         {
+            var energy = 0.0;
+            for (var i = 0; i < buffer.Length; i++) energy += buffer[i] * (double)buffer[i];
+            var rms = Mathf.Sqrt((float)(energy / Mathf.Max(1, buffer.Length)));
+            if (rms < 0.000001f) return;
+
+            // Auf eine gemeinsame Lautheit anheben, dann durch die Saettigung schicken.
+            const float loudnessTarget = 0.33f;
+            var gain = loudnessTarget / rms * drive;
+            for (var i = 0; i < buffer.Length; i++)
+                buffer[i] = (float)System.Math.Tanh(buffer[i] * gain);
+
+            // Tanh bleibt unter eins; der letzte Schritt setzt den Pegel genau.
             var loudest = 0f;
             for (var i = 0; i < buffer.Length; i++) loudest = Mathf.Max(loudest, Mathf.Abs(buffer[i]));
             if (loudest < 0.0001f) return;
             var scale = peak / loudest;
             for (var i = 0; i < buffer.Length; i++) buffer[i] *= scale;
         }
+
+        /// <summary>
+        /// Wie hart ein Klang in die Saettigung darf. Einschlaege duerfen - bei ihnen ist die
+        /// Verzerrung Teil der Wucht. Toene, Glocken und die Hintergrundflaeche wuerden dabei
+        /// schmutzig, die bekommen weniger.
+        /// </summary>
+        private static float DriveFor(Sound sound) => sound switch
+        {
+            Sound.Ambience => 0.3f,
+            Sound.Cast or Sound.RiftOpen or Sound.FocusEnter or Sound.FocusEnd => 0.5f,
+            Sound.CoreActivated or Sound.FloorCleared or Sound.UiConfirm or Sound.HeavyReady
+                or Sound.Telegraph or Sound.Block => 0.65f,
+            Sound.Draw or Sound.Swing or Sound.Spin or Sound.Stab or Sound.Dash => 0.8f,
+            _ => 1f
+        };
 
         private static void FadeTail(float[] buffer, float seconds)
         {

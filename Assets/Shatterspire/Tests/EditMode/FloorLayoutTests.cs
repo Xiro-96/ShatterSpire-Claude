@@ -306,6 +306,48 @@ namespace Shatterspire.Tests
         }
 
         [Test]
+        public void SprungLandetAnDerKanteUndNichtWiederAmStart()
+        {
+            foreach (var layout in SampleFloors().Take(40))
+            {
+                var navigation = new FloorNavigation(layout);
+                var start = layout.SpawnPoint;
+                foreach (var direction in new[] { Vector3.forward, Vector3.back, Vector3.left, Vector3.right })
+                {
+                    // Weit ueber die Etage hinaus zielen: das Ergebnis muss begehbar sein und darf
+                    // nicht hinter dem Start liegen - genau das war der Fehler, der einen Sprung von
+                    // 7,5 Metern zu 2,1 Metern gemacht hat.
+                    var wanted = start + direction * 40f;
+                    var landing = navigation.FurthestWalkableAlong(start, wanted, 0.6f);
+                    Assert.That(navigation.IsWalkable(landing, 0.59f), Is.True,
+                        $"Seed {layout.Seed}: Landung {landing} ist nicht begehbar.");
+                    var travelled = Vector3.Dot(landing - start, direction);
+                    Assert.That(travelled, Is.GreaterThanOrEqualTo(-0.01f),
+                        $"Seed {layout.Seed}: Sprung nach {direction} ging rueckwaerts.");
+                }
+            }
+        }
+
+        [Test]
+        public void SprungBleibtVorEinerDeckungStehen()
+        {
+            var layout = FloorLayoutGenerator.Generate(1234, 3, RoomKind.Combat);
+            var navigation = new FloorNavigation(layout);
+            foreach (var room in layout.Rooms)
+            foreach (var cover in room.Cover)
+            {
+                // Von einer Seite genau durch die Deckung zielen: die Landung darf nie darin liegen.
+                var centre = cover.Center;
+                var from = centre + Vector3.left * (cover.Width * 0.5f + 2.5f);
+                if (!navigation.IsWalkable(from, 0.6f)) continue;
+                var landing = navigation.FurthestWalkableAlong(from, centre + Vector3.right * 3f, 0.6f);
+                Assert.That(cover.Contains(landing), Is.False,
+                    $"Landung {landing} steckt in einer Deckung.");
+                Assert.That(navigation.IsWalkable(landing, 0.59f), Is.True);
+            }
+        }
+
+        [Test]
         public void SichtlinieBleibtOhneDeckungDazwischenFrei()
         {
             var layout = FloorLayoutGenerator.Generate(1234, 2, RoomKind.Combat);

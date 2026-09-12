@@ -8,6 +8,8 @@ namespace Shatterspire
     public sealed class EnemyAgent : MonoBehaviour
     {
         private static readonly System.Collections.Generic.List<EnemyAgent> ActiveAgents = new();
+        /// <summary>Alle lebenden Gegner. Gebraucht von Flaechenwirkungen, die Gegner selbst ansprechen.</summary>
+        public static System.Collections.Generic.IReadOnlyList<EnemyAgent> Active => ActiveAgents;
         private enum State { Idle, Chase, Telegraph, Attack, Dead }
         private EnemyKind kind;
         private EnemyStats stats;
@@ -275,6 +277,24 @@ namespace Shatterspire
             var dx = a.x - b.x;
             var dz = a.z - b.z;
             return Mathf.Sqrt(dx * dx + dz * dz);
+        }
+
+        /// <summary>
+        /// Haelt den Gegner vollstaendig an. Nutzt denselben Riegel wie die Trefferreaktion - Bewegung,
+        /// Vorwarnung und Angriff laufen darueber, also genuegt ein Zeitstempel fuer eine echte
+        /// Betaeubung. Ein laufender Angriff wird zusaetzlich abgebrochen.
+        /// </summary>
+        public void Stun(float seconds)
+        {
+            if (state == State.Dead || seconds <= 0f) return;
+            hitStaggerUntil = Mathf.Max(hitStaggerUntil, Time.time + seconds);
+            if (state is State.Telegraph or State.Attack)
+            {
+                StopAllCoroutines();
+                state = State.Chase;
+                attackReadyAt = Mathf.Max(attackReadyAt, Time.time + seconds);
+            }
+            motion?.PulseHit();
         }
 
         private void OnDamaged(DamageInfo damage)

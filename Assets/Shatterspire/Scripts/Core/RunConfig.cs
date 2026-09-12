@@ -133,9 +133,9 @@ namespace Shatterspire
 
         public static string UltimateName(HeroClassId hero) => hero switch
         {
-            HeroClassId.Guardian => "FORGE QUAKE",
-            HeroClassId.Arcanist => "SINGULARITY",
-            _ => "RIFT BARRAGE"
+            HeroClassId.Guardian => "FORGE PLUNGE",
+            HeroClassId.Arcanist => "TIME RIFT",
+            _ => "HUNTERS FOCUS"
         };
     }
 

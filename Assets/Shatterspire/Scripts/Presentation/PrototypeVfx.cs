@@ -260,6 +260,40 @@ namespace Shatterspire
             go.AddComponent<VfxPulse>().Configure(0.35f, 1.8f, false);
         }
 
+        /// <summary>
+        /// Dauerhafte Flaeche am Boden fuer Ultimate-Zonen - Krater, Zeitriss. Anders als eine
+        /// Vorwarnung bleibt sie stehen und pulsiert nur leicht, damit sie als Gelaende liest und
+        /// nicht als Gefahr, auf die man reagieren muss.
+        /// </summary>
+        public static GameObject SpawnZone(Vector3 position, float radius, Color color, float seconds)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            go.name = "Ultimate Zone";
+            go.transform.position = position + Vector3.up * 0.03f;
+            go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            go.transform.localScale = Vector3.one * radius * 2f;
+            // Fuellung sehr zurueckhaltend: die Zone soll den Boden faerben, nicht ihn zumalen.
+            var fill = color;
+            fill.a = 0.2f;
+            go.GetComponent<Renderer>().sharedMaterial = PrototypeFactory.CreateRadialDecal(fill);
+            PrototypeFactory.RemoveCollider(go.GetComponent<Collider>());
+            go.AddComponent<VfxZonePulse>().Configure(seconds);
+
+            // Die Kante als echter Ring. Vorher stand hier ein Zylinder - der ist massiv und
+            // erschien im Bild als undurchsichtiger Teller ueber dem halben Raum.
+            var rim = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            rim.name = "Zone Rim";
+            rim.transform.SetParent(go.transform, false);
+            rim.transform.localPosition = Vector3.up * 0.01f;
+            rim.transform.localRotation = Quaternion.identity;
+            rim.transform.localScale = Vector3.one * 1.02f;
+            var edge = color;
+            edge.a = 0.75f;
+            rim.GetComponent<Renderer>().sharedMaterial = PrototypeFactory.CreateRadialDecal(edge, 0.88f);
+            PrototypeFactory.RemoveCollider(rim.GetComponent<Collider>());
+            return go;
+        }
+
         public static GameObject SpawnTelegraph(Vector3 position, float radius, bool line)
         {
             Sfx.Play(Sound.Telegraph, position, 0.7f);
@@ -292,6 +326,26 @@ namespace Shatterspire
             PrototypeFactory.RemoveCollider(go.GetComponent<Collider>());
             go.AddComponent<DangerTelegraphMotion>().Configure(false);
             return go;
+        }
+    }
+
+    /// <summary>Leises Atmen einer Ultimate-Zone. Nur Optik, keine Wirkung.</summary>
+    public sealed class VfxZonePulse : MonoBehaviour
+    {
+        private Vector3 baseScale;
+        private float endsAt;
+
+        public void Configure(float seconds) => endsAt = Time.time + seconds;
+
+        private void Awake() => baseScale = transform.localScale;
+
+        private void Update()
+        {
+            var pulse = 1f + Mathf.Sin(Time.time * 3.4f) * 0.02f;
+            // Am Ende schrumpft die Flaeche, damit das Auslaufen sichtbar ist.
+            var remaining = endsAt - Time.time;
+            if (remaining < 0.6f) pulse *= Mathf.Clamp01(remaining / 0.6f);
+            transform.localScale = baseScale * pulse;
         }
     }
 

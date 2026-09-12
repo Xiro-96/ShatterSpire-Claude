@@ -40,6 +40,13 @@ namespace Shatterspire
         /// <summary>So lange gilt ein Tipp als noch offen, wenn die Aktion gerade nicht bereit war.</summary>
         private const float AttackBufferSeconds = 0.15f;
         private float attackRequestedAt = -10f;
+        /// <summary>Rex' Jaegerblick laeuft bis zu diesem Zeitpunkt. Jeder Abschuss verlaengert ihn.</summary>
+        private float focusUntil;
+        private const float FocusBaseSeconds = 5f;
+        private const float FocusPerKill = 0.6f;
+        private const float FocusMaximum = 9f;
+        /// <summary>Der Jaegerblick laeuft. Das HUD zeigt es am Ultimate-Knopf.</summary>
+        public bool HunterFocusActive => Time.time < focusUntil;
         private float ultimateCharge;
         private bool ultimateActive;
         private int lightComboStep;
@@ -108,6 +115,16 @@ namespace Shatterspire
                 StartCoroutine(Ultimate());
         }
 
+        /// <summary>
+        /// Fuellt die Ultimate sofort. Nur fuer die automatische Vorfuehrung (CaptureDemo): ohne das
+        /// liesse sich der Schmiedesturz nicht ohne Kampf pruefen.
+        /// </summary>
+        public void FillUltimateForCapture()
+        {
+            ultimateCharge = 1f;
+            PublishHeavyState();
+        }
+
         public void NotifyLightHit()
         {
             if (chargingHeavy || HeavyReady) return;
@@ -137,7 +154,13 @@ namespace Shatterspire
 
         private void OnEntityDied(Health value)
         {
-            if (value && value.Team == TeamId.Enemy) AddUltimateCharge(0.02f);
+            if (!value || value.Team != TeamId.Enemy) return;
+            AddUltimateCharge(0.02f);
+            // Jaegerblick lebt von Abschuessen: wer trifft, bleibt laenger im Zustand. Das macht die
+            // Ultimate zu einer Kette statt zu einem einzelnen Knall.
+            if (!HunterFocusActive) return;
+            focusUntil = Mathf.Min(Time.time + FocusMaximum, focusUntil + FocusPerKill);
+            Sfx.Play2D(Sound.FocusExtend, 0.6f);
         }
 
         private void AddUltimateCharge(float amount)
@@ -182,6 +205,8 @@ namespace Shatterspire
 
             comboExpiresAt = Time.time + 0.95f;
             var interval = heroClass == HeroClassId.Arcanist ? 0.34f : finisher ? 0.42f : 0.25f;
+            // Im Jaegerblick schiesst Rex fast ohne Pause, und jeder Pfeil sucht sich sein Ziel.
+            if (HunterFocusActive && heroClass == HeroClassId.Ranger) interval = 0.075f;
             nextShot = Time.time + interval / build.AttackSpeedMultiplier;
             var damage = BaseDamage * (finisher ? 1.38f : lightComboStep == 2 ? 1.1f : 1f);
             var impactRadius = finisher ? 0.75f : 0f;
@@ -191,12 +216,15 @@ namespace Shatterspire
                 impactRadius = Mathf.Max(impactRadius, 1.4f);
                 impactDamage += BaseDamage * build.DamageMultiplier * 0.4f;
             }
+            var focus = HunterFocusActive && heroClass == HeroClassId.Ranger;
             var arrows = finisher && heroClass == HeroClassId.Ranger && build.Has(PerkId.RangerSplitFinisher) ? 3 : 1;
+            if (focus) arrows = Mathf.Max(arrows, 2);
             for (var i = 0; i < arrows; i++)
             {
                 var angle = arrows == 1 ? 0f : Mathf.Lerp(-11f, 11f, i / (float)(arrows - 1));
-                FireProjectile(Quaternion.Euler(0f, angle, 0f) * direction, damage, i == arrows / 2, build.Pierces,
-                    build.Ricochets, finisher ? 1.25f : 1f, impactRadius, impactDamage);
+                FireProjectile(Quaternion.Euler(0f, angle, 0f) * direction, damage, i == arrows / 2,
+                    focus ? build.Pierces + 2 : build.Pierces,
+                    build.Ricochets, finisher ? 1.25f : 1f, impactRadius, impactDamage, focus);
             }
             if (finisher) controller?.CombatStep(direction, 0.17f);
             PulseShot(finisher ? 1f : 0.62f);
@@ -417,53 +445,130 @@ namespace Shatterspire
             Sfx.Play2D(Sound.UltimateRise);
             PrototypeVfx.SpawnHeavyReady(transform.position);
 
-            if (heroClass == HeroClassId.Guardian)
-            {
-                // Forge Quake: sechs Beben, jedes weiter als das vorige.
-                var type = build.Has(PerkId.GuardianMoltenQuake) ? DamageType.Fire : ResolveDamageType(DamageType.Physical);
-                for (var pulse = 0; pulse < 6; pulse++)
-                {
-                    if (pulse % 2 == 0) motion?.PlayMotion(pulse == 0 ? AttackMotion.Leap : AttackMotion.Spin, 1.4f);
-                    var radius = 2.6f + pulse * 0.55f;
-                    Strike(transform.position, radius, BaseDamage * 1.5f * build.DamageMultiplier, type, 8f);
-                    PrototypeVfx.SpawnShockwave(transform.position, radius + 0.4f,
-                        type == DamageType.Fire ? new Color(1f, 0.4f, 0.08f) : HeroCatalog.Accent(heroClass));
-                    CameraController.Impulse(0.08f);
-                    yield return new WaitForSeconds(0.2f);
-                }
-            }
-            else if (heroClass == HeroClassId.Arcanist)
-            {
-                // Singularity: ein schwarzer Stern vor dem Arcanist, acht Pulse.
-                motion?.PlayMotion(AttackMotion.Summon, 1.5f);
-                var center = transform.position + direction * 5.8f;
-                var pull = build.Has(PerkId.ArcanistEventHorizon);
-                var type = ResolveDamageType(DamageType.Void);
-                for (var pulse = 0; pulse < 8; pulse++)
-                {
-                    Strike(center, 4.8f, BaseDamage * 1.3f * build.DamageMultiplier, type, pull ? 6f : 4f, pull);
-                    PrototypeVfx.SpawnShockwave(center, 5.1f, Color.Lerp(HeroCatalog.Accent(heroClass), Color.black, 0.28f));
-                    yield return new WaitForSeconds(0.16f);
-                }
-            }
-            else
-            {
-                // Rift Barrage: fuenf breite Salven in Zielrichtung.
-                var homing = build.Has(PerkId.RangerHomingBarrage);
-                for (var volley = 0; volley < 5; volley++)
-                {
-                    var aim = AcquireAttackDirection();
-                    for (var i = 0; i < 9; i++)
-                    {
-                        var shotDirection = Quaternion.Euler(0f, Mathf.Lerp(-42f, 42f, i / 8f), 0f) * aim;
-                        FireProjectile(shotDirection, BaseDamage * 1.7f, false, build.Pierces + 1,
-                            build.Ricochets + 1, 1.18f, 1.35f, BaseDamage * build.DamageMultiplier * 0.45f, homing);
-                    }
-                    PulseShot(1.2f);
-                    yield return new WaitForSeconds(0.12f);
-                }
-            }
+            if (heroClass == HeroClassId.Guardian) yield return ForgePlunge(direction);
+            else if (heroClass == HeroClassId.Arcanist) yield return OpenTimeRift(direction);
+            else yield return HuntersFocus();
+
             ultimateActive = false;
+        }
+
+        /// <summary>
+        /// Brax: SCHMIEDESTURZ. Er springt in die Hoehe und kommt dort herunter, wohin gezielt wurde.
+        /// Der Aufschlag betaeubt alles im Umkreis und laesst einen Krater zurueck, der Gegner
+        /// festhaelt und Brax' Schlaege verstaerkt, solange er darin steht.
+        ///
+        /// Bewusst kein groesseres Beben: sein Skill ist ein Vorwaertssturm, seine Ultimate ist ein
+        /// Ortswechsel mit Kontrolle. Man springt damit auf einen Armbruster im Rueckraum oder in
+        /// die Mitte einer Gruppe - und besitzt danach ein Stueck Boden.
+        /// </summary>
+        private IEnumerator ForgePlunge(Vector3 direction)
+        {
+            const float airSeconds = 0.62f;
+            const float impactRadius = 5.2f;
+            var accent = HeroCatalog.Accent(heroClass);
+            var start = transform.position;
+            var landing = start + direction * 7.5f;
+            var navigation = controller ? controller.Navigation : null;
+            // Entlang der Strecke tasten statt den Endpunkt zu klemmen: wer auf eine Wand zielt,
+            // landet an der Wand und nicht wieder bei sich selbst.
+            if (navigation != null) landing = navigation.FurthestWalkableAlong(start, landing, 0.6f);
+
+            // Steht er mit dem Gesicht zur Wand, bringt der Flug nichts. Dann schlaegt er auf der
+            // Stelle ein: Betaeubung und Krater wirken trotzdem, die Ultimate ist nicht verschenkt.
+            var reach = new Vector2(landing.x - start.x, landing.z - start.z).magnitude;
+            var leaps = reach >= 1.5f;
+
+            // Wohin es geht, muss vorher sichtbar sein - auch fuer die zwei Mitspieler.
+            var marker = PrototypeVfx.SpawnTelegraph(landing, impactRadius, false);
+            motion?.PlayMotion(AttackMotion.Leap, 1.6f);
+            health.SetInvulnerable(airSeconds + 0.35f);
+            Sfx.Play(Sound.PlungeRise, start);
+
+            var flightSeconds = leaps ? airSeconds : airSeconds * 0.45f;
+            var elapsed = 0f;
+            while (elapsed < flightSeconds)
+            {
+                var t = elapsed / flightSeconds;
+                // Wurfparabel: waagerecht gleichmaessig, senkrecht als Bogen.
+                var flat = Vector3.Lerp(start, landing, t);
+                var height = Mathf.Sin(t * Mathf.PI) * (leaps ? 4.2f : 2.2f);
+                controller?.Airborne(flat + Vector3.up * height);
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            controller?.Land(landing);
+            if (marker) Destroy(marker);
+            // Die Strecke ins Log: auf einem Bild ist ein Ortswechsel von wenigen Metern nicht
+            // sicher zu erkennen, und der Ortswechsel ist der Sinn dieser Ultimate.
+            var travelled = new Vector2(landing.x - start.x, landing.z - start.z).magnitude;
+            Debug.Log($"SHATTERSPIRE Schmiedesturz: {travelled:0.0} m versetzt, Landung {landing}.");
+
+            motion?.PlayMotion(AttackMotion.Smash, 1.8f);
+            Sfx.Play(Sound.PlungeImpact, landing);
+            CameraController.Impulse(0.3f);
+            Hitstop.Freeze(0.08f, 0.08f);
+            var type = build.Has(PerkId.GuardianMoltenQuake) ? DamageType.Fire : ResolveDamageType(DamageType.Physical);
+            Strike(landing, impactRadius, BaseDamage * 4.5f * build.DamageMultiplier, type, 6f);
+            PrototypeVfx.SpawnShockwave(landing, impactRadius + 0.6f, accent);
+            PrototypeVfx.SpawnExplosion(landing, impactRadius * 0.7f, accent);
+
+            // Betaeubung: das Fenster, in dem die Gruppe nachsetzen kann.
+            foreach (var agent in EnemyAgent.Active)
+            {
+                if (!agent) continue;
+                var offset = agent.transform.position - landing;
+                offset.y = 0f;
+                if (offset.sqrMagnitude <= impactRadius * impactRadius) agent.Stun(2f);
+            }
+            ForgeCrater.Spawn(landing, impactRadius, 8f, transform, build,
+                type == DamageType.Fire ? new Color(1f, 0.42f, 0.08f) : accent);
+        }
+
+        /// <summary>
+        /// Orion: ZEITRISS. Eine Flaeche, in der Gegner kriechen und in der jedes feindliche Geschoss
+        /// aufgeloest wird. Der Schaden ist gering - das ist der Punkt.
+        ///
+        /// Sein Skill ist der Schwarze Stern, also Schaden auf einer Flaeche. Die Ultimate macht das
+        /// Gegenteil: sie nimmt dem Gegner die Mittel. Gegen Armbruester und Schuetzen ist sie die
+        /// Antwort, die es vorher nicht gab, und im Co-op ist sie der Rueckzugsraum fuer das Team.
+        /// </summary>
+        private IEnumerator OpenTimeRift(Vector3 direction)
+        {
+            motion?.PlayMotion(AttackMotion.Summon, 1.6f);
+            var centre = transform.position + direction * 5.5f;
+            var navigation = controller ? controller.Navigation : null;
+            if (navigation != null) centre = navigation.ClampToWalkable(centre, 0.6f);
+            var accent = Color.Lerp(HeroCatalog.Accent(heroClass), new Color(0.1f, 0.9f, 1f), 0.45f);
+            Sfx.Play(Sound.RiftOpen, centre);
+            PrototypeVfx.SpawnExplosion(centre, 3.2f, accent);
+            var seconds = build.Has(PerkId.ArcanistEventHorizon) ? 8.5f : 6.5f;
+            TimeRift.Spawn(centre, 6.2f, seconds, BaseDamage * 0.18f * build.DamageMultiplier, gameObject, accent);
+            // Der Arkanist ist sofort wieder handlungsfaehig: die Zone arbeitet allein.
+            yield return new WaitForSeconds(0.35f);
+        }
+
+        /// <summary>
+        /// Rex: JAEGERBLICK. Kein Pfeilhagel, sondern ein Zustand: fuenf Sekunden schiesst er fast
+        /// ohne Pause, jeder Pfeil sucht sein Ziel und durchbohrt mehr, und jeder Abschuss verlaengert
+        /// den Zustand um 0,6 Sekunden bis maximal neun.
+        ///
+        /// Damit ist die Ultimate nicht mehr die groessere Version seines Skills, sondern eine Kette,
+        /// die man selbst am Leben haelt - wer trifft, bleibt drin.
+        /// </summary>
+        private IEnumerator HuntersFocus()
+        {
+            focusUntil = Time.time + (build.Has(PerkId.RangerHomingBarrage) ? FocusBaseSeconds + 2f : FocusBaseSeconds);
+            motion?.PlayMotion(AttackMotion.Draw, 1.4f);
+            Sfx.Play2D(Sound.FocusEnter);
+            PrototypeVfx.SpawnHeavyReady(transform.position);
+            // Schneller unterwegs: der Zustand ist zum Kiten gedacht, nicht zum Stehenbleiben.
+            build.SetFocusSpeed(1.25f);
+            // Sofort wieder handlungsfaehig - der Zustand lebt davon, dass man schiesst.
+            yield return null;
+            ultimateActive = false;
+            while (HunterFocusActive) yield return null;
+            build.SetFocusSpeed(1f);
+            Sfx.Play2D(Sound.FocusEnd, 0.7f);
         }
 
         // ── DASH ────────────────────────────────────────────────────────────

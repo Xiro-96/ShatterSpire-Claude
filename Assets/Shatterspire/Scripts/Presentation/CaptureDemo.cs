@@ -93,6 +93,7 @@ namespace Shatterspire
             input.ScriptedMove = null;
             yield return new WaitForSecondsRealtime(0.6f);
 
+            yield return ShowForgePlunge();
             yield return ShowShieldbearer();
             yield return ShowMarksman();
 
@@ -150,6 +151,53 @@ namespace Shatterspire
             }
             if (enemy) Destroy(enemy.gameObject);
             frameOn = null;
+            yield return new WaitForSecondsRealtime(0.4f);
+        }
+
+        /// <summary>
+        /// Brax' Ultimate: Absprung, Flug, Aufschlag, Krater. Genau hier greift die Ultimate in den
+        /// CharacterController ein - wenn der Held haengen bleibt oder unter dem Boden landet, sieht
+        /// man es auf diesen Bildern und nirgends sonst.
+        /// </summary>
+        private IEnumerator ShowForgePlunge()
+        {
+            var weapon = player.GetComponent<WeaponSystem>();
+            if (!weapon) yield break;
+            // In die Raummitte zielen. Zielt man nach aussen, ist gar kein Platz zum Springen -
+            // dann prueft die Bildfolge einen Sonderfall statt der Ultimate.
+            var director = FindFirstObjectByType<RunDirector>();
+            var layout = director && director.Navigation != null ? director.Navigation.Layout : null;
+            var inward = player.forward;
+            if (layout != null)
+            {
+                var room = director.Navigation.RoomAt(player.position);
+                if (room >= 0)
+                {
+                    var toCentre = layout.Rooms[room].Bounds.Center - player.position;
+                    toCentre.y = 0f;
+                    if (toCentre.sqrMagnitude > 0.5f) inward = toCentre.normalized;
+                }
+            }
+            input.ScriptedMove = null;
+            var victim = SpawnDemoEnemy(EnemyKind.Crawler, 7f);
+            frameOn = null;
+            overviewPoint = player.position + inward * 4f;
+            frameSize = 9.5f;
+            overview = true;
+            input.ScriptedAim = inward;
+            yield return new WaitForSecondsRealtime(0.6f);
+
+            weapon.FillUltimateForCapture();
+            input.ScriptedUltimate = true;
+            var start = Time.unscaledTime;
+            for (var i = 0; i < 12; i++)
+            {
+                while (Time.unscaledTime - start < i * 0.13f) yield return null;
+                yield return Shot($"u{i:00}");
+            }
+            overview = false;
+            overviewPoint = null;
+            if (victim) Destroy(victim.gameObject);
             yield return new WaitForSecondsRealtime(0.4f);
         }
 

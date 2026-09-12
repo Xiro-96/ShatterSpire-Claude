@@ -103,9 +103,9 @@ namespace Shatterspire
             // ULTIMATE
             P(PerkId.UltimateSurge, "SURGE CELL", "Your Ultimate charges 30% faster.", PerkRarity.Rare, ActionSlot.Ultimate),
             P(PerkId.UltimateAfterglow, "AFTERGLOW", "Casting your Ultimate heals you for 30% of your max health.", PerkRarity.Epic, ActionSlot.Ultimate),
-            P(PerkId.RangerHomingBarrage, "HOMING BARRAGE", "Rift Barrage arrows seek out enemies.", PerkRarity.Epic, ActionSlot.Ultimate, RangerOnly),
-            P(PerkId.GuardianMoltenQuake, "MOLTEN QUAKE", "Forge Quake shockwaves set enemies on fire.", PerkRarity.Epic, ActionSlot.Ultimate, GuardianOnly),
-            P(PerkId.ArcanistEventHorizon, "EVENT HORIZON", "Singularity pulls enemies into its center.", PerkRarity.Epic, ActionSlot.Ultimate, ArcanistOnly),
+            P(PerkId.RangerHomingBarrage, "LONG FOCUS", "Hunters Focus starts with 7 instead of 5 seconds.", PerkRarity.Epic, ActionSlot.Ultimate, RangerOnly),
+            P(PerkId.GuardianMoltenQuake, "MOLTEN CRATER", "Forge Plunge burns, and so does its crater.", PerkRarity.Epic, ActionSlot.Ultimate, GuardianOnly),
+            P(PerkId.ArcanistEventHorizon, "EVENT HORIZON", "The Time Rift lasts 8.5 instead of 6.5 seconds.", PerkRarity.Epic, ActionSlot.Ultimate, ArcanistOnly),
 
             // PASSIVE
             P(PerkId.DamageUp, "TEMPERED POWER", "+25% damage for every action.", PerkRarity.Common, ActionSlot.Passive),
@@ -216,7 +216,11 @@ namespace Shatterspire
         /// gespeichert: so wirkt die Zornspule ueberall, wo Schaden entsteht, ohne dass jede
         /// Angriffsstelle im Kampfcode sie einzeln abfragen muesste.
         /// </summary>
-        public float DamageMultiplier => storedDamageMultiplier * (LowHealthFury ? 1.15f : 1f);
+        public float DamageMultiplier =>
+            storedDamageMultiplier * (LowHealthFury ? 1.15f : 1f) * (InForgeCrater ? 1.25f : 1f);
+
+        /// <summary>Der Held steht in seinem eigenen Schmiedekrater. Wird vom Krater selbst gesetzt.</summary>
+        public bool InForgeCrater { get; set; }
         private float storedDamageMultiplier = 1f;
         private Health cachedHealth;
 
@@ -231,7 +235,12 @@ namespace Shatterspire
             }
         }
         public float AttackSpeedMultiplier { get; private set; } = 1f;
-        public float MoveSpeedMultiplier { get; private set; } = 1f;
+        public float MoveSpeedMultiplier => storedMoveSpeedMultiplier * focusSpeedMultiplier;
+        private float storedMoveSpeedMultiplier = 1f;
+        private float focusSpeedMultiplier = 1f;
+
+        /// <summary>Zusaetzliches Tempo, solange Rex' Jaegerblick laeuft.</summary>
+        public void SetFocusSpeed(float value) => focusSpeedMultiplier = Mathf.Max(0.1f, value);
         public float CritChance { get; private set; } = 0.05f;
         public float CritMultiplier { get; private set; } = 1.5f;
         public float HeavyDamageMultiplier { get; private set; } = 1f;
@@ -263,13 +272,13 @@ namespace Shatterspire
         {
             HeroClass = hero;
             storedDamageMultiplier *= 1f + Mathf.Clamp(meta?.mightLevel ?? 0, 0, 10) * 0.04f;
-            MoveSpeedMultiplier *= 1f + Mathf.Clamp(meta?.agilityLevel ?? 0, 0, 10) * 0.02f;
+            storedMoveSpeedMultiplier *= 1f + Mathf.Clamp(meta?.agilityLevel ?? 0, 0, 10) * 0.02f;
             if (config == null) return;
             if (config.HasRelic(RelicId.WindstepSigil)) ExtraDashCharges++;
             if (config.HasRelic(RelicId.HuntersMark)) CritChance += 0.1f;
             if (config.HasRelic(RelicId.ArcBattery)) HeavyChargeMultiplier *= 1.25f;
             if (config.HasRelic(RelicId.IronHeart)) GetComponent<Health>()?.IncreaseMaximum(30f, true);
-            if (config.HasRelic(RelicId.SwiftBoots)) MoveSpeedMultiplier *= 1.12f;
+            if (config.HasRelic(RelicId.SwiftBoots)) storedMoveSpeedMultiplier *= 1.12f;
             if (config.HasRelic(RelicId.FocusCrystal)) SkillCooldownMultiplier *= 0.8f;
             if (config.HasRelic(RelicId.SurgeCore)) UltimateChargeMultiplier *= 1.2f;
             if (config.HasRelic(RelicId.TwinCharge)) AttackSpeedMultiplier *= 1.1f;
@@ -321,7 +330,7 @@ namespace Shatterspire
                 case PerkId.CritChance: CritChance += 0.12f; break;
                 case PerkId.CritDamage: CritMultiplier += 0.5f; break;
                 case PerkId.MovementSpeed:
-                    MoveSpeedMultiplier *= 1.15f;
+                    storedMoveSpeedMultiplier *= 1.15f;
                     DashRechargeMultiplier *= 1.25f;
                     break;
                 case PerkId.ExtraDash: ExtraDashCharges++; break;
