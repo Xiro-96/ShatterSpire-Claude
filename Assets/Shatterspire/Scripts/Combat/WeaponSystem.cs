@@ -40,6 +40,9 @@ namespace Shatterspire
         /// <summary>So lange gilt ein Tipp als noch offen, wenn die Aktion gerade nicht bereit war.</summary>
         private const float AttackBufferSeconds = 0.15f;
         private float attackRequestedAt = -10f;
+        private KillStreak killStreak;
+        /// <summary>Bis hierhin laesst jeder Abschuss eine neue Ladung fallen (Kettenzuender).</summary>
+        private float chainUntil;
         /// <summary>Rex' Jaegerblick laeuft bis zu diesem Zeitpunkt. Jeder Abschuss verlaengert ihn.</summary>
         private float focusUntil;
         private const float FocusBaseSeconds = 5f;
@@ -85,6 +88,7 @@ namespace Shatterspire
             input = GetComponent<PlayerInputRouter>();
             build = GetComponent<PlayerBuild>();
             health = GetComponent<Health>();
+            killStreak = GetComponent<KillStreak>();
             controller = GetComponent<PlayerController>();
             motion = GetComponent<StylizedCharacterMotion>();
             targetIndicator = gameObject.AddComponent<TargetLockIndicator>();
@@ -156,6 +160,15 @@ namespace Shatterspire
         {
             if (!value || value.Team != TeamId.Enemy) return;
             AddUltimateCharge(0.02f);
+            // Die Serie zaehlt jeden gefallenen Gegner des Aufstiegs, nicht nur die eigenen Treffer:
+            // im Co-op kaempft die Gruppe zusammen, und eine Serie, die ein Mitspieler kaputtmacht,
+            // waere eine Strafe fuer Zusammenspiel.
+            if (killStreak) killStreak.Register();
+            // Kettenzuender: jeder gefallene Gegner hinterlaesst selbst eine scharfe Ladung.
+            if (heroClass == HeroClassId.Bomber && Time.time < chainUntil && value)
+                TimedBomb.Throw(value.transform.position + Vector3.up, value.transform.position, 0.12f, 0.5f,
+                    2.6f, BaseDamage * 1.8f * build.DamageMultiplier,
+                    ResolveDamageType(DamageType.Fire), gameObject, HeroCatalog.Accent(heroClass));
             // Jaegerblick lebt von Abschuessen: wer trifft, bleibt laenger im Zustand. Das macht die
             // Ultimate zu einer Kette statt zu einem einzelnen Knall.
             if (!HunterFocusActive) return;
@@ -200,6 +213,12 @@ namespace Shatterspire
             if (heroClass == HeroClassId.Guardian)
             {
                 HammerCombo(direction);
+                return;
+            }
+
+            if (heroClass == HeroClassId.Bomber)
+            {
+                ThrowCharge(direction, finisher);
                 return;
             }
 
@@ -291,6 +310,132 @@ namespace Shatterspire
             }));
         }
 
+        /// <summary>
+        /// KORRs Licht-Angriff: eine Ladung im Bogen auf die Zielstelle, die nach kurzer Zuendschnur
+        /// aufreisst. Jeder dritte Wurf ist eine Doppelladung.
+        ///
+        /// Der Unterschied zu den anderen drei Helden liegt nicht in der Zahl, sondern im Zeitpunkt:
+        /// der Schaden faellt nicht beim Tastendruck, sondern dort, wo der Gegner gleich sein wird.
+        /// </summary>
+        private void ThrowCharge(Vector3 direction, bool finisher)
+        {
+            comboExpiresAt = Time.time + 1.05f;
+            nextShot = Time.time + (finisher ? 0.5f : 0.34f) / build.AttackSpeedMultiplier;
+            var type = ResolveDamageType(DamageType.Fire);
+            var accent = HeroCatalog.Accent(heroClass);
+            var reach = 6.5f + build.Pierces * 0.8f;
+            var landing = ThrowTarget(direction, reach);
+            var charges = finisher ? 2 : 1;
+            if (build.ProjectileCount > 1) charges++;
+            for (var i = 0; i < charges; i++)
+            {
+                var spread = charges == 1 ? Vector3.zero
+                    : Quaternion.Euler(0f, Mathf.Lerp(-16f, 16f, i / (float)(charges - 1)), 0f) * direction * 1.4f;
+                var fuse = (finisher ? 0.75f : 0.9f) * (build.Has(PerkId.BomberShortFuse) ? 0.5f : 1f);
+                TimedBomb.Throw(MuzzlePosition(), landing + spread, 0.34f, fuse,
+                    2.1f + build.Pierces * 0.25f,
+                    BaseDamage * (finisher ? 1.5f : 1.1f) * build.DamageMultiplier, type, gameObject, accent);
+                if (!build.Has(PerkId.BomberClusterCharge)) continue;
+                // Splitterladung: zwei kleinere kurz danach, leicht versetzt.
+                for (var shard = -1; shard <= 1; shard += 2)
+                    TimedBomb.Throw(MuzzlePosition(), landing + spread + Vector3.Cross(Vector3.up, direction) * (shard * 1.6f),
+                        0.4f, fuse + 0.22f, 1.5f, BaseDamage * 0.7f * build.DamageMultiplier, type, gameObject, accent);
+            }
+            motion?.PlayMotion(AttackMotion.Swing, finisher ? 1f : 0.7f);
+            Sfx.Play(Sound.BombThrow, transform.position);
+            if (finisher) CameraController.Impulse(0.03f);
+        }
+
+        /// <summary>
+        /// Wohin eine Ladung fliegt. Auf dem Boden vor dem Helden, aber nie weiter als seine
+        /// Wurfweite - sonst legt man Ladungen in Gegenden, die man nicht sieht.
+        /// </summary>
+        private Vector3 ThrowTarget(Vector3 direction, float maximum)
+        {
+            var aim = input.AimPoint;
+            aim.y = 0f;
+            var offset = aim - transform.position;
+            offset.y = 0f;
+            var target = offset.magnitude > maximum || offset.sqrMagnitude < 1f
+                ? transform.position + direction * maximum
+                : transform.position + offset;
+            var navigation = controller ? controller.Navigation : null;
+            return navigation != null ? navigation.FurthestWalkableAlong(transform.position, target, 0.4f) : target;
+        }
+
+        /// <summary>
+        /// KORRs schwerer Angriff: eine Haftmine. Gehalten wird sie groesser; im goldenen Fenster
+        /// losgelassen zuendet sie sofort statt nach Zuendschnur - der perfekte Moment ist hier also
+        /// nicht mehr Schaden, sondern kein Warten.
+        /// </summary>
+        private void ReleaseStickyMine(bool perfect, float normalized)
+        {
+            var type = ResolveDamageType(DamageType.Fire);
+            var accent = HeroCatalog.Accent(heroClass);
+            var direction = AcquireAttackDirection();
+            var landing = ThrowTarget(direction, 7.5f);
+            var radius = Mathf.Lerp(2.6f, 4.4f, normalized) * (perfect ? 1.25f : 1f);
+            var damage = BaseDamage * Mathf.Lerp(2.2f, 3.6f, normalized) * build.HeavyDamageMultiplier
+                         * build.DamageMultiplier * (build.Has(PerkId.BomberStickyCluster) ? 1.4f : 1f);
+            TimedBomb.Throw(MuzzlePosition(), landing, 0.3f, perfect ? 0.05f : 0.85f, radius, damage,
+                type, gameObject, accent);
+            if (build.Has(PerkId.PerfectEcho) && perfect)
+                TimedBomb.Throw(MuzzlePosition(), landing + direction * 2.4f, 0.34f, 0.2f, radius * 0.8f,
+                    damage * 0.6f, type, gameObject, accent);
+            motion?.PlayMotion(AttackMotion.Smash, perfect ? 1.4f : 1f);
+            Sfx.Play(Sound.BombThrow, transform.position);
+        }
+
+        /// <summary>
+        /// KORRs Faehigkeit: eine Sprengschnur. Drei Ladungen in einer Linie, die von vorn nach
+        /// hinten zuenden - eine Wand, hinter die man sich zurueckzieht.
+        /// </summary>
+        private IEnumerator BlastCord(Vector3 direction)
+        {
+            var type = ResolveDamageType(DamageType.Fire);
+            var accent = HeroCatalog.Accent(heroClass);
+            var charges = build.Has(PerkId.BomberLongCord) ? 5 : 3;
+            motion?.PlayMotion(AttackMotion.Cast, 1.2f);
+            for (var i = 0; i < charges; i++)
+            {
+                var spot = ThrowTarget(direction, 2.6f + i * 2.4f);
+                TimedBomb.Throw(MuzzlePosition(), spot, 0.28f, 0.55f + i * 0.12f, 2.4f,
+                    BaseDamage * 1.6f * build.DamageMultiplier, type, gameObject, accent);
+                Sfx.Play(Sound.BombThrow, transform.position, 0.7f);
+                yield return new WaitForSeconds(0.09f);
+            }
+        }
+
+        /// <summary>
+        /// KORRs Ultimate: KETTENZUENDER. Alles, was gerade scharf ist, geht gleichzeitig hoch - mit
+        /// doppeltem Radius. Danach laesst jeder gefallene Gegner sechs Sekunden lang selbst eine
+        /// Ladung fallen.
+        ///
+        /// Sie macht aus sich heraus wenig: sie ist die Belohnung dafuer, vorher das Feld vorbereitet
+        /// zu haben. Damit ist es die einzige Ultimate im Spiel, deren Wirkung davon abhaengt, was
+        /// man in den Sekunden davor getan hat.
+        /// </summary>
+        private IEnumerator ChainDetonator()
+        {
+            var accent = HeroCatalog.Accent(heroClass);
+            Sfx.Play2D(Sound.ChainDetonate);
+            PrototypeVfx.SpawnExplosion(transform.position, 3f, accent);
+            CameraController.Impulse(0.26f);
+            var chained = TimedBomb.DetonateAll(2f, 1.4f);
+            Debug.Log($"SHATTERSPIRE Kettenzuender: {chained} Ladung(en) gleichzeitig gezuendet.");
+            // Ohne vorbereitetes Feld wenigstens ein Fundament, damit die Ultimate nie ins Leere geht.
+            if (chained == 0)
+            {
+                var direction = AcquireAttackDirection();
+                for (var i = 0; i < 3; i++)
+                    TimedBomb.Throw(MuzzlePosition(), ThrowTarget(direction, 3f + i * 2.2f), 0.3f, 0.35f + i * 0.1f,
+                        3.4f, BaseDamage * 2.4f * build.DamageMultiplier,
+                        ResolveDamageType(DamageType.Fire), gameObject, accent);
+            }
+            chainUntil = Time.time + (build.Has(PerkId.BomberChainFeed) ? 10f : 6f);
+            yield return new WaitForSeconds(0.3f);
+        }
+
         private IEnumerator MeleeImpact(float delay, System.Action impact)
         {
             yield return new WaitForSeconds(delay);
@@ -305,6 +450,17 @@ namespace Shatterspire
         {
             var normalized = HeavyChargeNormalized;
             var perfect = normalized >= PerfectStart && normalized <= PerfectEnd;
+            if (heroClass == HeroClassId.Bomber)
+            {
+                ReleaseStickyMine(perfect, normalized);
+                heavyMeter = 0f;
+                chargingHeavy = false;
+                heavyCharge = 0f;
+                nextShot = Time.time + 0.3f;
+                PublishHeavyState();
+                CameraController.Impulse(perfect ? 0.16f : 0.08f);
+                return;
+            }
             var multiplier = (perfect ? 4.5f : Mathf.Lerp(2f, 3.4f, normalized)) * build.HeavyDamageMultiplier;
             var direction = AcquireAttackDirection();
             var echo = perfect && build.Has(PerkId.PerfectEcho);
@@ -391,6 +547,12 @@ namespace Shatterspire
                 yield break;
             }
 
+            if (heroClass == HeroClassId.Bomber)
+            {
+                yield return BlastCord(direction);
+                yield break;
+            }
+
             if (heroClass == HeroClassId.Arcanist)
             {
                 motion?.PlayMotion(AttackMotion.Channel, 1.2f);
@@ -447,6 +609,7 @@ namespace Shatterspire
 
             if (heroClass == HeroClassId.Guardian) yield return ForgePlunge(direction);
             else if (heroClass == HeroClassId.Arcanist) yield return OpenTimeRift(direction);
+            else if (heroClass == HeroClassId.Bomber) yield return ChainDetonator();
             else yield return HuntersFocus();
 
             ultimateActive = false;
@@ -584,6 +747,10 @@ namespace Shatterspire
                         false, build.Pierces, build.Ricochets, 0.95f, 0f, 0f);
                 PrototypeVfx.SpawnMuzzle(MuzzlePosition(), aim);
             }
+            if (heroClass == HeroClassId.Bomber && build.Has(PerkId.BomberSmokeStep))
+                TimedBomb.Throw(origin + Vector3.up * 0.5f, origin, 0.1f, 0.7f, 2.4f,
+                    BaseDamage * 1.5f * build.DamageMultiplier, ResolveDamageType(DamageType.Fire),
+                    gameObject, HeroCatalog.Accent(heroClass));
             if (heroClass == HeroClassId.Arcanist && build.Has(PerkId.ArcanistPhaseRift))
                 StartCoroutine(DelayedBlast(origin, 3f, BaseDamage * 1.8f * build.DamageMultiplier,
                     ResolveDamageType(DamageType.Void), 0.45f));

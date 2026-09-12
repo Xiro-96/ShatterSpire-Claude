@@ -44,8 +44,11 @@ namespace Shatterspire.Tests
                 kits.Add(HeroCatalog.Kit(hero));
             }
 
-            Assert.That(names, Has.Count.EqualTo(3));
-            Assert.That(kits, Has.Count.EqualTo(3));
+            // An der Zahl der Helden gemessen, nicht an einer festen 3: jeder neue Held muss
+            // eigenen Namen und eigenes Kit haben, aber es duerfen beliebig viele werden.
+            var heroCount = System.Enum.GetValues(typeof(HeroClassId)).Length;
+            Assert.That(names, Has.Count.EqualTo(heroCount), "Zwei Helden teilen sich einen Namen.");
+            Assert.That(kits, Has.Count.EqualTo(heroCount), "Zwei Helden teilen sich ihr Kit.");
         }
     }
 }

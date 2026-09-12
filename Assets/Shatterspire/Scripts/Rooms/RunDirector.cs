@@ -269,14 +269,30 @@ namespace Shatterspire
             PrototypeVfx.SpawnExplosion(player.position + Vector3.up * 0.6f, 2.6f, new Color(0.25f, 1f, 0.55f));
         }
 
+        /// <summary>
+        /// Stand des Aufstiegs, wie er gerade ist. Das HUD zeigt daraus die Rohpunkte - so sieht man
+        /// im Lauf, was ein Abschluss oder eine Serie wert war, statt erst am Ende.
+        /// </summary>
+        public ClimbResult LiveResult
+        {
+            get
+            {
+                var streak = player ? player.GetComponent<KillStreak>() : null;
+                return new ClimbResult(floorsCleared, bossesDefeated, enemiesDefeated, shards, true,
+                    config.Mode, config.Hero, streak ? streak.Bonus : 0, streak ? streak.Best : 0);
+            }
+        }
+
         private void EndRun(bool victory)
         {
             if (ended) return;
             ended = true;
             var earned = victory ? shards : Mathf.RoundToInt(shards * 0.65f);
             if (build && build.HasFortunePrism) earned = Mathf.RoundToInt(earned * 1.25f);
+            var streak = player ? player.GetComponent<KillStreak>() : null;
             var result = new ClimbResult(floorsCleared, bossesDefeated, enemiesDefeated,
-                earned, victory, config.Mode, config.Hero);
+                earned, victory, config.Mode, config.Hero,
+                streak ? streak.Bonus : 0, streak ? streak.Best : 0);
             var record = MetaSaveSystem.RecordClimb(result, earned);
             GameEvents.RaiseRunEnded(victory, earned);
             hud.ShowRunEnd(victory, earned, record.Save, roomIndex, result, record.Score, record.RankPoints);

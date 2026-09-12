@@ -25,6 +25,23 @@ namespace Shatterspire
 
         public static bool Requested => Array.IndexOf(Environment.GetCommandLineArgs(), Flag) >= 0;
 
+        /// <summary>
+        /// Welcher Held vorgefuehrt wird. Mit -shatterspire-hero Bomber laeuft die Vorfuehrung als
+        /// KORR, sonst als Brax. So lassen sich beide Handschriften pruefen, ohne zwei Builds.
+        /// </summary>
+        public static HeroClassId Hero
+        {
+            get
+            {
+                var args = Environment.GetCommandLineArgs();
+                var index = Array.IndexOf(args, "-shatterspire-hero");
+                if (index < 0 || index + 1 >= args.Length) return HeroClassId.Guardian;
+                return Enum.TryParse<HeroClassId>(args[index + 1], true, out var parsed)
+                    ? parsed
+                    : HeroClassId.Guardian;
+            }
+        }
+
         public void Configure(GameObject hero, CameraController runCamera)
         {
             player = hero.transform;
@@ -93,6 +110,7 @@ namespace Shatterspire
             input.ScriptedMove = null;
             yield return new WaitForSecondsRealtime(0.6f);
 
+            yield return ShowStreakAndOrbs();
             yield return ShowThreatMarker();
             yield return ShowForgePlunge();
             yield return ShowShieldbearer();
@@ -155,6 +173,30 @@ namespace Shatterspire
             if (enemy) Destroy(enemy.gameObject);
             frameOn = null;
             yield return new WaitForSecondsRealtime(0.4f);
+        }
+
+        /// <summary>
+        /// Serie und Lebenskugeln: mehrere Gegner dicht beieinander fallen kurz hintereinander. Die
+        /// Serienanzeige muss hochzaehlen, und Kugeln muessen liegen bleiben.
+        /// </summary>
+        private IEnumerator ShowStreakAndOrbs()
+        {
+            for (var i = 0; i < 6; i++)
+            {
+                var victim = SpawnDemoEnemy(EnemyKind.Crawler, 2.6f + i * 0.5f);
+                if (victim && victim.TryGetComponent<Health>(out var health))
+                    health.TakeDamage(new DamageInfo(9999f, DamageType.Physical, player.gameObject,
+                        victim.transform.position, Vector3.zero));
+            }
+            frameOn = null;
+            overviewPoint = null;
+            frameSize = 4.5f;
+            var start = Time.unscaledTime;
+            for (var i = 0; i < 6; i++)
+            {
+                while (Time.unscaledTime - start < i * 0.25f) yield return null;
+                yield return Shot($"s{i:00}");
+            }
         }
 
         /// <summary>
@@ -232,6 +274,12 @@ namespace Shatterspire
             overview = true;
             input.ScriptedAim = inward;
             yield return new WaitForSecondsRealtime(0.6f);
+
+            // Erst ein paar Ladungen legen. Beim Bomber lebt die Ultimate davon, dass das Feld
+            // vorbereitet ist - ohne das prueft die Bildfolge nur den Notnagel.
+            input.ScriptedAttack = true;
+            yield return new WaitForSecondsRealtime(1.1f);
+            input.ScriptedAttack = false;
 
             weapon.FillUltimateForCapture();
             input.ScriptedUltimate = true;

@@ -84,7 +84,7 @@ namespace Shatterspire
 
             // Automatische Bildkontrolle (-shatterspire-capture): ohne Menue direkt in einen Aufstieg mit Brax.
             if (CaptureDemo.Requested && !RunLaunchSettings.HasPendingRun)
-                RunLaunchSettings.Prepare(new RunConfig { Hero = HeroClassId.Guardian, Mode = RunMode.Brave });
+                RunLaunchSettings.Prepare(new RunConfig { Hero = CaptureDemo.Hero, Mode = RunMode.Brave });
 
             if (!RunLaunchSettings.HasPendingRun)
             {
@@ -140,6 +140,7 @@ namespace Shatterspire
             var health = root.AddComponent<Health>();
             root.AddComponent<LevelSystem>();
             root.AddComponent<RunWallet>();
+            root.AddComponent<KillStreak>();
             var controller = root.AddComponent<PlayerController>();
             var weapon = root.AddComponent<WeaponSystem>();
 

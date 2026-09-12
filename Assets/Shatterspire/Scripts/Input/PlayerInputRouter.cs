@@ -32,8 +32,19 @@ namespace Shatterspire
         public bool UltimatePressed { get; private set; }
         /// <summary>Nur fuer automatische Vorfuehrungen (CaptureDemo): haelt den Angriff gedrueckt.</summary>
         public bool ScriptedAttack { get; set; }
-        /// <summary>Nur fuer automatische Vorfuehrungen: loest die Ultimate einmal aus.</summary>
-        public bool ScriptedUltimate { get; set; }
+        /// <summary>
+        /// Nur fuer automatische Vorfuehrungen: loest die Ultimate einmal aus. Der Druck haelt zwei
+        /// Bilder, weil die Reihenfolge der Update-Aufrufe zwischen Router und Waffe nicht
+        /// festgelegt ist - laeuft die Waffe zuerst, wuerde ein Druck von einem Bild verloren gehen.
+        /// Bei Tastendruecken passiert das nicht, weil Input.GetKeyDown das ganze Bild ueber gilt.
+        /// </summary>
+        public bool ScriptedUltimate
+        {
+            get => scriptedUltimateFrames > 0;
+            set => scriptedUltimateFrames = value ? 2 : 0;
+        }
+
+        private int scriptedUltimateFrames;
         /// <summary>Nur fuer automatische Vorfuehrungen: feste Blickrichtung statt Maus.</summary>
         public Vector3? ScriptedAim { get; set; }
         /// <summary>Nur fuer automatische Vorfuehrungen: feste Laufrichtung statt Tastatur.</summary>
@@ -68,8 +79,9 @@ namespace Shatterspire
             HeavyHeld = (mouse && Input.GetMouseButton(1)) || MobileInput.Heavy;
             SkillPressed = Input.GetKeyDown(KeyCode.Q) || MobileInput.ConsumeSkill();
             DashPressed = Input.GetKeyDown(KeyCode.Space) || MobileInput.ConsumeDash();
-            UltimatePressed = Input.GetKeyDown(KeyCode.R) || MobileInput.ConsumeUltimate() || ScriptedUltimate;
-            ScriptedUltimate = false;
+            UltimatePressed = Input.GetKeyDown(KeyCode.R) || MobileInput.ConsumeUltimate() ||
+                              scriptedUltimateFrames > 0;
+            if (scriptedUltimateFrames > 0) scriptedUltimateFrames--;
 
             if (worldCamera && !Application.isMobilePlatform && Input.touchCount == 0)
             {

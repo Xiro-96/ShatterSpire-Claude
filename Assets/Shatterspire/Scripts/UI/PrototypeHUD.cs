@@ -45,7 +45,12 @@ namespace Shatterspire
         private Image xpFill;
         private Text levelText;
         private Text goldText;
+        private Text scoreText;
+        private Text streakText;
         private ScreenFade screenFade;
+        private KillStreak killStreak;
+        private RunDirector director;
+        private int shownScore;
         private CanvasGroup announcementGroup;
         private Text announcementText;
         private float announcementUntil;
@@ -77,6 +82,8 @@ namespace Shatterspire
             levelSystem = player.GetComponent<LevelSystem>();
             wallet = player.GetComponent<RunWallet>();
             if (wallet) wallet.Changed += RefreshGold;
+            killStreak = player.GetComponent<KillStreak>();
+            if (killStreak) killStreak.StepReached += OnStreakStep;
             BuildCanvas();
             Subscribe();
             RefreshHealth(playerHealth);
@@ -87,6 +94,7 @@ namespace Shatterspire
         private void OnDestroy()
         {
             if (wallet) wallet.Changed -= RefreshGold;
+            if (killStreak) killStreak.StepReached -= OnStreakStep;
             GameEvents.HealthChanged -= RefreshHealth;
             GameEvents.PerkSelected -= OnPerkSelected;
             GameEvents.RoomStarted -= OnRoomStarted;
@@ -205,6 +213,7 @@ namespace Shatterspire
         private void Update()
         {
             HandleModalInput();
+            RefreshScore();
             if (hpChip)
             {
                 hpChipValue = hpTargetValue >= hpChipValue
@@ -273,6 +282,53 @@ namespace Shatterspire
             goldText.color = new Color(1f, 0.82f, 0.24f);
             goldText.fontStyle = FontStyle.Bold;
             RefreshGold();
+
+            // Punkte oben in der Mitte unter dem Etagenkopf: dort schaut man beim Abschluss einer
+            // Etage ohnehin hin. Die Serie sitzt gross darunter, weil sie im Kampf gelesen wird.
+            scoreText = CreateText(back.transform.parent, "0", 20, TextAnchor.UpperRight,
+                new Vector2(-20, -206), new Vector2(260, 26), new Vector2(1, 1));
+            scoreText.color = new Color(0.72f, 0.86f, 1f);
+            scoreText.fontStyle = FontStyle.Bold;
+            streakText = CreateText(back.transform.parent, string.Empty, 30, TextAnchor.UpperRight,
+                new Vector2(-20, -236), new Vector2(320, 40), new Vector2(1, 1));
+            streakText.color = new Color(1f, 0.68f, 0.16f);
+            streakText.fontStyle = FontStyle.Bold;
+        }
+
+        /// <summary>Punkte und Serie. Punkte zaehlen sichtbar hoch statt zu springen.</summary>
+        private void RefreshScore()
+        {
+            if (!director) director = FindFirstObjectByType<RunDirector>();
+            if (scoreText && director)
+            {
+                var live = ClimbScore.Raw(director.LiveResult);
+                // Hochzaehlen statt setzen: eine Zahl, die laeuft, wird gelesen; eine, die springt, nicht.
+                shownScore = live - shownScore > 400
+                    ? Mathf.RoundToInt(Mathf.Lerp(shownScore, live, 8f * Time.unscaledDeltaTime))
+                    : live;
+                scoreText.text = shownScore.ToString("N0") + "  " + Loc.T("POINTS");
+            }
+            if (!streakText || !killStreak) return;
+            if (killStreak.Count < 2)
+            {
+                streakText.text = string.Empty;
+                return;
+            }
+            var multiplier = killStreak.Multiplier;
+            streakText.text = killStreak.Count + "  " + Loc.T("STREAK") +
+                              (multiplier > 1f ? "   x" + multiplier.ToString("0.0") : string.Empty);
+            // Die Farbe waermt mit der Stufe, und die Anzeige verblasst, wenn die Serie auslaeuft.
+            var heat = Mathf.InverseLerp(1f, 3f, multiplier);
+            var color = Color.Lerp(new Color(1f, 0.78f, 0.3f), new Color(1f, 0.32f, 0.1f), heat);
+            color.a = Mathf.Lerp(0.45f, 1f, killStreak.Remaining);
+            streakText.color = color;
+        }
+
+        private void OnStreakStep(int count, float multiplier)
+        {
+            ShowAnnouncement(count + "  " + Loc.T("STREAK") + "   x" + multiplier.ToString("0.0"), 0.9f);
+            Sfx.Play2D(Sound.StreakStep, 0.6f);
+            CameraController.Impulse(0.05f);
         }
 
         private void CreateAnnouncement(Transform parent)
@@ -315,7 +371,7 @@ namespace Shatterspire
                 emblem.sprite = UiIconFactory.Hero(RoleHero(bot.Role));
                 emblem.preserveAspect = true;
                 emblem.raycastTarget = false;
-                CreateText(frame.transform, $"{bot.DisplayName}  <size=12>{bot.Role.ToString().ToUpperInvariant()}</size>", 18,
+                CreateText(frame.transform, bot.DisplayName + "  <size=12>" + Loc.Of(bot.Role) + "</size>", 18,
                     TextAnchor.UpperLeft, new Vector2(68, -7), new Vector2(200, 24), new Vector2(0, 1)).fontStyle = FontStyle.Bold;
                 teamStatus[i] = CreateText(frame.transform, bot.Status, 13, TextAnchor.UpperLeft, new Vector2(68, -32), new Vector2(200, 18), new Vector2(0, 1));
                 teamStatus[i].color = bot.Accent;

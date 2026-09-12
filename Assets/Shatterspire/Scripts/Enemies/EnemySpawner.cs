@@ -196,6 +196,9 @@ namespace Shatterspire
             enemy.Engaged -= OnCampEngaged;
             // Gold fuer den Aufstieg. Der Spawner kennt den Spieler ohnehin, deshalb faellt die
             // Belohnung hier und nicht in einer statischen Kasse.
+            // Lebenskugel fallen lassen. Liegt beim Spawner, weil er den Spieler kennt und den
+            // Gegner in derselben Meldung hat.
+            if (player) HealthOrb.TryDrop(enemy.Kind, enemy.transform.position, player);
             if (player && player.TryGetComponent<RunWallet>(out var wallet))
             {
                 var reward = RunWallet.RewardFor(enemy.Kind, activeFloor);

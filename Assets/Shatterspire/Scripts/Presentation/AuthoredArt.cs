@@ -169,8 +169,12 @@ namespace Shatterspire
         {
             if (hero == HeroClassId.Ranger) return TryBuildRex(root, out muzzle);
             var role = hero == HeroClassId.Guardian ? CompanionRole.Guardian : CompanionRole.Support;
+            // KORR bekommt die Schleicherfigur: klein, beweglich, mit Beutel - und dadurch auf einen
+            // Blick von Brax, Rex und Orion zu unterscheiden.
+            var model3D = hero == HeroClassId.Bomber ? "Rogue_Hooded" : null;
+            var texture = hero == HeroClassId.Bomber ? "rogue_texture" : null;
             if (!TryBuildCompanion(root, role, HeroCatalog.Accent(hero), out muzzle,
-                    HeroCatalog.BaseSpeed(hero))) return false;
+                    HeroCatalog.BaseSpeed(hero), model3D, texture)) return false;
             var model = root.childCount > 0 ? root.GetChild(0) : null;
             if (model) model.name = HeroCatalog.Name(hero) + " · " + HeroCatalog.Role(hero);
             return true;
@@ -218,15 +222,19 @@ namespace Shatterspire
         }
 
         public static bool TryBuildCompanion(Transform root, CompanionRole role, Color accent,
-            out Transform muzzle, float topSpeed = 6.5f)
+            out Transform muzzle, float topSpeed = 6.5f, string modelName = null, string textureName = null)
         {
             muzzle = null;
-            var resource = role switch
-            {
-                CompanionRole.Guardian => KayCharacters + "Barbarian",
-                CompanionRole.Ranger => KayCharacters + "Ranger",
-                _ => KayCharacters + "Mage"
-            };
+            // Mit modelName laesst sich eine andere Figur aufsetzen, ohne eine neue Bot-Rolle zu
+            // erfinden - gebraucht wird das fuer KORR, der kein Wachter, Jaeger oder Magier ist.
+            var resource = modelName != null
+                ? KayCharacters + modelName
+                : role switch
+                {
+                    CompanionRole.Guardian => KayCharacters + "Barbarian",
+                    CompanionRole.Ranger => KayCharacters + "Ranger",
+                    _ => KayCharacters + "Mage"
+                };
             var source = LoadModel(resource);
             if (!source) return false;
 
@@ -242,8 +250,8 @@ namespace Shatterspire
             var animator = model.GetComponentInChildren<Animator>();
             Reground(model, root.position);
             ApplyKayKitMaterials(model,
-                KayCharacters + (role == CompanionRole.Guardian ? "barbarian_texture"
-                    : role == CompanionRole.Ranger ? "ranger_texture" : "mage_texture"),
+                KayCharacters + (textureName ?? (role == CompanionRole.Guardian ? "barbarian_texture"
+                    : role == CompanionRole.Ranger ? "ranger_texture" : "mage_texture")),
                 Color.white);
             StylizeHumanoidProportions(animator, role == CompanionRole.Guardian ? 1.08f : 1.12f, 1.08f);
 

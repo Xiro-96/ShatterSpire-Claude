@@ -16,7 +16,10 @@ namespace Shatterspire
         RangerSplitFinisher, RangerRailShot, RangerArrowRain, RangerPartingShot,
         GuardianCleaveWave, GuardianEarthsplitter, GuardianBulwark, GuardianShoulderCharge,
         ArcanistVoidBurst, ArcanistCollapse, ArcanistLingeringStar, ArcanistPhaseRift,
-        UltimateSurge, UltimateAfterglow, RangerHomingBarrage, GuardianMoltenQuake, ArcanistEventHorizon
+        UltimateSurge, UltimateAfterglow, RangerHomingBarrage, GuardianMoltenQuake, ArcanistEventHorizon,
+        // KORR, der Bomber.
+        BomberShortFuse, BomberClusterCharge, BomberLongCord, BomberStickyCluster, BomberChainFeed,
+        BomberSmokeStep
     }
 
     public enum PerkRarity { Common, Rare, Epic, Legendary }
@@ -64,6 +67,7 @@ namespace Shatterspire
         private static readonly HeroClassId[] RangerOnly = { HeroClassId.Ranger };
         private static readonly HeroClassId[] GuardianOnly = { HeroClassId.Guardian };
         private static readonly HeroClassId[] ArcanistOnly = { HeroClassId.Arcanist };
+        private static readonly HeroClassId[] BomberOnly = { HeroClassId.Bomber };
 
         public static readonly IReadOnlyList<PerkDefinition> All = new List<PerkDefinition>
         {
@@ -99,6 +103,7 @@ namespace Shatterspire
             P(PerkId.RangerPartingShot, "PARTING SHOT", "Dashing fires a fan of five arrows toward your aim.", PerkRarity.Rare, ActionSlot.Dash, RangerOnly),
             P(PerkId.GuardianShoulderCharge, "SHOULDER CHARGE", "Dashing slams every enemy in your path.", PerkRarity.Rare, ActionSlot.Dash, GuardianOnly),
             P(PerkId.ArcanistPhaseRift, "PHASE RIFT", "Dashing leaves a rift behind that detonates.", PerkRarity.Rare, ActionSlot.Dash, ArcanistOnly),
+            P(PerkId.BomberSmokeStep, "DROP STEP", "Dashing drops a live charge where you were standing.", PerkRarity.Rare, ActionSlot.Dash, BomberOnly),
 
             // ULTIMATE
             P(PerkId.UltimateSurge, "SURGE CELL", "Your Ultimate charges 30% faster.", PerkRarity.Rare, ActionSlot.Ultimate),
@@ -106,6 +111,11 @@ namespace Shatterspire
             P(PerkId.RangerHomingBarrage, "LONG FOCUS", "Hunters Focus starts with 7 instead of 5 seconds.", PerkRarity.Epic, ActionSlot.Ultimate, RangerOnly),
             P(PerkId.GuardianMoltenQuake, "MOLTEN CRATER", "Forge Plunge burns, and so does its crater.", PerkRarity.Epic, ActionSlot.Ultimate, GuardianOnly),
             P(PerkId.ArcanistEventHorizon, "EVENT HORIZON", "The Time Rift lasts 8.5 instead of 6.5 seconds.", PerkRarity.Epic, ActionSlot.Ultimate, ArcanistOnly),
+            P(PerkId.BomberShortFuse, "SHORT FUSE", "Thrown charges detonate twice as fast.", PerkRarity.Rare, ActionSlot.Light, BomberOnly),
+            P(PerkId.BomberClusterCharge, "CLUSTER CHARGE", "Every charge splits into two smaller ones on landing.", PerkRarity.Epic, ActionSlot.Light, BomberOnly),
+            P(PerkId.BomberStickyCluster, "SHAPED CHARGE", "The Sticky Mine hits 40% harder.", PerkRarity.Rare, ActionSlot.Heavy, BomberOnly),
+            P(PerkId.BomberLongCord, "LONG CORD", "The Blast Cord lays five charges instead of three.", PerkRarity.Epic, ActionSlot.Skill, BomberOnly),
+            P(PerkId.BomberChainFeed, "CHAIN FEED", "The Chain Detonator keeps feeding for 10 instead of 6 seconds.", PerkRarity.Epic, ActionSlot.Ultimate, BomberOnly),
 
             // PASSIVE
             P(PerkId.DamageUp, "TEMPERED POWER", "+25% damage for every action.", PerkRarity.Common, ActionSlot.Passive),

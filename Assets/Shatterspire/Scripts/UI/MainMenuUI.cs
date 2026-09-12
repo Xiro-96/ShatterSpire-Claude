@@ -13,7 +13,7 @@ namespace Shatterspire
     /// </summary>
     public sealed class MainMenuUI : MonoBehaviour
     {
-        private static readonly HeroClassId[] Heroes = { HeroClassId.Ranger, HeroClassId.Guardian, HeroClassId.Arcanist };
+        private static readonly HeroClassId[] Heroes = { HeroClassId.Ranger, HeroClassId.Guardian, HeroClassId.Arcanist, HeroClassId.Bomber };
         private static readonly RunMode[] Paths = { RunMode.Brave, RunMode.Heroic, RunMode.Legendary };
 
         private readonly List<Button> buttons = new();

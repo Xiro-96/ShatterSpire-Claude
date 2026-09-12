@@ -14,7 +14,7 @@ namespace Shatterspire
         UiClick, UiConfirm, PlayerHurt, Ambience,
         // Die drei Ultimates vom 12.09.
         PlungeRise, PlungeImpact, RiftOpen, FocusEnter, FocusExtend, FocusEnd,
-        LiftRise, LiftArrive, Heartbeat
+        LiftRise, LiftArrive, Heartbeat, StreakStep, Pickup, BombThrow, BombLand, ChainDetonate
     }
 
     /// <summary>
@@ -80,6 +80,9 @@ namespace Shatterspire
             Sound.Shockwave or Sound.HitHeavy => 0.8f,
             Sound.Explosion or Sound.GuardBreak or Sound.UltimateRise => 0.9f,
             Sound.PlungeImpact => 1f,
+            Sound.ChainDetonate => 1f,
+            Sound.BombThrow => 0.34f,
+            Sound.BombLand => 0.45f,
             Sound.PlungeRise => 0.5f,
             Sound.FocusExtend => 0.3f,
             Sound.FocusEnd => 0.4f,
@@ -132,6 +135,9 @@ namespace Shatterspire
             Sound.PlungeRise or Sound.FocusEnter => 0.2f,
             Sound.LiftRise or Sound.LiftArrive => 0.34f,
             Sound.Heartbeat => 0.1f,
+            Sound.StreakStep or Sound.Pickup => 0.24f,
+            Sound.BombLand => 0.3f,
+            Sound.ChainDetonate => 0.5f,
             Sound.Block or Sound.Shockwave or Sound.HitHeavy or Sound.Death => 0.32f,
             Sound.CoreActivated or Sound.FloorCleared or Sound.HeavyReady => 0.3f,
             _ => 0.24f
@@ -158,6 +164,9 @@ namespace Shatterspire
             Sound.CoreActivated => 1.3f,
             Sound.UltimateRise => 1.3f,
             Sound.FloorCleared => 1.9f,
+            Sound.BombThrow => 0.2f,
+            Sound.BombLand => 0.3f,
+            Sound.ChainDetonate => 1.6f,
             Sound.Ambience => 5f,
             Sound.PlungeRise => 0.7f,
             Sound.PlungeImpact => 1.4f,
@@ -166,6 +175,8 @@ namespace Shatterspire
             Sound.FocusExtend => 0.14f,
             Sound.FocusEnd => 0.5f,
             Sound.Heartbeat => 0.45f,
+            Sound.StreakStep => 0.55f,
+            Sound.Pickup => 0.3f,
             Sound.LiftRise => 1.6f,
             Sound.LiftArrive => 0.9f,
             _ => 0.4f
@@ -390,6 +401,38 @@ namespace Shatterspire
                     break;
 
                 // ── Hintergrund ─────────────────────────────────────────
+                case Sound.BombThrow:
+                    // Kurzer Luftzug beim Wurf, nichts weiter: der Knall kommt spaeter.
+                    AddSweptNoise(buffer, ref noise, 0f, 0.16f, 0.7f, 0.03f, 14f, 900f, 2600f, 400f);
+                    break;
+                case Sound.BombLand:
+                    // Metall auf Stein: die Ladung liegt. Danach zaehlt nur noch die Zuendschnur.
+                    Strike(buffer, ref noise, 0f, 0.002f, 4000f, 0.6f);
+                    AddResonator(buffer, ref noise, 0f, 240f, 0.1f, 0.8f, 0.002f);
+                    Knock(buffer, ref noise, 0f, 940f, 0.07f, 0.5f);
+                    break;
+                case Sound.ChainDetonate:
+                    // Kettenzuender: ein Zuendfunke, dann eine Folge von Einschlaegen, die sich
+                    // verdichtet - das Ohr hoert eine Kette und nicht einen einzelnen Knall.
+                    Strike(buffer, ref noise, 0f, 0.003f, 9000f, 0.7f);
+                    for (var i = 0; i < 7; i++)
+                    {
+                        var at = i * i * 0.018f;
+                        Body(buffer, ref noise, at, 44f + i * 5f, 0.12f, 0.4f, 1f - i * 0.09f);
+                        Knock(buffer, ref noise, at, 620f + i * 70f, 0.1f, 0.55f - i * 0.05f);
+                    }
+                    AddSweptNoise(buffer, ref noise, 0f, 1.1f, 0.8f, 0.01f, 3f, 5200f, 130f, 40f);
+                    break;
+                case Sound.StreakStep:
+                    // Zwei Glocken, die zweite hoeher: eine steigende Geste liest sich als Fortschritt.
+                    AddBell(buffer, ref noise, 0f, 880f, 0.22f, 0.7f);
+                    AddBell(buffer, ref noise, 0.08f, 1320f, 0.3f, 1f);
+                    break;
+                case Sound.Pickup:
+                    // Kurz und hell: eine Aufnahme soll bestaetigen, nicht feiern.
+                    AddBell(buffer, ref noise, 0f, 1175f, 0.18f, 1f);
+                    AddResonator(buffer, ref noise, 0f, 587f, 0.1f, 0.4f, 0.0015f);
+                    break;
                 case Sound.Heartbeat:
                     // Zwei tiefe Stoesse wie ein Herzschlag. Bewusst sehr tief und kurz: es soll
                     // im Bauch sitzen und nicht mit dem Kampf um Aufmerksamkeit streiten.
@@ -715,7 +758,7 @@ namespace Shatterspire
             Sound.Ambience => 0.3f,
             Sound.Cast or Sound.RiftOpen or Sound.FocusEnter or Sound.FocusEnd => 0.5f,
             Sound.CoreActivated or Sound.FloorCleared or Sound.UiConfirm or Sound.HeavyReady
-                or Sound.Telegraph or Sound.Block => 0.65f,
+                or Sound.Telegraph or Sound.Block or Sound.StreakStep or Sound.Pickup => 0.65f,
             Sound.Draw or Sound.Swing or Sound.Spin or Sound.Stab or Sound.Dash => 0.8f,
             _ => 1f
         };
