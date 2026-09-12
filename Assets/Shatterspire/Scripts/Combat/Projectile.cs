@@ -344,6 +344,7 @@ namespace Shatterspire
                 payload.Owner.GetComponent<WeaponSystem>()?.NotifyLightHit();
             ApplyElement(health, amount);
             if (payload.Build && payload.Build.Has(PerkId.Vampirism)) payload.Owner.GetComponent<Health>()?.Heal(amount * 0.04f);
+            if (payload.Build && payload.Build.HasSiphonStone) payload.Owner.GetComponent<Health>()?.Heal(amount * 0.03f);
 
             if (payload.Build && payload.Build.Has(PerkId.ExplosiveShot))
                 CombatUtility.Explode(hitPoint, payload.Build.IsInferno ? 3.2f : 2.2f, amount * 0.55f, payload.TargetTeam,

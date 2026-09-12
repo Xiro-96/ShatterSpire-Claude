@@ -526,6 +526,7 @@ namespace Shatterspire
                 target.TakeDamage(new DamageInfo(dealt, type, gameObject, point, away * (pull ? -knockback : knockback), critical));
                 ApplyStatus(target, type, dealt);
                 if (build.Has(PerkId.Vampirism)) health.Heal(dealt * 0.04f);
+                if (build.HasSiphonStone) health.Heal(dealt * 0.03f);
                 NotifyDamageDealt(dealt);
             }
             if (critical && build.IsShatter && strikeTargets.Count > 0)

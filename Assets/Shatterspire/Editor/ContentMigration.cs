@@ -108,7 +108,16 @@ namespace Shatterspire.Editor
                     chargeMultiplier: relic == RelicId.ArcBattery ? 1.25f : 1f,
                     healBonus: relic == RelicId.DawnSeed ? 10f : 0f,
                     shards: relic == RelicId.FortunePrism ? 1.25f : 1f,
-                    erupts: relic == RelicId.EmberLens);
+                    erupts: relic == RelicId.EmberLens,
+                    healthBonus: relic == RelicId.IronHeart ? 30f : 0f,
+                    moveSpeed: relic == RelicId.SwiftBoots ? 1.12f : 1f,
+                    attackSpeed: relic == RelicId.TwinCharge ? 1.1f : 1f,
+                    skillCooldown: relic == RelicId.FocusCrystal ? 0.8f : 1f,
+                    ultimateCharge: relic == RelicId.SurgeCore ? 1.2f : 1f,
+                    gold: relic == RelicId.GoldVein ? 1.3f : 1f,
+                    damageTaken: relic == RelicId.GuardPlate ? 0.9f : 1f,
+                    lifesteal: relic == RelicId.SiphonStone ? 0.03f : 0f,
+                    lowHealthDamage: relic == RelicId.VengeanceCoil ? 0.15f : 0f);
                 EditorUtility.SetDirty(asset);
                 result.Add(asset);
             }

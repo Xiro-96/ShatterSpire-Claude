@@ -211,7 +211,25 @@ namespace Shatterspire
     {
         private readonly HashSet<PerkId> perks = new();
         public IReadOnlyCollection<PerkId> Perks => perks;
-        public float DamageMultiplier { get; private set; } = 1f;
+        /// <summary>
+        /// Schadensfaktor einschliesslich der Wirkungen, die vom Zustand abhaengen. Berechnet statt
+        /// gespeichert: so wirkt die Zornspule ueberall, wo Schaden entsteht, ohne dass jede
+        /// Angriffsstelle im Kampfcode sie einzeln abfragen muesste.
+        /// </summary>
+        public float DamageMultiplier => storedDamageMultiplier * (LowHealthFury ? 1.15f : 1f);
+        private float storedDamageMultiplier = 1f;
+        private Health cachedHealth;
+
+        /// <summary>Zornspule liegt an und der Held ist unter 40 Prozent Leben.</summary>
+        private bool LowHealthFury
+        {
+            get
+            {
+                if (!HasVengeanceCoil) return false;
+                if (!cachedHealth) cachedHealth = GetComponent<Health>();
+                return cachedHealth && cachedHealth.IsAlive && cachedHealth.Normalized < 0.4f;
+            }
+        }
         public float AttackSpeedMultiplier { get; private set; } = 1f;
         public float MoveSpeedMultiplier { get; private set; } = 1f;
         public float CritChance { get; private set; } = 0.05f;
@@ -231,6 +249,11 @@ namespace Shatterspire
         public bool HasEmberLens { get; private set; }
         public bool HasDawnSeed { get; private set; }
         public bool HasFortunePrism { get; private set; }
+        public bool HasVengeanceCoil { get; private set; }
+        /// <summary>Saugstein: heilt einen Anteil des verursachten Schadens, wie die Saugrune.</summary>
+        public bool HasSiphonStone { get; private set; }
+        /// <summary>Faktor auf das Gold aus Gegnern. Die Goldader hebt ihn an.</summary>
+        public float GoldMultiplier { get; private set; } = 1f;
         public HeroClassId HeroClass { get; private set; } = HeroClassId.Ranger;
         public event Action Changed;
 
@@ -239,15 +262,30 @@ namespace Shatterspire
         public void ConfigureRun(HeroClassId hero, RunConfig config, MetaSaveData meta)
         {
             HeroClass = hero;
-            DamageMultiplier *= 1f + Mathf.Clamp(meta?.mightLevel ?? 0, 0, 10) * 0.04f;
+            storedDamageMultiplier *= 1f + Mathf.Clamp(meta?.mightLevel ?? 0, 0, 10) * 0.04f;
             MoveSpeedMultiplier *= 1f + Mathf.Clamp(meta?.agilityLevel ?? 0, 0, 10) * 0.02f;
             if (config == null) return;
             if (config.HasRelic(RelicId.WindstepSigil)) ExtraDashCharges++;
             if (config.HasRelic(RelicId.HuntersMark)) CritChance += 0.1f;
             if (config.HasRelic(RelicId.ArcBattery)) HeavyChargeMultiplier *= 1.25f;
+            if (config.HasRelic(RelicId.IronHeart)) GetComponent<Health>()?.IncreaseMaximum(30f, true);
+            if (config.HasRelic(RelicId.SwiftBoots)) MoveSpeedMultiplier *= 1.12f;
+            if (config.HasRelic(RelicId.FocusCrystal)) SkillCooldownMultiplier *= 0.8f;
+            if (config.HasRelic(RelicId.SurgeCore)) UltimateChargeMultiplier *= 1.2f;
+            if (config.HasRelic(RelicId.TwinCharge)) AttackSpeedMultiplier *= 1.1f;
+            if (config.HasRelic(RelicId.GoldVein)) GoldMultiplier *= 1.3f;
+            if (config.HasRelic(RelicId.GuardPlate))
+            {
+                // Schutzplatte laeuft ueber denselben Haken, mit dem der Schildtraeger Treffer
+                // abfaengt - eine Stelle fuer alles, was Schaden vor dem Abzug veraendert.
+                var own = GetComponent<Health>();
+                if (own) own.DamageFilter = damage => damage.Amount * 0.9f;
+            }
             HasEmberLens = config.HasRelic(RelicId.EmberLens);
             HasDawnSeed = config.HasRelic(RelicId.DawnSeed);
             HasFortunePrism = config.HasRelic(RelicId.FortunePrism);
+            HasVengeanceCoil = config.HasRelic(RelicId.VengeanceCoil);
+            HasSiphonStone = config.HasRelic(RelicId.SiphonStone);
             Changed?.Invoke();
         }
 
@@ -260,13 +298,13 @@ namespace Shatterspire
         {
             switch (id)
             {
-                case ShopOfferId.Whetstone: DamageMultiplier *= 1.12f; break;
+                case ShopOfferId.Whetstone: storedDamageMultiplier *= 1.12f; break;
                 case ShopOfferId.OiledGears: AttackSpeedMultiplier *= 1.08f; break;
                 case ShopOfferId.IronRation: GetComponent<Health>().IncreaseMaximum(25f, true); break;
                 case ShopOfferId.FocusLens: CritChance = Mathf.Min(0.85f, CritChance + 0.06f); break;
                 case ShopOfferId.Counterweight: HeavyDamageMultiplier *= 1.18f; break;
                 case ShopOfferId.ForgedBlade:
-                    DamageMultiplier *= 1.3f;
+                    storedDamageMultiplier *= 1.3f;
                     AttackSpeedMultiplier *= 0.94f;
                     break;
             }
@@ -278,7 +316,7 @@ namespace Shatterspire
             if (!perks.Add(perk.Id)) return;
             switch (perk.Id)
             {
-                case PerkId.DamageUp: DamageMultiplier *= 1.25f; break;
+                case PerkId.DamageUp: storedDamageMultiplier *= 1.25f; break;
                 case PerkId.AttackSpeed: AttackSpeedMultiplier *= 1.22f; break;
                 case PerkId.CritChance: CritChance += 0.12f; break;
                 case PerkId.CritDamage: CritMultiplier += 0.5f; break;

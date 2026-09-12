@@ -9,7 +9,14 @@ namespace Shatterspire
     public enum RunMode { Brave, Heroic, Legendary }
     public enum FloorTheme { ForgottenCourt, EmberFoundry, AstralArchive }
     public enum MetaUpgradeId { Vitality, Might, Agility }
-    public enum RelicId { WindstepSigil, HuntersMark, DawnSeed, EmberLens, ArcBattery, FortunePrism }
+    // Neue Relikte kommen ans Ende, damit gespeicherte Zahlen ihre Bedeutung behalten.
+    // Alle wirken auf jeden Helden: jeder hat Licht, Schwer, Faehigkeit, Dash und Ultimate.
+    public enum RelicId
+    {
+        WindstepSigil, HuntersMark, DawnSeed, EmberLens, ArcBattery, FortunePrism,
+        IronHeart, SwiftBoots, VengeanceCoil, SiphonStone, FocusCrystal, SurgeCore,
+        TwinCharge, GuardPlate, GoldVein
+    }
 
     [Serializable]
     public sealed class RunConfig
@@ -154,7 +161,16 @@ namespace Shatterspire
             RelicId.DawnSeed => "DAWN SEED",
             RelicId.EmberLens => "EMBER LENS",
             RelicId.ArcBattery => "ARC BATTERY",
-            _ => "FORTUNE PRISM"
+            RelicId.FortunePrism => "FORTUNE PRISM",
+            RelicId.IronHeart => "IRON HEART",
+            RelicId.SwiftBoots => "SWIFT BOOTS",
+            RelicId.VengeanceCoil => "VENGEANCE COIL",
+            RelicId.SiphonStone => "SIPHON STONE",
+            RelicId.FocusCrystal => "FOCUS CRYSTAL",
+            RelicId.SurgeCore => "SURGE CORE",
+            RelicId.TwinCharge => "TWIN CHARGE",
+            RelicId.GuardPlate => "GUARD PLATE",
+            _ => "GOLD VEIN"
         };
 
         public static string Description(RelicId relic) => relic switch
@@ -164,7 +180,16 @@ namespace Shatterspire
             RelicId.DawnSeed => "Heal 10 after every floor",
             RelicId.EmberLens => "Heavy attacks erupt on impact",
             RelicId.ArcBattery => "Heavy meter charges 25% faster",
-            _ => "+25% secured shards"
+            RelicId.FortunePrism => "+25% secured shards",
+            RelicId.IronHeart => "+30 maximum health",
+            RelicId.SwiftBoots => "+12% movement speed",
+            RelicId.VengeanceCoil => "+15% damage below 40% health",
+            RelicId.SiphonStone => "Heal 3% of damage dealt",
+            RelicId.FocusCrystal => "Skill cooldown 20% shorter",
+            RelicId.SurgeCore => "Ultimate charges 20% faster",
+            RelicId.TwinCharge => "Light attacks 10% faster",
+            RelicId.GuardPlate => "Take 10% less damage",
+            _ => "+30% gold from enemies"
         };
     }
 }

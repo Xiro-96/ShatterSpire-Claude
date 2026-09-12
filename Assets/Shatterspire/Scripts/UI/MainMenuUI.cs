@@ -96,7 +96,7 @@ namespace Shatterspire
             AnnounceShiftRewardOnce();
 
             if (!Application.isMobilePlatform)
-                Text(screen.transform, "← →  HERO      ↑ ↓  PATH      R  RELICS      F  FORGE      ENTER  CLIMB", 15,
+                Text(screen.transform, Loc.T("ARROW KEYS HINT"), 15,
                     TextAnchor.LowerCenter, new Vector2(0, 14), new Vector2(900, 24), new Vector2(0.5f, 0)).color = new Color(0.62f, 0.7f, 0.8f);
 
             shortcuts[KeyCode.LeftArrow] = () => CycleHero(-1);
@@ -125,15 +125,17 @@ namespace Shatterspire
             var tier = RankTable.TierFor(rankPoints);
             var rank = Panel(screen.transform, new Vector2(-48, -26), new Vector2(380, 116), new Vector2(1, 1),
                 new Color(0.018f, 0.035f, 0.07f, 0.92f), RankTable.Accent(tier));
-            Text(rank.transform, $"SHIFT {save.shiftIndex}  ·  ENDS IN {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}", 15,
+            Text(rank.transform, Loc.T("SHIFT") + " " + save.shiftIndex + "  ·  " + Loc.T("ENDS IN") + " " +
+                ShiftCalendar.Countdown(ShiftCalendar.Remaining), 15,
                 TextAnchor.UpperLeft, new Vector2(24, -12), new Vector2(340, 22), new Vector2(0, 1)).color = new Color(0.62f, 0.72f, 0.84f);
             var rankName = Text(rank.transform, RankTable.Name(tier), 38, TextAnchor.UpperLeft, new Vector2(22, -34), new Vector2(340, 46), new Vector2(0, 1));
             rankName.fontStyle = FontStyle.Bold;
             rankName.color = RankTable.Accent(tier);
             var next = RankTable.IsHighest(tier)
                 ? "HIGHEST RANK"
-                : $"{RankTable.PointsToNext(rankPoints):N0} TO {RankTable.Name((RankTier)((int)tier + 1))}";
-            Text(rank.transform, $"{rankPoints:N0} RANK POINTS  ·  {next}", 15, TextAnchor.UpperLeft,
+                : RankTable.PointsToNext(rankPoints).ToString("N0") + " " + Loc.T("TO") + " " +
+                  RankTable.Name((RankTier)((int)tier + 1));
+            Text(rank.transform, rankPoints.ToString("N0") + " " + Loc.T("RANK POINTS") + "  ·  " + next, 15, TextAnchor.UpperLeft,
                 new Vector2(24, -84), new Vector2(340, 22), new Vector2(0, 1));
 
             Chip(new Vector2(-448, -26), "SHARDS", save.shards.ToString("N0"), new Color(0.3f, 0.78f, 1f));
@@ -166,18 +168,22 @@ namespace Shatterspire
             name.fontStyle = FontStyle.Bold;
             Text(screen.transform, HeroCatalog.Role(hero), 22, TextAnchor.UpperLeft, new Vector2(58, -350), new Vector2(560, 30), new Vector2(0, 1)).color = accent;
             Text(screen.transform,
-                $"LIGHT   {HeroCatalog.LightAttackName(hero)}\nHEAVY   {HeroCatalog.HeavyAttackName(hero)}\nSKILL   {HeroCatalog.SkillName(hero)}\nULTIMATE   {HeroCatalog.UltimateName(hero)}\n\nHP   {HeroCatalog.BaseHealth(hero):0}",
+                Loc.T("LIGHT") + "   " + Loc.T(HeroCatalog.LightAttackName(hero)) + "\n" +
+                Loc.T("HEAVY") + "   " + Loc.T(HeroCatalog.HeavyAttackName(hero)) + "\n" +
+                Loc.T("SKILL") + "   " + Loc.T(HeroCatalog.SkillName(hero)) + "\n" +
+                Loc.T("ULTIMATE") + "   " + Loc.T(HeroCatalog.UltimateName(hero)) + "\n\n" +
+                Loc.T("HP") + "   " + HeroCatalog.BaseHealth(hero).ToString("0"),
                 19, TextAnchor.UpperLeft, new Vector2(58, -396), new Vector2(520, 150), new Vector2(0, 1)).color = new Color(0.86f, 0.92f, 0.98f);
         }
 
         private void BuildRelicSlots(Color accent)
         {
-            Text(screen.transform, $"RELICS  {config.Relics.Count}/3", 18, TextAnchor.LowerLeft, new Vector2(58, 214), new Vector2(400, 26), new Vector2(0, 0))
+            Text(screen.transform, Loc.T("RELICS") + "  " + config.Relics.Count + "/3", 18, TextAnchor.LowerLeft, new Vector2(58, 214), new Vector2(400, 26), new Vector2(0, 0))
                 .color = new Color(0.62f, 0.72f, 0.84f);
             for (var i = 0; i < 3; i++)
             {
                 var filled = i < config.Relics.Count;
-                var label = filled ? RelicCatalog.Name(config.Relics[i]) : "+ EMPTY";
+                var label = filled ? Loc.T(RelicCatalog.Name(config.Relics[i])) : Loc.T("+ EMPTY");
                 Button(screen.transform, label, new Vector2(56 + i * 166, 108), new Vector2(154, 96), new Vector2(0, 0),
                     filled ? accent : new Color(0.32f, 0.4f, 0.5f), ShowRelics, labelSize: 16);
             }
@@ -201,11 +207,12 @@ namespace Shatterspire
             {
                 var path = Paths[i];
                 var selected = path == config.Mode;
-                Button(screen.transform, $"{PathCatalog.Name(path)}\n<size=16>{PathCatalog.Summary(path)}</size>",
+                Button(screen.transform, PathCatalog.Name(path) + "\n<size=16>" + Loc.T(PathCatalog.Summary(path)) + "</size>",
                     new Vector2(-56, 326 - i * 94), new Vector2(460, 84), new Vector2(1, 0),
                     selected ? PathCatalog.Accent(path) : new Color(0.32f, 0.4f, 0.5f), () => SelectPath(path), selected);
             }
-            var climb = Button(screen.transform, $"CLIMB\n<size=18>{PathCatalog.Name(config.Mode)}  ·  {PathCatalog.Summary(config.Mode)}</size>",
+            var climb = Button(screen.transform, Loc.T("CLIMB") + "\n<size=18>" + PathCatalog.Name(config.Mode)
+                + "  ·  " + Loc.T(PathCatalog.Summary(config.Mode)) + "</size>",
                 new Vector2(-56, 28), new Vector2(460, 112), new Vector2(1, 0), PathCatalog.Accent(config.Mode), BeginRun, true, 42);
             climb.GetComponentInChildren<Text>().color = Color.white;
         }
@@ -216,7 +223,7 @@ namespace Shatterspire
             plates = new RectTransform[1 + team.Length];
             plates[0] = Plate("YOU", HeroCatalog.Name(hero), accent);
             for (var i = 0; i < team.Length; i++)
-                plates[i + 1] = Plate("BOT", $"{team[i].Name}  {team[i].Role.ToString().ToUpperInvariant()}", team[i].Accent);
+                plates[i + 1] = Plate("BOT", team[i].Name + "  " + Loc.Of(team[i].Role), team[i].Accent);
             UpdatePlates();
         }
 
@@ -278,7 +285,7 @@ namespace Shatterspire
                 new Color(0.03f, 0.06f, 0.05f, 0.96f), RankTable.Accent(tier));
             Text(banner.transform, "SHIFT COMPLETE", 22, TextAnchor.UpperCenter, new Vector2(0, -12), new Vector2(700, 28), new Vector2(0.5f, 1))
                 .color = RankTable.Accent(tier);
-            Text(banner.transform, $"RANK {RankTable.Name(tier)}  ·  +{tokens} TOKENS", 26, TextAnchor.UpperCenter,
+            Text(banner.transform, Loc.T("RANK") + " " + RankTable.Name(tier) + "  ·  +" + tokens + " " + Loc.T("TOKENS"), 26, TextAnchor.UpperCenter,
                 new Vector2(0, -46), new Vector2(700, 34), new Vector2(0.5f, 1));
         }
 
@@ -289,18 +296,25 @@ namespace Shatterspire
             BeginScreen(true);
             backAction = CloseRelics;
             var accent = HeroCatalog.Accent(config.Hero);
-            Header("RELIC LOADOUT", $"{config.Relics.Count}/3 EQUIPPED  ·  CARRIED INTO EVERY CLIMB", accent);
+            Header(Loc.T("RELIC LOADOUT"),
+                config.Relics.Count + "/3 " + Loc.T("EQUIPPED  ·  CARRIED INTO EVERY CLIMB"), accent);
             var relics = (RelicId[])Enum.GetValues(typeof(RelicId));
+            // Vier Spalten: mit fuenfzehn Relikten liefe ein Raster aus drei Spalten unten aus dem Bild.
+            const int columns = 4;
             for (var i = 0; i < relics.Length; i++)
             {
                 var relic = relics[i];
                 var selected = config.Relics.Contains(relic);
-                Button(screen.transform, $"{(selected ? "◆  " : "◇  ")}{RelicCatalog.Name(relic)}\n<size=17>{RelicCatalog.Description(relic)}</size>",
-                    new Vector2(-510 + (i % 3) * 510, 90 - (i / 3) * 150), new Vector2(470, 124), new Vector2(0.5f, 0.5f),
+                var label = (selected ? "◆  " : "◇  ") + Loc.T(RelicCatalog.Name(relic))
+                            + "\n<size=16>" + Loc.T(RelicCatalog.Description(relic)) + "</size>";
+                Button(screen.transform, label,
+                    new Vector2(-585 + (i % columns) * 390, 170 - (i / columns) * 132),
+                    new Vector2(364, 112), new Vector2(0.5f, 0.5f),
                     selected ? accent : new Color(0.32f, 0.42f, 0.54f), () => ToggleRelic(relic), selected);
-                shortcuts[KeyCode.Alpha1 + i] = () => ToggleRelic(relic);
+                // Zifferntasten nur fuer die ersten neun - mehr Ziffern gibt es nicht.
+                if (i < 9) shortcuts[KeyCode.Alpha1 + i] = () => ToggleRelic(relic);
             }
-            Button(screen.transform, "DONE", new Vector2(0, -330), new Vector2(360, 88), new Vector2(0.5f, 0.5f), accent, CloseRelics, true);
+            Button(screen.transform, "DONE", new Vector2(0, -380), new Vector2(360, 88), new Vector2(0.5f, 0.5f), accent, CloseRelics, true);
             shortcuts[KeyCode.R] = CloseRelics;
             shortcuts[KeyCode.Return] = CloseRelics;
         }
@@ -325,7 +339,7 @@ namespace Shatterspire
             BeginScreen(true);
             backAction = ShowLobby;
             var save = MetaSaveSystem.Load();
-            Header("META FORGE", $"SHARDS  {save.shards:N0}  ·  PERMANENT, CAPPED BONUSES", new Color(1f, 0.55f, 0.08f));
+            Header(Loc.T("META FORGE"), Loc.T("SHARDS") + "  " + save.shards.ToString("N0") + "  ·  " + Loc.T("PERMANENT, CAPPED BONUSES"), new Color(1f, 0.55f, 0.08f));
             var upgrades = new[] { MetaUpgradeId.Vitality, MetaUpgradeId.Might, MetaUpgradeId.Agility };
             var names = new[] { "VITAL CORE", "TEMPERED EDGE", "WIND GLYPH" };
             var effects = new[] { "+5 MAX HP / LEVEL", "+4% DAMAGE / LEVEL", "+2% MOVE SPEED / LEVEL" };
@@ -336,7 +350,9 @@ namespace Shatterspire
                 var level = MetaSaveSystem.UpgradeLevel(save, id);
                 var cost = MetaSaveSystem.UpgradeCost(save, id);
                 Action buy = () => { MetaSaveSystem.Purchase(id); ShowForge(); };
-                Button(screen.transform, $"{names[i]}\n\n<size=19>{effects[i]}\n\nLEVEL {level} / 10\n{(level >= 10 ? "MAXIMUM" : "UPGRADE  " + cost + " SHARDS")}</size>",
+                Button(screen.transform, Loc.T(names[i]) + "\n\n<size=19>" + Loc.T(effects[i]) + "\n\n"
+                    + Loc.T("LEVEL") + " " + level + " / 10\n"
+                    + (level >= 10 ? Loc.T("MAXIMUM") : Loc.T("UPGRADE") + "  " + cost + " " + Loc.T("SHARDS")) + "</size>",
                     new Vector2(-510 + i * 510, 0), new Vector2(430, 400), new Vector2(0.5f, 0.5f), colors[i], buy);
                 shortcuts[KeyCode.Alpha1 + i] = buy;
             }

@@ -197,7 +197,12 @@ namespace Shatterspire
             // Gold fuer den Aufstieg. Der Spawner kennt den Spieler ohnehin, deshalb faellt die
             // Belohnung hier und nicht in einer statischen Kasse.
             if (player && player.TryGetComponent<RunWallet>(out var wallet))
-                wallet.Earn(RunWallet.RewardFor(enemy.Kind, activeFloor));
+            {
+                var reward = RunWallet.RewardFor(enemy.Kind, activeFloor);
+                if (player.TryGetComponent<PlayerBuild>(out var build))
+                    reward = Mathf.RoundToInt(reward * build.GoldMultiplier);
+                wallet.Earn(reward);
+            }
             camps.Remove(enemy);
             campOf.Remove(enemy);
             if (encounter.Remove(enemy))

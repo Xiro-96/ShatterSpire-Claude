@@ -163,7 +163,17 @@ namespace Shatterspire.Tests
                 [RelicId.DawnSeed] = new RelicEffect(0, 0f, 1f, 10f, 1f, false),
                 [RelicId.EmberLens] = new RelicEffect(0, 0f, 1f, 0f, 1f, true),
                 [RelicId.ArcBattery] = new RelicEffect(0, 0f, 1.25f, 0f, 1f, false),
-                [RelicId.FortunePrism] = new RelicEffect(0, 0f, 1f, 0f, 1.25f, false)
+                [RelicId.FortunePrism] = new RelicEffect(0, 0f, 1f, 0f, 1.25f, false),
+                // Die neun Relikte vom 12.09. Alle wirken auf jeden Helden.
+                [RelicId.IronHeart] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, health: 30f),
+                [RelicId.SwiftBoots] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, move: 1.12f),
+                [RelicId.VengeanceCoil] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, lowHealthDamage: 0.15f),
+                [RelicId.SiphonStone] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, lifesteal: 0.03f),
+                [RelicId.FocusCrystal] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, skillCooldown: 0.8f),
+                [RelicId.SurgeCore] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, ultimateCharge: 1.2f),
+                [RelicId.TwinCharge] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, attackSpeed: 1.1f),
+                [RelicId.GuardPlate] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, damageTaken: 0.9f),
+                [RelicId.GoldVein] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, gold: 1.3f)
             };
 
             Assert.That(expected.Keys, Is.EquivalentTo(Enum.GetValues(typeof(RelicId)).Cast<RelicId>()),
@@ -180,6 +190,15 @@ namespace Shatterspire.Tests
                 Assert.That(asset.FloorHealBonus, Is.EqualTo(want.Heal).Within(Tolerance), $"{relic}: Etagen-Heilung");
                 Assert.That(asset.ShardMultiplier, Is.EqualTo(want.Shards).Within(Tolerance), $"{relic}: Shard-Faktor");
                 Assert.That(asset.HeavyErupts, Is.EqualTo(want.Erupts), $"{relic}: Heavy detoniert");
+                Assert.That(asset.MaximumHealthBonus, Is.EqualTo(want.Health).Within(Tolerance), $"{relic}: Leben");
+                Assert.That(asset.MoveSpeedMultiplier, Is.EqualTo(want.Move).Within(Tolerance), $"{relic}: Lauftempo");
+                Assert.That(asset.AttackSpeedMultiplier, Is.EqualTo(want.AttackSpeed).Within(Tolerance), $"{relic}: Angriffstempo");
+                Assert.That(asset.SkillCooldownMultiplier, Is.EqualTo(want.SkillCooldown).Within(Tolerance), $"{relic}: Abklingzeit");
+                Assert.That(asset.UltimateChargeMultiplier, Is.EqualTo(want.UltimateCharge).Within(Tolerance), $"{relic}: Ultimate-Ladung");
+                Assert.That(asset.GoldMultiplier, Is.EqualTo(want.Gold).Within(Tolerance), $"{relic}: Gold");
+                Assert.That(asset.DamageTakenMultiplier, Is.EqualTo(want.DamageTaken).Within(Tolerance), $"{relic}: erlittener Schaden");
+                Assert.That(asset.LifestealFraction, Is.EqualTo(want.Lifesteal).Within(Tolerance), $"{relic}: Lebensraub");
+                Assert.That(asset.LowHealthDamageBonus, Is.EqualTo(want.LowHealthDamage).Within(Tolerance), $"{relic}: Zorn-Bonus");
             }
         }
 
@@ -191,8 +210,20 @@ namespace Shatterspire.Tests
             public readonly float Heal;
             public readonly float Shards;
             public readonly bool Erupts;
+            public readonly float Health;
+            public readonly float Move;
+            public readonly float AttackSpeed;
+            public readonly float SkillCooldown;
+            public readonly float UltimateCharge;
+            public readonly float Gold;
+            public readonly float DamageTaken;
+            public readonly float Lifesteal;
+            public readonly float LowHealthDamage;
 
-            public RelicEffect(int dashCharges, float crit, float charge, float heal, float shards, bool erupts)
+            public RelicEffect(int dashCharges, float crit, float charge, float heal, float shards, bool erupts,
+                float health = 0f, float move = 1f, float attackSpeed = 1f, float skillCooldown = 1f,
+                float ultimateCharge = 1f, float gold = 1f, float damageTaken = 1f, float lifesteal = 0f,
+                float lowHealthDamage = 0f)
             {
                 DashCharges = dashCharges;
                 Crit = crit;
@@ -200,6 +231,15 @@ namespace Shatterspire.Tests
                 Heal = heal;
                 Shards = shards;
                 Erupts = erupts;
+                Health = health;
+                Move = move;
+                AttackSpeed = attackSpeed;
+                SkillCooldown = skillCooldown;
+                UltimateCharge = ultimateCharge;
+                Gold = gold;
+                DamageTaken = damageTaken;
+                Lifesteal = lifesteal;
+                LowHealthDamage = lowHealthDamage;
             }
         }
     }
