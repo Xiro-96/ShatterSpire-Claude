@@ -89,7 +89,7 @@ namespace Shatterspire
             floorRoot = AuthoredArt.BuildFloor(layout, null);
 
             PlaceParty(layout);
-            spawner.BeginFloor(navigation, roomIndex, currentAnomaly);
+            spawner.BeginFloor(navigation, roomIndex, currentAnomaly, runSeed);
             // Zuerst die Anomalie: der Etagenkopf nennt sie in derselben Ansage, also muss sie
             // beim HUD schon angekommen sein.
             GameEvents.RaiseAnomalyChanged(currentAnomaly);

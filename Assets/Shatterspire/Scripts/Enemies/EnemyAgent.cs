@@ -37,6 +37,20 @@ namespace Shatterspire
         private int announcedBossPhase;
         private float hitStaggerUntil;
         private float strafeDirection;
+        /// <summary>
+        /// Lauf-Seed, Etage und ein Salz, das genau diesen Gegner meint. Daraus kommt alles, was der
+        /// Gegner streut - im Co-op muss derselbe Gegner bei allen drei Spielern derselbe sein.
+        /// </summary>
+        private int runSeed;
+        private int floorIndex;
+        private int salt;
+        // Vier Fragen an denselben Gegner. Jede bekommt ihren eigenen Abstand im Salzraum: sonst
+        // zoege der Nachbar im Lager fuer seine erste Frage dieselbe Zahl wie dieser Gegner fuer
+        // seine zweite, und die Antworten waeren ueber das ganze Lager hinweg gekoppelt.
+        private const int SaltElite = 1000000;
+        private const int SaltStrafe = 2000000;
+        private const int SaltReady = 3000000;
+        private const int SaltPose = 4000000;
         private Vector3 knockbackVelocity;
         // Schildtraeger: Deckung nach vorn. Wer von der Seite oder von hinten trifft, trifft voll;
         // wer von vorn hart genug zuschlaegt, bricht die Deckung fuer ein paar Sekunden auf.
@@ -52,6 +66,8 @@ namespace Shatterspire
         /// <summary>Wird aufmerksam und greift an. Der Spawner alarmiert darueber das restliche Lager.</summary>
         public event Action<EnemyAgent> Engaged;
         public EnemyKind Kind => kind;
+        /// <summary>Salz dieses Gegners. Der Spawner braucht es fuer die Beute beim Tod.</summary>
+        public int Salt => salt;
         /// <summary>Kurz nach dem Erscheinen: fuer die Zielhilfe noch kein gueltiges Ziel.</summary>
         public bool IsArriving => Time.time - spawnedAt < ArrivalGraceSeconds;
         /// <summary>Wartet im Lager und hat noch niemanden bemerkt.</summary>
@@ -73,18 +89,30 @@ namespace Shatterspire
 
         private void OnDisable() => ActiveAgents.Remove(this);
 
-        public void Configure(EnemyKind value, Transform player, int floor)
-            => Configure(value, player, floor, FloorModifierCatalog.For(FloorModifierId.None));
+        /// <summary>
+        /// Traegt dieser Elite die explosive oder die vampirische Eigenschaft? Reine Rechnung aus
+        /// (Seed, Etage, Salz) und nicht aus <see cref="UnityEngine.Random"/>: wer im Co-op einem
+        /// explosiven Elite ausweicht, muss das auch bei den anderen Spielern tun.
+        /// </summary>
+        public static bool EliteIsExplosive(int runSeed, int floor, int salt)
+            => RunRandom.Chance(runSeed, floor, salt + SaltElite, 0.5f);
 
         /// <summary>
         /// Setzt den Gegner auf. Die Anomalie der Etage greift nach der Tiefenskalierung an,
         /// nicht davor: sonst wuerde sie sich mit der Etagenkurve multiplizieren und auf Etage 14
         /// ein Vielfaches dessen bedeuten, was auf Etage 2 angekuendigt war.
+        ///
+        /// seed und enemySalt sagen, welcher Gegner das ist: sie ersetzen den Wuerfel bei allem,
+        /// was zwischen den Spielern uebereinstimmen muss.
         /// </summary>
-        public void Configure(EnemyKind value, Transform player, int floor, in FloorModifier modifier)
+        public void Configure(EnemyKind value, Transform player, int floor, in FloorModifier modifier,
+            int seed, int enemySalt)
         {
             kind = value;
             target = player;
+            runSeed = seed;
+            floorIndex = floor;
+            salt = enemySalt;
             health = GetComponent<Health>();
             status = GetComponent<StatusReceiver>();
             motion = GetComponent<StylizedCharacterMotion>();
@@ -95,7 +123,7 @@ namespace Shatterspire
             health.Configure(TeamId.Enemy, stats.Health);
             if (kind == EnemyKind.Elite)
             {
-                eliteExplosive = UnityEngine.Random.value < 0.5f;
+                eliteExplosive = EliteIsExplosive(runSeed, floorIndex, salt);
                 eliteVampiric = !eliteExplosive;
             }
 
@@ -129,9 +157,11 @@ namespace Shatterspire
                 guardBreakDamage = health.Maximum * 0.42f;
                 health.DamageFilter = FilterGuardedDamage;
             }
-            strafeDirection = GetInstanceID() % 2 == 0 ? 1f : -1f;
+            strafeDirection = RunRandom.Chance(runSeed, floorIndex, salt + SaltStrafe, 0.5f) ? 1f : -1f;
             spawnedAt = Time.time;
-            attackReadyAt = Time.time + UnityEngine.Random.Range(0.35f, 0.85f);
+            // Der erste Schlag kommt versetzt, damit ein Lager nicht wie ein Mann zuschlaegt:
+            // 0,35 bis 0,85 Sekunden in Hundertstelschritten, gezogen statt gewuerfelt.
+            attackReadyAt = Time.time + 0.35f + RunRandom.Index(runSeed, floorIndex, salt + SaltReady, 51) * 0.01f;
             state = State.Chase;
         }
 
@@ -155,7 +185,10 @@ namespace Shatterspire
                 state = State.Idle;
                 // Lager schlafen: leichte Skelette liegen meist am Boden, schwere stehen reglos. Wer naeher
                 // kommt, weckt sie - erst stehen sie auf, dann greifen sie an.
-                dormantOnFloor = kind is EnemyKind.Crawler or EnemyKind.Shooter && GetInstanceID() % 3 != 0;
+                // Zwei von drei leichten Skeletten liegen. Auch das gezogen: ein Gegner, der beim
+                // einen Spieler liegt und beim anderen steht, wacht auch verschieden auf.
+                dormantOnFloor = kind is EnemyKind.Crawler or EnemyKind.Shooter
+                    && RunRandom.Chance(runSeed, floorIndex, salt + SaltPose, 2f / 3f);
                 dormant = motion && motion.HoldPose(dormantOnFloor ? PresenceMotion.InactiveFloor : PresenceMotion.InactiveStanding);
                 return;
             }

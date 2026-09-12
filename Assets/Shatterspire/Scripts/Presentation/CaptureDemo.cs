@@ -26,6 +26,14 @@ namespace Shatterspire
         public static bool Requested => Array.IndexOf(Environment.GetCommandLineArgs(), Flag) >= 0;
 
         /// <summary>
+        /// Salze der beiden Vorfuehrgegner. Sie stehen ausserhalb dessen, was der Spawner vergibt
+        /// (siehe <see cref="EnemySpawner.EnemySalt"/>), und unterscheiden sich voneinander, damit
+        /// nicht beide dieselbe Eigenschaft ziehen.
+        /// </summary>
+        private const int DemoSaltAhead = 7000001;
+        private const int DemoSaltSideways = 7000002;
+
+        /// <summary>
         /// Fester Lauf-Seed aus -shatterspire-seed. Ohne ihn waere jede Bildfolge eine andere Etage
         /// mit anderen Anomalien, und zwei Aufnahmen liessen sich nicht vergleichen.
         /// Gibt 0 zurueck, wenn keiner angegeben ist.
@@ -371,7 +379,8 @@ namespace Shatterspire
             var side = Vector3.Cross(Vector3.up, player.forward).normalized;
             var spot = player.position + side * distance;
             if (navigation != null) spot = navigation.ClampToWalkable(spot, 0.6f);
-            var enemy = EnemyFactory.Create(kind, spot, player, 1);
+            // Fester Seed und festes Salz: zwei Aufnahmen sollen denselben Gegner zeigen.
+            var enemy = EnemyFactory.Create(kind, spot, player, 1, FixedSeed, DemoSaltSideways);
             enemy.SetBehaviour(navigation, spot, false);
             return enemy;
         }
@@ -382,7 +391,7 @@ namespace Shatterspire
             var navigation = director ? director.Navigation : null;
             var spot = player.position + player.forward * distance;
             if (navigation != null) spot = navigation.ClampToWalkable(spot, 0.6f);
-            var enemy = EnemyFactory.Create(kind, spot, player, 1);
+            var enemy = EnemyFactory.Create(kind, spot, player, 1, FixedSeed, DemoSaltAhead);
             enemy.SetBehaviour(navigation, spot, false);
             return enemy;
         }

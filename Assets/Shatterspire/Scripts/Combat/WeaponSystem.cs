@@ -776,6 +776,10 @@ namespace Shatterspire
         private void Strike(Vector3 point, float radius, float damage, DamageType type, float knockback = 4f, bool pull = false,
             bool flash = true)
         {
+            // Krit und Kettenblitz bleiben gewuerfelt, anders als alles am Raum und am Gegner:
+            // sie haengen am einzelnen Schlag, und den gibt es nur bei dem Spieler, der ihn fuehrt.
+            // Ein Salz aus (Seed, Etage) gaebe es dafuer nicht - die Zahl der Schlaege ist bei
+            // jedem Spieler eine andere. Im Netzwerk wird spaeter das Ergebnis verschickt.
             var critical = Random.value < build.CritChance;
             var amount = damage * (critical ? build.CritMultiplier : 1f);
             if (flash) PrototypeVfx.SpawnExplosion(point, radius, PrototypeVfx.ElementColor(type));

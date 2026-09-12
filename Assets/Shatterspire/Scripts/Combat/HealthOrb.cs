@@ -29,21 +29,36 @@ namespace Shatterspire
         /// Wahrscheinlichkeit und Menge je Gegnerart. Starke Gegner lassen oefter und mehr fallen -
         /// das belohnt, sich an das Schwierige zu halten, statt Crawler zu farmen.
         /// </summary>
-        public static void TryDrop(EnemyKind kind, Vector3 position, Transform hero)
+        private static (float Chance, float Heal) Reward(EnemyKind kind) => kind switch
+        {
+            EnemyKind.Crawler => (0.16f, 6f),
+            EnemyKind.Shooter or EnemyKind.Marksman => (0.2f, 7f),
+            EnemyKind.Shieldbearer => (0.3f, 10f),
+            EnemyKind.Brute => (0.42f, 14f),
+            EnemyKind.Elite => (1f, 26f),
+            EnemyKind.IronWarden => (1f, 60f),
+            _ => (0.16f, 6f)
+        };
+
+        /// <summary>
+        /// Salz der Beutefrage. Steht neben den vier Fragen, die der Gegner selbst stellt
+        /// (siehe <see cref="EnemyAgent"/>), damit keine zwei davon dieselbe Zahl ziehen.
+        /// </summary>
+        private const int SaltDrop = 5000000;
+
+        /// <summary>
+        /// Faellt fuer diesen Gegner eine Kugel? Aus (Seed, Etage, Salz) gezogen und nicht aus
+        /// <see cref="UnityEngine.Random"/>: Beute ist im Co-op gemeinsame Sache, und eine Kugel,
+        /// die nur bei einem Spieler liegt, laesst zwei andere ins Leere laufen.
+        /// </summary>
+        public static bool Drops(EnemyKind kind, int runSeed, int floor, int salt)
+            => RunRandom.Chance(runSeed, floor, salt + SaltDrop, Reward(kind).Chance);
+
+        public static void TryDrop(EnemyKind kind, Vector3 position, Transform hero, int runSeed, int floor, int salt)
         {
             if (!hero) return;
-            var (chance, heal) = kind switch
-            {
-                EnemyKind.Crawler => (0.16f, 6f),
-                EnemyKind.Shooter or EnemyKind.Marksman => (0.2f, 7f),
-                EnemyKind.Shieldbearer => (0.3f, 10f),
-                EnemyKind.Brute => (0.42f, 14f),
-                EnemyKind.Elite => (1f, 26f),
-                EnemyKind.IronWarden => (1f, 60f),
-                _ => (0.16f, 6f)
-            };
-            if (Random.value > chance) return;
-            Spawn(position, heal, hero);
+            if (!Drops(kind, runSeed, floor, salt)) return;
+            Spawn(position, Reward(kind).Heal, hero);
         }
 
         public static HealthOrb Spawn(Vector3 position, float heal, Transform hero)
@@ -55,6 +70,8 @@ namespace Shatterspire
             orb.target = hero;
             orb.amount = heal;
             orb.expiresAt = Time.time + LifeSeconds;
+            // Wackeln und Sprung bleiben gewuerfelt: sie entscheiden nichts, sie verhindern nur,
+            // dass zwei Kugeln nebeneinander im Gleichtakt huepfen.
             orb.bobPhase = Random.value * 6.28f;
             // Kleiner Sprung beim Erscheinen, damit sie nicht im Gegner klebt.
             orb.velocity = new Vector3(Random.Range(-1.2f, 1.2f), 3.4f, Random.Range(-1.2f, 1.2f));

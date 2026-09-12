@@ -395,6 +395,8 @@ namespace Shatterspire
 
         private void ApplyElement(Health health, float amount)
         {
+            // Der Kettenblitz bleibt gewuerfelt: er haengt am einzelnen Treffer, nicht an der Etage.
+            // Dieselbe Begruendung wie beim Krit in WeaponSystem.Strike.
             var status = health.GetComponent<StatusReceiver>();
             if (!status) return;
             switch (payload.Type)
