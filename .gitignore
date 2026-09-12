@@ -100,3 +100,8 @@ desktop.ini
 
 # Lokale Sicherungskopien als Archiv (etwa Assets.rar). Der Inhalt liegt ohnehin im Repo.
 *.rar
+
+# Unity-Zwischenordner aus Batchmode-Laeufen
+/.utmp/
+# Vom Performance-Testing-Paket beim Testlauf erzeugt
+/[Aa]ssets/Resources/PerformanceTestRun*
