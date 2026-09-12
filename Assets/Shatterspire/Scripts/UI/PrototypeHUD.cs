@@ -766,7 +766,11 @@ namespace Shatterspire
                 var button = CreateButton(modal.transform,
                     $"[{i + 1}]  {PerkCatalog.SlotLabel(perk.Slot, hero)}\n{perk.Name}\n\n{perk.Description}\n\n{rarity}",
                     new Vector2(-390f + i * 390f, -20f), new Vector2(340f, 420f), perk.Color);
-                button.onClick.AddListener(() => SelectPerk(perk));
+                button.onClick.AddListener(() =>
+                {
+                    Sfx.Play2D(Sound.UiConfirm);
+                    SelectPerk(perk);
+                });
                 modalButtons.Add(button);
             }
         }
@@ -804,7 +808,11 @@ namespace Shatterspire
                 var color = kind switch { RoomKind.Elite => new Color(0.86f, 0.2f, 0.55f), RoomKind.Boss => new Color(1f, 0.45f, 0.08f), RoomKind.Treasure => new Color(1f, 0.78f, 0.16f), _ => new Color(0.15f, 0.7f, 0.82f) };
                 var text = kind switch { RoomKind.Elite => "ELITE FIGHT\nHigh risk · bonus shards", RoomKind.Treasure => "TREASURE\nExtra healing · bonus shards", RoomKind.Mystery => "MYSTERY\nUnknown encounter", RoomKind.Boss => "SPIRE WARDEN\nAscension trial", _ => "COMBAT\nBalanced resistance" };
                 var button = CreateButton(modal.transform, $"[{i + 1}]  {text}", new Vector2((i - (options.Length - 1) * 0.5f) * 390f, -20f), new Vector2(340f, 360f), color);
-                button.onClick.AddListener(() => SelectRoute(kind));
+                button.onClick.AddListener(() =>
+                {
+                    Sfx.Play2D(Sound.UiConfirm);
+                    SelectRoute(kind);
+                });
                 modalButtons.Add(button);
             }
         }
@@ -827,13 +835,21 @@ namespace Shatterspire
             modal = CreateModal("THE ASCENSION GATE", $"FLOOR {floor} CLEARED  ·  {carriedShards} SHARDS AT STAKE");
             var extractButton = CreateButton(modal.transform,
                 "[1]  EXTRACT\n\nSECURE ALL SHARDS\nRETURN TO SKYHOLD", new Vector2(-260, -30), new Vector2(420, 390), new Color(0.12f, 0.9f, 0.64f));
-            extractButton.onClick.AddListener(ChooseExtract);
+            extractButton.onClick.AddListener(() =>
+            {
+                Sfx.Play2D(Sound.UiClick);
+                ChooseExtract();
+            });
             modalButtons.Add(extractButton);
             if (canAscend)
             {
                 var ascendButton = CreateButton(modal.transform,
                     "[2]  ASCEND\n\nSTRONGER ENEMIES\n+35% TIER REWARDS", new Vector2(260, -30), new Vector2(420, 390), new Color(0.72f, 0.25f, 1f));
-                ascendButton.onClick.AddListener(ChooseAscend);
+                ascendButton.onClick.AddListener(() =>
+                {
+                    Sfx.Play2D(Sound.UiConfirm);
+                    ChooseAscend();
+                });
                 modalButtons.Add(ascendButton);
             }
         }

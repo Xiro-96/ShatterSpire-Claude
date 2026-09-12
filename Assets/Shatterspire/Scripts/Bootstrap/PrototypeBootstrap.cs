@@ -78,6 +78,9 @@ namespace Shatterspire
             if (Application.isMobilePlatform) Input.simulateMouseWithTouches = false;
             MobileInput.Reset();
             StylizedArt.ConfigureWorld();
+            // Die Flaeche laeuft ueber Menue und Aufstieg durch. Sie ist leise und soll den Turm
+            // nur tragen, nicht auffallen.
+            Sfx.StartAmbience();
 
             // Automatische Bildkontrolle (-shatterspire-capture): ohne Menue direkt in einen Aufstieg mit Brax.
             if (CaptureDemo.Requested && !RunLaunchSettings.HasPendingRun)
@@ -120,6 +123,7 @@ namespace Shatterspire
 #if UNITY_EDITOR
             EditorCaptureAgent.Attach(systems, "run", true, 3f, 12f);
 #endif
+            systems.AddComponent<SoundToggle>();
             if (CaptureDemo.Requested) systems.AddComponent<CaptureDemo>().Configure(player, runCamera);
         }
 

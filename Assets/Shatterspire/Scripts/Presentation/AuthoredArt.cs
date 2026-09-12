@@ -1495,6 +1495,8 @@ namespace Shatterspire
         // Blendzeiten. Kurz genug, dass die Steuerung direkt bleibt, lang genug,
         // dass kein Schnitt mehr sichtbar ist.
         private const float LocomotionBlendSeconds = 0.16f;
+        /// <summary>Strecke je Schritt. Passt zum Laufclip, sonst trippelt oder schlurft es.</summary>
+        private const float StrideLength = 1.85f;
         private const float ActionFadeInSeconds = 0.07f;
         private const float ActionFadeOutSeconds = 0.17f;
 
@@ -1560,6 +1562,8 @@ namespace Shatterspire
         private float moveBlend;
         private float referenceSpeed = 6f;
         private bool ready;
+        /// <summary>Zurueckgelegte Strecke seit dem letzten Schritt. Ton haengt am Weg, nicht an der Uhr.</summary>
+        private float strideDistance;
 
         public void Configure(Animator target, float topSpeed = 6f, bool undead = false)
         {
@@ -1807,6 +1811,23 @@ namespace Shatterspire
             locomotion.SetInputWeight(1, moveBlend);
             // Clip-Tempo mitziehen, sonst rutschen die Fuesse ueber den Boden.
             movePlayable.SetSpeed(Mathf.Lerp(0.75f, 1.35f, moveBlend));
+
+            // Schritte aus der tatsaechlichen Strecke: bei halbem Tempo kommen sie von selbst
+            // halb so oft, ohne dass irgendwo ein Takt gepflegt werden muesste.
+            if (moveBlend > 0.25f)
+            {
+                strideDistance += displacement.magnitude;
+                if (strideDistance >= StrideLength)
+                {
+                    strideDistance = 0f;
+                    Sfx.Play(Sound.Footstep, transform.position, 0.55f);
+                }
+            }
+            else
+            {
+                // Fast voll: der erste Schritt nach dem Losgehen soll sofort kommen.
+                strideDistance = StrideLength * 0.75f;
+            }
 
             WrapLoop(idlePlayable);
             WrapLoop(movePlayable);

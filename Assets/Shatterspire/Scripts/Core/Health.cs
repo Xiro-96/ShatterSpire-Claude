@@ -81,6 +81,8 @@ namespace Shatterspire
             current = Mathf.Max(0f, current - applied.Amount);
             Damaged?.Invoke(applied);
             GetComponent<StylizedCharacterMotion>()?.PulseHit();
+            // Eigener Klang fuer die eigene Seite: im Getuemmel muss hoerbar sein, wer getroffen wurde.
+            if (team == TeamId.Player) Sfx.Play(Sound.PlayerHurt, transform.position, 0.85f);
             GameEvents.RaiseHealthChanged(this);
             DamageNumber.Spawn(applied.HitPoint, applied.Amount, applied.IsCritical, applied.Type);
             if (applied.Force.sqrMagnitude > 0.01f || applied.IsCritical)

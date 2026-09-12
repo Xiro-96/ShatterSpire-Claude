@@ -152,6 +152,7 @@ namespace Shatterspire
         {
             if (finished || !node || node.Activated || !node.Ready) return;
             node.LockActivated();
+            Sfx.Play2D(Sound.CoreActivated);
             if (ActivatedCount >= nodes.Count)
             {
                 gate.Unlock();
@@ -197,6 +198,7 @@ namespace Shatterspire
             finished = true;
             GameEvents.RaiseObjectiveTargetChanged(Vector3.zero, string.Empty, false);
             GameEvents.RaiseObjectiveChanged(nodes.Count, nodes.Count, "FLOOR SECURED");
+            Sfx.Play2D(Sound.FloorCleared);
             completed?.Invoke();
         }
 

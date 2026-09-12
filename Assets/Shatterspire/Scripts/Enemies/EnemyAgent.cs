@@ -587,11 +587,15 @@ namespace Shatterspire
                 guardBrokenUntil = Time.time + GuardBreakSeconds;
                 hitStaggerUntil = Mathf.Max(hitStaggerUntil, Time.time + 0.45f);
                 motion?.PlayPresence(PresenceMotion.GuardBreak, 1f, 0.7f);
+                Sfx.Play(Sound.GuardBreak, transform.position + Vector3.up * 0.9f);
                 PrototypeVfx.SpawnShockwave(transform.position + Vector3.up * 0.9f, 2.2f, GuardColor);
                 CameraController.Impulse(0.1f);
                 return damage.Amount;
             }
 
+            // Der metallische Abpraller ist die wichtigste Rueckmeldung des Schildtraegers: er sagt
+            // "hier nicht", noch bevor die kleine Schadenszahl gelesen ist.
+            Sfx.Play(Sound.Block, damage.HitPoint);
             PrototypeVfx.SpawnHit(damage.HitPoint, -toAttacker.normalized, DamageType.Lightning, false);
             // Health spielt gleich danach die Trefferreaktion und ueberschreibt damit die Haltung.
             // Kurz darauf geht der Schild wieder hoch - das liest sich als Zucken, nicht als Aussetzer.

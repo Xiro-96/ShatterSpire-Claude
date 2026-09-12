@@ -404,7 +404,11 @@ namespace Shatterspire
             var strength = filled ? 0.5f : 0.14f;
             var panel = Panel(parent, pos, size, anchor, new Color(color.r * strength, color.g * strength, color.b * strength, 0.96f), color);
             var button = panel.gameObject.AddComponent<Button>();
-            button.onClick.AddListener(() => action?.Invoke());
+            button.onClick.AddListener(() =>
+            {
+                Sfx.Play2D(Sound.UiClick);
+                action?.Invoke();
+            });
             var colors = button.colors;
             colors.highlightedColor = Color.Lerp(Color.white, color, 0.45f);
             colors.pressedColor = color;

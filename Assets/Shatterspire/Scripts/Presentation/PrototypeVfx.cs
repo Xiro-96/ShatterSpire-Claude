@@ -117,8 +117,11 @@ namespace Shatterspire
             _ => new Color(0.25f, 0.95f, 1f)
         };
 
+        // Ton haengt an denselben Aufrufen wie das Bild: was blitzt, klingt auch. So gibt es keine
+        // Stelle im Spiel, die einen Effekt zeigt und dabei stumm bleibt.
         public static void SpawnMuzzle(Vector3 position, Vector3 direction)
         {
+            Sfx.Play(Sound.Shot, position);
             var go = PrototypeFactory.Primitive(PrimitiveType.Sphere, "Muzzle Flash", position + direction * 0.2f,
                 new Vector3(0.28f, 0.28f, 0.46f), new Color(1f, 0.8f, 0.2f), true);
             Object.Destroy(go.GetComponent<Collider>());
@@ -151,11 +154,13 @@ namespace Shatterspire
                 streak.AddComponent<VfxPulse>().Configure(critical ? 0.2f : 0.14f, 0f, false);
             }
 
+            Sfx.Play(critical ? Sound.HitCritical : Sound.HitLight, position, critical ? 1f : 0.85f);
             CameraController.Impulse(critical ? 0.085f : 0.025f);
         }
 
         public static void SpawnEnemyArrival(Vector3 position, bool elite)
         {
+            Sfx.Play(Sound.EnemyArrival, position, elite ? 1f : 0.7f);
             var color = elite ? new Color(1f, 0.18f, 0.58f) : new Color(0.62f, 0.24f, 1f);
             color.a = elite ? 0.9f : 0.76f;
             var socket = GameObject.CreatePrimitive(PrimitiveType.Quad);
@@ -179,6 +184,7 @@ namespace Shatterspire
 
         public static void SpawnHeavyReady(Vector3 position)
         {
+            Sfx.Play(Sound.HeavyReady, position, 0.8f);
             var color = new Color(1f, 0.76f, 0.1f);
             var ring = PrototypeFactory.Primitive(PrimitiveType.Cylinder, "Heavy Ready Ring",
                 position + Vector3.up * 0.035f, new Vector3(0.4f, 0.018f, 0.4f), color, true);
@@ -190,6 +196,9 @@ namespace Shatterspire
 
         public static void SpawnExplosion(Vector3 position, float radius, Color color)
         {
+            // Eine kleine Detonation soll nicht so laut sein wie eine grosse.
+            Sfx.Play(radius >= 2.4f ? Sound.Explosion : Sound.HitHeavy, position,
+                Mathf.Clamp(0.45f + radius * 0.12f, 0.45f, 1f));
             CameraController.Impulse(Mathf.Min(0.16f, radius * 0.025f));
             var ring = PrototypeFactory.Primitive(PrimitiveType.Cylinder, "Impact Ring", position + Vector3.up * 0.06f,
                 new Vector3(0.24f, 0.025f, 0.24f), color, true);
@@ -212,6 +221,7 @@ namespace Shatterspire
 
         public static void SpawnShockwave(Vector3 position, float radius, Color color)
         {
+            Sfx.Play(Sound.Shockwave, position, Mathf.Clamp(0.55f + radius * 0.1f, 0.55f, 1f));
             for (var i = 0; i < 3; i++)
             {
                 var ring = GameObject.CreatePrimitive(PrimitiveType.Quad);
@@ -231,6 +241,7 @@ namespace Shatterspire
 
         public static void SpawnDeath(Vector3 position, Color color)
         {
+            Sfx.Play(Sound.Death, position);
             for (var i = 0; i < 11; i++)
             {
                 var shard = PrototypeFactory.Primitive(PrimitiveType.Cube, "Death Shard", position + Vector3.up,
@@ -251,6 +262,7 @@ namespace Shatterspire
 
         public static GameObject SpawnTelegraph(Vector3 position, float radius, bool line)
         {
+            Sfx.Play(Sound.Telegraph, position, 0.7f);
             var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
             go.name = "Attack Area Telegraph";
             go.transform.position = position + Vector3.up * 0.035f;
@@ -265,6 +277,7 @@ namespace Shatterspire
 
         public static GameObject SpawnTelegraphLine(Vector3 origin, Vector3 direction, float length, float width)
         {
+            Sfx.Play(Sound.Telegraph, origin, 0.7f);
             direction.y = 0f;
             if (direction.sqrMagnitude < 0.01f) direction = Vector3.forward;
             direction.Normalize();

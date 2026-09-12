@@ -406,6 +406,8 @@ namespace Shatterspire
             if (build.Has(PerkId.UltimateAfterglow)) health.Heal(health.Maximum * 0.3f);
             CameraController.Impulse(0.24f);
             Hitstop.Freeze(0.07f, 0.06f);
+            // Ohne Ort und damit ohne Abstandsdaempfung: die eigene Ultimate soll im Vordergrund stehen.
+            Sfx.Play2D(Sound.UltimateRise);
             PrototypeVfx.SpawnHeavyReady(transform.position);
 
             if (heroClass == HeroClassId.Guardian)

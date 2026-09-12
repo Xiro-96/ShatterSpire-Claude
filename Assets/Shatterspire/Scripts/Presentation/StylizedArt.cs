@@ -426,11 +426,36 @@ namespace Shatterspire
                 _ => 0.4f
             };
             recoil = Mathf.Max(recoil, strength * (kind == AttackMotion.Spin ? 0.25f : kind == AttackMotion.Shot ? 0.55f : 0.8f));
+            // Der Luftzug gehoert zur Bewegung, nicht zum Treffer: er klingt auch, wenn danebengehauen
+            // wird. Shot bleibt stumm, weil dort der Muendungsblitz schon seinen Knall mitbringt.
+            var swing = SoundFor(kind);
+            if (swing.HasValue) Sfx.Play(swing.Value, transform.position);
             authoredAnimation?.PlayMotion(kind, motionDuration);
         }
 
-        public void PulseDash() => authoredAnimation?.PulseDash();
-        public void PulseDash(Vector3 localDirection) => authoredAnimation?.PulseDash(localDirection);
+        private static Sound? SoundFor(AttackMotion kind) => kind switch
+        {
+            AttackMotion.Swing => Sound.Swing,
+            AttackMotion.Smash or AttackMotion.Leap => Sound.Smash,
+            AttackMotion.Spin => Sound.Spin,
+            AttackMotion.Stab => Sound.Stab,
+            AttackMotion.Cast or AttackMotion.Channel or AttackMotion.Summon => Sound.Cast,
+            AttackMotion.Draw => Sound.Draw,
+            AttackMotion.Release => Sound.Release,
+            _ => null
+        };
+
+        public void PulseDash()
+        {
+            Sfx.Play(Sound.Dash, transform.position, 0.7f);
+            authoredAnimation?.PulseDash();
+        }
+
+        public void PulseDash(Vector3 localDirection)
+        {
+            Sfx.Play(Sound.Dash, transform.position, 0.7f);
+            authoredAnimation?.PulseDash(localDirection);
+        }
 
         /// <summary>Auftritt spielen, hoechstens maxSeconds lang. Gibt die Dauer zurueck, 0 ohne passenden Clip.</summary>
         public float PlayPresence(PresenceMotion kind, float preferredSpeed = 1f, float maxSeconds = 2f)
