@@ -18,6 +18,8 @@ namespace Shatterspire
         private PlayerController controller;
         private WeaponSystem weapon;
         private LevelSystem levelSystem;
+        private RunWallet wallet;
+        private Action shopContinue;
         private Image hpFill;
         private Image hpChip;
         private Text hpText;
@@ -42,6 +44,7 @@ namespace Shatterspire
         private Text knockoutText;
         private Image xpFill;
         private Text levelText;
+        private Text goldText;
         private CanvasGroup announcementGroup;
         private Text announcementText;
         private float announcementUntil;
@@ -71,6 +74,8 @@ namespace Shatterspire
             controller = player.GetComponent<PlayerController>();
             weapon = player.GetComponent<WeaponSystem>();
             levelSystem = player.GetComponent<LevelSystem>();
+            wallet = player.GetComponent<RunWallet>();
+            if (wallet) wallet.Changed += RefreshGold;
             BuildCanvas();
             Subscribe();
             RefreshHealth(playerHealth);
@@ -80,6 +85,7 @@ namespace Shatterspire
 
         private void OnDestroy()
         {
+            if (wallet) wallet.Changed -= RefreshGold;
             GameEvents.HealthChanged -= RefreshHealth;
             GameEvents.PerkSelected -= OnPerkSelected;
             GameEvents.RoomStarted -= OnRoomStarted;
@@ -177,7 +183,9 @@ namespace Shatterspire
             buildText = CreateText(root.transform, "NO UPGRADES YET", 12, TextAnchor.UpperLeft, new Vector2(112, -91), new Vector2(258, 22), new Vector2(0, 1));
             CreateExperienceBar(root.transform);
             CreateTeamFrames(root.transform);
-            CreateMoveStick(root.transform);
+            // Die Bedienflaechen zuerst: sie liegen damit unter den Aktionsknoepfen, und ein Tipp auf
+            // einen Knopf geht an den Knopf, nicht an den Stick darunter.
+            CreateTouchSticks(root.transform);
             CreateActionCluster(root.transform);
             CreateAnnouncement(root.transform);
         }
@@ -245,6 +253,14 @@ namespace Shatterspire
             levelText = CreateText(back.transform, "LV 1  ·  0 / 30", 11, TextAnchor.MiddleCenter,
                 Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
             levelText.fontStyle = FontStyle.Bold;
+
+            // Gold direkt unter dem Erfahrungsbalken: es entsteht im Kampf und wird gleich danach
+            // beim Haendler ausgegeben, gehoert also in denselben Blick.
+            goldText = CreateText(back.transform.parent, "0 GOLD", 15, TextAnchor.UpperLeft,
+                new Vector2(96, -104), new Vector2(240, 22), new Vector2(0, 1));
+            goldText.color = new Color(1f, 0.82f, 0.24f);
+            goldText.fontStyle = FontStyle.Bold;
+            RefreshGold();
         }
 
         private void CreateAnnouncement(Transform parent)
@@ -311,7 +327,7 @@ namespace Shatterspire
             for (var i = 0; i < team.Length; i++)
             {
                 if (!team[i]) continue;
-                if (teamStatus[i]) teamStatus[i].text = team[i].Status;
+                if (teamStatus[i]) teamStatus[i].text = Loc.T(team[i].Status);
                 if (teamSupportFill[i]) teamSupportFill[i].fillAmount = team[i].SupportReadyNormalized;
             }
         }
@@ -323,14 +339,48 @@ namespace Shatterspire
             _ => HeroClassId.Ranger
         };
 
-        private void CreateMoveStick(Transform parent)
+        /// <summary>
+        /// Zwei schwebende Sticks: links laufen, rechts zielen und dabei schiessen. Jede Haelfte ist
+        /// vollstaendig Bedienflaeche - der Stick entsteht unter dem Daumen, wo auch immer der aufsetzt.
+        ///
+        /// Vorher gab es nur einen Stick an einer festen Stelle und das Ziel suchte sich das Spiel
+        /// selbst. Beides war im Handytest der Hauptgrund, warum sich die Steuerung schwerfaellig
+        /// anfuehlte und Schuesse auf falsche Gegner gingen.
+        /// </summary>
+        private void CreateTouchSticks(Transform parent)
         {
             if (!Application.isMobilePlatform) return;
-            var stick = CreateImage(parent, "Move Stick", new Color(0.2f, 0.8f, 1f, 0.22f), new Vector2(190, 190), new Vector2(270, 270), Vector2.zero);
-            stick.sprite = UiIconFactory.Disc();
-            var knob = CreateImage(stick.transform, "Knob", new Color(0.25f, 0.9f, 1f, 0.7f), Vector2.zero, new Vector2(105, 105), new Vector2(0.5f, 0.5f));
+            CreateTouchStick(parent, StickRole.Move, "Lauf-Flaeche", new Vector2(0f, 0f), new Vector2(0.5f, 1f),
+                new Color(0.2f, 0.8f, 1f, 0.55f));
+            CreateTouchStick(parent, StickRole.Aim, "Ziel-Flaeche", new Vector2(0.5f, 0f), new Vector2(1f, 1f),
+                new Color(1f, 0.66f, 0.18f, 0.55f));
+        }
+
+        private void CreateTouchStick(Transform parent, StickRole role, string name, Vector2 anchorMin,
+            Vector2 anchorMax, Color accent)
+        {
+            var zoneObject = new GameObject(name, typeof(RectTransform), typeof(Image));
+            zoneObject.transform.SetParent(parent, false);
+            var zone = (RectTransform)zoneObject.transform;
+            zone.anchorMin = anchorMin;
+            zone.anchorMax = anchorMax;
+            zone.offsetMin = Vector2.zero;
+            zone.offsetMax = Vector2.zero;
+            // Unsichtbar, aber anfassbar: eine voll durchsichtige Flaeche bekommt keine Beruehrung.
+            var surface = zoneObject.GetComponent<Image>();
+            surface.color = new Color(0f, 0f, 0f, 0.004f);
+
+            var ring = CreateImage(zone, name + " Ring", new Color(accent.r, accent.g, accent.b, 0.2f),
+                Vector2.zero, new Vector2(240, 240), new Vector2(0.5f, 0.5f));
+            ring.sprite = UiIconFactory.Disc();
+            ring.raycastTarget = false;
+            var knob = CreateImage(zone, name + " Knopf", accent, Vector2.zero, new Vector2(96, 96),
+                new Vector2(0.5f, 0.5f));
             knob.sprite = UiIconFactory.Disc();
-            stick.gameObject.AddComponent<MobileJoystick>().Configure((RectTransform)knob.transform);
+            knob.raycastTarget = false;
+
+            zoneObject.AddComponent<MobileJoystick>()
+                .Configure((RectTransform)ring.transform, (RectTransform)knob.transform, role);
         }
 
         /// <summary>
@@ -467,7 +517,7 @@ namespace Shatterspire
                     : new Color(1f, 0.74f, 0.16f);
                 ultimateButton.Cooldown.fillAmount = weapon.UltimateActive ? 1f : 1f - weapon.UltimateNormalized;
                 ultimateButton.Center.text = ready || weapon.UltimateActive ? string.Empty : Mathf.FloorToInt(weapon.UltimateNormalized * 100f) + "%";
-                ultimateButton.Status.text = ready ? "ULTIMATE READY" : string.Empty;
+                ultimateButton.Status.text = ready ? Loc.T("ULTIMATE READY") : string.Empty;
                 if (ready && !ultimateWasReady)
                 {
                     ultimateButton.Punch();
@@ -593,7 +643,8 @@ namespace Shatterspire
         private void RefreshObjective(int current, int required, string instruction)
         {
             if (!objectiveText) return;
-            objectiveText.text = required > 1 ? $"{instruction}  ·  {current}/{required}" : instruction;
+            var localized = Loc.T(instruction);
+            objectiveText.text = required > 1 ? $"{localized}  ·  {current}/{required}" : localized;
             objectiveText.color = current >= required
                 ? new Color(0.2f, 1f, 0.55f)
                 : new Color(0.82f, 0.96f, 1f);
@@ -614,8 +665,10 @@ namespace Shatterspire
             encounterText.gameObject.SetActive(visible);
             if (!visible) return;
             encounterText.text = boss
-                ? "IRON WARDEN  ·  BOSS ENGAGED"
-                : $"CORE DEFENDERS  ·  {remaining} REMAINING";
+                ? Loc.T("IRON WARDEN  ·  BOSS ENGAGED")
+                : Loc.Language == Language.German
+                    ? $"KERN-VERTEIDIGER  ·  {remaining} ÜBRIG"
+                    : $"CORE DEFENDERS  ·  {remaining} REMAINING";
             encounterText.color = boss
                 ? new Color(1f, 0.58f, 0.12f)
                 : remaining <= Mathf.Max(2, total / 3)
@@ -626,7 +679,7 @@ namespace Shatterspire
         private void RefreshExperience(int level, int current, int required)
         {
             if (xpFill) xpFill.fillAmount = required <= 0 ? 0f : Mathf.Clamp01(current / (float)required);
-            if (levelText) levelText.text = $"LV {level}  ·  {current} / {required}";
+            if (levelText) levelText.text = $"{Loc.T("LV")} {level}  ·  {current} / {required}";
         }
 
         private void RefreshWave(int current, int total)
@@ -638,7 +691,7 @@ namespace Shatterspire
         private void ShowAnnouncement(string message, float seconds)
         {
             if (!announcementGroup || !announcementText) return;
-            announcementText.text = message;
+            announcementText.text = Loc.T(message);
             announcementGroup.alpha = 1f;
             announcementGroup.gameObject.SetActive(true);
             announcementUntil = Time.unscaledTime + seconds;
@@ -677,7 +730,7 @@ namespace Shatterspire
             heavyWasReady = ready;
             if (!heavyStateText) return;
             // Der Erklaertext steht nur, bis der Heavy zum ersten Mal voll war. Danach reicht der Ring.
-            heavyStateText.text = perfect ? (Application.isMobilePlatform ? "PERFECT!  RELEASE" : "PERFECT!  RELEASE RMB")
+            heavyStateText.text = perfect ? Loc.T(Application.isMobilePlatform ? "PERFECT!  RELEASE" : "PERFECT!  RELEASE RMB")
                 : charging ? "RELEASE IN GOLD"
                 : ready ? weapon.HeavyName + " READY"
                 : heavyEverReady ? string.Empty : "LIGHT HITS CHARGE HEAVY";
@@ -689,20 +742,20 @@ namespace Shatterspire
             if (!knockoutText) return;
             if (downed && skulls < maximum)
             {
-                knockoutText.text = $"ALLY REVIVING {HeroCatalog.Name(runConfig.Hero)}  {reviveProgress:P0}";
+                knockoutText.text = $"{Loc.T("ALLY REVIVING")} {HeroCatalog.Name(runConfig.Hero)}  {reviveProgress:P0}";
                 knockoutText.color = new Color(0.3f, 1f, 0.58f);
                 return;
             }
             var lives = Mathf.Max(0, maximum - skulls);
-            knockoutText.text = "TEAM LIVES  " + new string('◆', lives) + new string('◇', maximum - lives);
+            knockoutText.text = Loc.T("TEAM LIVES") + "  " + new string('◆', lives) + new string('◇', maximum - lives);
             knockoutText.color = lives <= 1 ? new Color(1f, 0.32f, 0.22f) : new Color(1f, 0.78f, 0.2f);
         }
 
         private void OnRoomStarted(int index, RoomKind kind)
         {
             var counter = PathCatalog.FloorCounter(runConfig.Mode, index);
-            roomText.text = $"{counter}  ·  {kind.ToString().ToUpperInvariant()}";
-            ShowAnnouncement($"{FloorCatalog.Name(FloorCatalog.ThemeFor(index))}\nFLOOR {index} · {kind.ToString().ToUpperInvariant()}", 1.8f);
+            roomText.text = $"{counter}  ·  {Loc.Of(kind)}";
+            ShowAnnouncement($"{FloorCatalog.Name(FloorCatalog.ThemeFor(index))}\n{Loc.T("FLOOR")} {index} · {Loc.Of(kind)}", 1.8f);
         }
         private void OnPerkSelected(PerkDefinition _) => RefreshBuild();
 
@@ -716,7 +769,7 @@ namespace Shatterspire
                 var perk = PerkCatalog.Find(id);
                 if (perk == null) continue;
                 counts[(int)perk.Slot]++;
-                if (perk.Slot == ActionSlot.Passive) passives.Add(perk.Name);
+                if (perk.Slot == ActionSlot.Passive) passives.Add(Loc.T(perk.Name));
             }
             SetBadge(lightButton, counts[(int)ActionSlot.Light]);
             SetBadge(heavyButton, counts[(int)ActionSlot.Heavy]);
@@ -725,7 +778,7 @@ namespace Shatterspire
             SetBadge(ultimateButton, counts[(int)ActionSlot.Ultimate]);
             var fusion = build.IsInferno ? "  ·  FUSION: INFERNO" : build.IsShatter ? "  ·  FUSION: SHATTER" : build.IsChainStorm ? "  ·  FUSION: CHAIN STORM" : string.Empty;
             buildText.text = passives.Count > 0 ? string.Join(" · ", passives) + fusion
-                : build.Perks.Count > 0 ? "UPGRADES SHOWN ON YOUR ACTIONS" : "NO UPGRADES YET";
+                : Loc.T(build.Perks.Count > 0 ? "UPGRADES SHOWN ON YOUR ACTIONS" : "NO UPGRADES YET");
         }
 
         private static void SetBadge(ActionButtonView view, int count)
@@ -738,9 +791,84 @@ namespace Shatterspire
 
         public void ShowFloorUpgrade(Action afterSelection)
         {
-            postPerkCallback = afterSelection;
+            // Reihenfolge zwischen zwei Etagen: erst eine Verbesserung waehlen, dann der Haendler,
+            // danach geht es weiter. Wer beim Haendler nichts kauft, verliert nichts.
+            postPerkCallback = () => ShowShop(afterSelection);
             selectingLevelPerk = false;
             ShowPerkChoice();
+        }
+
+        /// <summary>
+        /// Haendler zwischen den Etagen. Gold kommt aus erledigten Gegnern, die Preise steigen mit
+        /// jedem Kauf derselben Ware, und die Waffe gibt es genau einmal je Aufstieg.
+        /// </summary>
+        private void ShowShop(Action afterShop)
+        {
+            if (modal || !wallet)
+            {
+                afterShop?.Invoke();
+                return;
+            }
+            Time.timeScale = 0f;
+            shopContinue = afterShop;
+            BuildShopModal();
+        }
+
+        private void BuildShopModal()
+        {
+            if (modal) Destroy(modal);
+            modalButtons.Clear();
+            modal = CreateModal($"{Loc.T("TRADER")}  ·  {wallet.Gold} {Loc.T("GOLD")}",
+                Loc.T("SPEND GOLD OR KEEP IT FOR LATER"));
+            var offers = ShopCatalog.All;
+            for (var i = 0; i < offers.Count; i++)
+            {
+                var offer = offers[i];
+                var owned = wallet.TimesBought(offer.Id);
+                var soldOut = offer.Unique && owned > 0;
+                var price = wallet.PriceOf(offer);
+                var affordable = wallet.CanAfford(offer);
+                var label = soldOut ? Loc.T("SOLD OUT") : $"{price} {Loc.T("GOLD")}";
+                var stack = owned > 0 && !offer.Unique ? "\n" + Loc.T("OWNED") + "  " + owned : string.Empty;
+                var column = i % 3;
+                var row = i / 3;
+                var button = CreateButton(modal.transform,
+                    Loc.T(offer.Name) + "\n\n" + Loc.T(offer.Description) + "\n\n" + label + stack,
+                    new Vector2(-390f + column * 390f, 130f - row * 250f), new Vector2(340f, 220f),
+                    affordable ? offer.Color : new Color(0.34f, 0.36f, 0.4f));
+                if (affordable)
+                {
+                    var chosen = offer;
+                    button.onClick.AddListener(() =>
+                    {
+                        if (!wallet.Buy(chosen, build)) return;
+                        Sfx.Play2D(Sound.UiConfirm);
+                        RefreshGold();
+                        // Preise und Kassenstand haben sich geaendert - der Laden wird neu gezeichnet.
+                        BuildShopModal();
+                    });
+                }
+                modalButtons.Add(button);
+            }
+            var leave = CreateButton(modal.transform, Loc.T("CONTINUE CLIMB"), new Vector2(0f, -330f),
+                new Vector2(420f, 90f), new Color(0.2f, 0.82f, 0.6f));
+            leave.onClick.AddListener(() =>
+            {
+                Sfx.Play2D(Sound.UiClick);
+                Destroy(modal);
+                modal = null;
+                modalButtons.Clear();
+                Time.timeScale = 1f;
+                var next = shopContinue;
+                shopContinue = null;
+                next?.Invoke();
+            });
+            modalButtons.Add(leave);
+        }
+
+        private void RefreshGold()
+        {
+            if (goldText && wallet) goldText.text = $"{wallet.Gold} {Loc.T("GOLD")}";
         }
 
         private void OnLevelUp(int _)
@@ -764,7 +892,7 @@ namespace Shatterspire
                 var rarity = perk.Rarity.ToString().ToUpperInvariant() +
                              (perk.Heroes.Length == 1 ? "  ·  " + HeroCatalog.Name(hero) + " ONLY" : string.Empty);
                 var button = CreateButton(modal.transform,
-                    $"[{i + 1}]  {PerkCatalog.SlotLabel(perk.Slot, hero)}\n{perk.Name}\n\n{perk.Description}\n\n{rarity}",
+                    $"[{i + 1}]  {Loc.T(PerkCatalog.SlotLabel(perk.Slot, hero))}\n{Loc.T(perk.Name)}\n\n{Loc.T(perk.Description)}\n\n{rarity}",
                     new Vector2(-390f + i * 390f, -20f), new Vector2(340f, 420f), perk.Color);
                 button.onClick.AddListener(() =>
                 {
@@ -939,10 +1067,10 @@ namespace Shatterspire
                 $"RANK POINTS  {rankPoints:N0}\nFROM YOUR {RankTable.ClimbCount} BEST CLIMBS\n{next}\n\nSHIFT ENDS IN  {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}",
                 24, TextAnchor.UpperCenter, new Vector2(0, -160), new Vector2(600, 130), new Vector2(0.5f, 1));
 
-            var wallet = CreateImage(modal.transform, "Wallet", new Color(0.03f, 0.06f, 0.1f, 0.96f),
+            var walletPanel = CreateImage(modal.transform, "Wallet", new Color(0.03f, 0.06f, 0.1f, 0.96f),
                 new Vector2(0, -140), new Vector2(1010, 62), new Vector2(0.5f, 0.5f));
-            ApplyRounded(wallet);
-            CreateText(wallet.transform,
+            ApplyRounded(walletPanel);
+            CreateText(walletPanel.transform,
                 $"SHARDS  +{earned}  ·  TOTAL {save.shards}      TOKENS  {save.tokens}      FLOOR  {Mathf.Max(1, roomsCleared)}  ·  BEST {save.bestFloor}",
                 26, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
             var restart = CreateButton(modal.transform, "CLIMB AGAIN", new Vector2(225, -225), new Vector2(360, 96), new Color(0.1f, 0.86f, 0.72f));
@@ -1055,7 +1183,8 @@ namespace Shatterspire
             if (anchorMin != anchorMax) { rect.offsetMin = Vector2.zero; rect.offsetMax = Vector2.zero; }
             var text = go.GetComponent<Text>();
             text.font = font;
-            text.text = value;
+            // Ein Durchlass fuer alle beim Aufbau gesetzten Texte.
+            text.text = Loc.T(value);
             text.fontSize = size;
             text.alignment = alignment;
             text.color = Color.white;

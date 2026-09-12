@@ -41,7 +41,9 @@ namespace Shatterspire
         };
 
         public static string FloorCounter(RunMode path, int floor)
-            => IsEndless(path) ? $"FLOOR {floor}" : $"FLOOR {floor} / {FloorCount(path)}";
+            => IsEndless(path)
+                ? $"{Loc.T("FLOOR")} {floor}"
+                : $"{Loc.T("FLOOR")} {floor} / {FloorCount(path)}";
 
         public static Color Accent(RunMode path) => path switch
         {

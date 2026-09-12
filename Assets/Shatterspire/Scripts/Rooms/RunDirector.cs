@@ -89,7 +89,7 @@ namespace Shatterspire
             {
                 spawner.SpawnBoss(layout.ExitPoint, roomIndex);
                 GameEvents.RaiseObjectiveChanged(0, 1, "DEFEAT THE SPIRE WARDEN");
-                GameEvents.RaiseObjectiveTargetChanged(layout.ExitPoint, "SPIRE WARDEN", true);
+                GameEvents.RaiseObjectiveTargetChanged(layout.ExitPoint, Loc.T("SPIRE WARDEN"), true);
                 return;
             }
 

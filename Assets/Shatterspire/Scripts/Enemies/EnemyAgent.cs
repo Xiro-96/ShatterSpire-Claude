@@ -633,7 +633,7 @@ namespace Shatterspire
             if (phase != announcedBossPhase)
             {
                 announcedBossPhase = phase;
-                GameEvents.RaiseObjectiveChanged(0, 1, "IRON WARDEN  ·  PHASE " + phase);
+                GameEvents.RaiseObjectiveChanged(0, 1, Loc.T("IRON WARDEN  ·  PHASE") + " " + phase);
                 PrototypeVfx.SpawnExplosion(transform.position + Vector3.up * 0.7f,
                     2.2f + phase * 0.35f, phase == 3 ? new Color(1f, 0.08f, 0.03f) : new Color(1f, 0.48f, 0.08f));
                 CameraController.Impulse(phase == 3 ? 0.24f : 0.12f);

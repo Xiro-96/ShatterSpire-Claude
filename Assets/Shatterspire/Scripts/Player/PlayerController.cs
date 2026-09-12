@@ -85,8 +85,10 @@ namespace Shatterspire
             if (velocity.sqrMagnitude > 0f) motor.Move(velocity * Time.deltaTime);
             var aim = input.AimPoint - transform.position;
             aim.y = 0f;
+            // Schneller drehen als vorher: mit Zielstick soll die Figur der Eingabe folgen und nicht
+            // hinterherschwenken. 22 pro Sekunde war bei schnellen Richtungswechseln sichtbar traege.
             if (aim.sqrMagnitude > 0.1f)
-                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(aim), 22f * Time.deltaTime);
+                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(aim), 30f * Time.deltaTime);
         }
 
         public void CombatStep(Vector3 direction, float distance)

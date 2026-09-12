@@ -251,6 +251,28 @@ namespace Shatterspire
             Changed?.Invoke();
         }
 
+        /// <summary>
+        /// Wirkung einer beim Haendler gekauften Ware. Bewusst getrennt von <see cref="Apply"/>:
+        /// Perks gibt es je Aufstieg genau einmal, Waren beliebig oft - deshalb duerfen sie nicht
+        /// ueber dieselbe Menge laufen, die Doppelungen abweist.
+        /// </summary>
+        public void ApplyPurchase(ShopOfferId id)
+        {
+            switch (id)
+            {
+                case ShopOfferId.Whetstone: DamageMultiplier *= 1.12f; break;
+                case ShopOfferId.OiledGears: AttackSpeedMultiplier *= 1.08f; break;
+                case ShopOfferId.IronRation: GetComponent<Health>().IncreaseMaximum(25f, true); break;
+                case ShopOfferId.FocusLens: CritChance = Mathf.Min(0.85f, CritChance + 0.06f); break;
+                case ShopOfferId.Counterweight: HeavyDamageMultiplier *= 1.18f; break;
+                case ShopOfferId.ForgedBlade:
+                    DamageMultiplier *= 1.3f;
+                    AttackSpeedMultiplier *= 0.94f;
+                    break;
+            }
+            Changed?.Invoke();
+        }
+
         public void Apply(PerkDefinition perk)
         {
             if (!perks.Add(perk.Id)) return;

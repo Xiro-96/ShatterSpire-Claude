@@ -14,8 +14,13 @@ namespace Shatterspire
     /// </summary>
     public sealed class CompanionBot : MonoBehaviour
     {
-        private const float PartySpacing = 2.2f;
-        private const float LeaderSpacing = 1.8f;
+        private const float PartySpacing = 2.4f;
+        /// <summary>Blase um den Spieler. Groesser als vorher: 1,8 liess die Bots am Aermel kleben.</summary>
+        private const float LeaderSpacing = 2.5f;
+        /// <summary>Laenge des Korridors vor dem Spieler, den die Bots frei halten.</summary>
+        private const float LaneLength = 3.4f;
+        /// <summary>Halbe Breite dieses Korridors.</summary>
+        private const float LaneHalfWidth = 1.3f;
         private const float ThreatRange = 11f;
 
         private static readonly List<CompanionBot> ActiveCompanions = new();
@@ -208,14 +213,23 @@ namespace Shatterspire
         }
 
         /// <summary>Ruhige Aufstellung, ausgerichtet an der Laufrichtung des Spielers.</summary>
+        /// <summary>
+        /// Platz in der Gruppe, solange kein Gegner kaempft: alle drei laufen hinter und neben dem
+        /// Spieler her.
+        ///
+        /// Vorher stand der Guardian 2,6 Einheiten genau vor dem Spieler. Das war als Frontlinie
+        /// gedacht, hiess aber im Handytest: der eigene Bot laeuft dauernd im Weg und man kommt in
+        /// Gaengen nicht vorbei. Seine Frontlinie hat er weiterhin - aber erst, wenn wirklich etwas
+        /// zu bekaempfen ist; dann fuehrt der Zweig mit dem Ziel ihn nach vorn.
+        /// </summary>
         private Vector3 Slot()
         {
             var right = Vector3.Cross(Vector3.up, leaderHeading);
             return role switch
             {
-                CompanionRole.Guardian => leader.position + leaderHeading * 2.6f + right * side * 1.6f,
-                CompanionRole.Support => leader.position - leaderHeading * 3.2f + right * side * 0.8f,
-                _ => leader.position - leaderHeading * 0.8f + right * side * 3.4f
+                CompanionRole.Guardian => leader.position - leaderHeading * 1.4f + right * side * 2.3f,
+                CompanionRole.Support => leader.position - leaderHeading * 3.4f + right * side * 1.2f,
+                _ => leader.position - leaderHeading * 2.1f + right * side * 3.2f
             };
         }
 
@@ -247,6 +261,11 @@ namespace Shatterspire
             if (navigation != null) transform.position = navigation.ClampToWalkable(transform.position, 0.45f);
         }
 
+        /// <summary>
+        /// Haelt Abstand: zum Spieler, zu den anderen Bots und vor allem aus dem Weg. Die Korrekturen
+        /// laufen jetzt pro Sekunde statt pro Bild - vorher war das Ausweichen bei 120 Bildern doppelt
+        /// so schnell wie bei 60.
+        /// </summary>
         private void ApplyPartySeparation()
         {
             var correction = Vector3.zero;
@@ -255,7 +274,8 @@ namespace Shatterspire
                 var fromLeader = transform.position - leader.position;
                 fromLeader.y = 0f;
                 if (fromLeader.sqrMagnitude < LeaderSpacing * LeaderSpacing)
-                    correction += (fromLeader.sqrMagnitude > 0.01f ? fromLeader.normalized : Vector3.right) * 0.16f;
+                    correction += (fromLeader.sqrMagnitude > 0.01f ? fromLeader.normalized : Vector3.right) * 9f;
+                correction += StepOutOfLeadersLane();
             }
 
             for (var i = 0; i < ActiveCompanions.Count; i++)
@@ -265,9 +285,34 @@ namespace Shatterspire
                 var away = transform.position - other.transform.position;
                 away.y = 0f;
                 if (away.sqrMagnitude < 0.01f || away.sqrMagnitude >= PartySpacing * PartySpacing) continue;
-                correction += away.normalized * 0.13f;
+                correction += away.normalized * 7.5f;
             }
-            transform.position += correction;
+            transform.position += correction * Time.deltaTime;
+        }
+
+        /// <summary>
+        /// Raeumt den Korridor vor dem Spieler. Steht der Bot in dem Streifen, in den der Spieler
+        /// gerade laeuft, tritt er zur naeheren Seite heraus - und zwar umso entschlossener, je weiter
+        /// er in der Mitte steht. Das ist der Unterschied zwischen "weicht irgendwann aus" und
+        /// "man kommt vorbei".
+        /// </summary>
+        private Vector3 StepOutOfLeadersLane()
+        {
+            var heading = leaderHeading;
+            heading.y = 0f;
+            if (heading.sqrMagnitude < 0.01f) return Vector3.zero;
+            heading.Normalize();
+            var offset = transform.position - leader.position;
+            offset.y = 0f;
+            var ahead = Vector3.Dot(offset, heading);
+            if (ahead < -0.6f || ahead > LaneLength) return Vector3.zero;
+            var right = Vector3.Cross(Vector3.up, heading);
+            var lateral = Vector3.Dot(offset, right);
+            if (Mathf.Abs(lateral) >= LaneHalfWidth) return Vector3.zero;
+            // Genau auf der Linie: zur eigenen Stammseite ausweichen, sonst zur naeheren.
+            var away = Mathf.Abs(lateral) < 0.05f ? side : Mathf.Sign(lateral);
+            var urgency = 1f - Mathf.Abs(lateral) / LaneHalfWidth;
+            return right * (away * (2.5f + urgency * 7f));
         }
 
         private void FaceMovement()

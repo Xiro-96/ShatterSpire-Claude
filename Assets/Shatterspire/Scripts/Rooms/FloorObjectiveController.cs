@@ -113,7 +113,8 @@ namespace Shatterspire
             chargingSince = Time.time;
             retryUsed = false;
             var index = nodes.IndexOf(node);
-            GameEvents.RaiseObjectiveChanged(ActivatedCount, nodes.Count, $"DEFEND POWER CORE {index + 1}");
+            GameEvents.RaiseObjectiveChanged(ActivatedCount, nodes.Count,
+                $"{Loc.T("DEFEND POWER CORE")} {index + 1}");
             spawner.SpawnObjectiveEncounter(node.transform.position, floor, index, roomKind);
         }
 
@@ -186,10 +187,10 @@ namespace Shatterspire
             {
                 var index = nodes.IndexOf(target) + 1;
                 GameEvents.RaiseObjectiveTargetChanged(target.transform.position,
-                    target.Ready ? $"ACTIVATE CORE {index}" : $"POWER CORE {index}", true);
+                    $"{Loc.T(target.Ready ? "ACTIVATE" : "POWER CORE")} {index}", true);
                 return;
             }
-            GameEvents.RaiseObjectiveTargetChanged(gate.transform.position, "TOWER LIFT", true);
+            GameEvents.RaiseObjectiveTargetChanged(gate.transform.position, Loc.T("TOWER LIFT"), true);
         }
 
         private void CompleteFloor()

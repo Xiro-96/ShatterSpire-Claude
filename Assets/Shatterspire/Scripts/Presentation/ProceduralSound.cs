@@ -16,12 +16,16 @@ namespace Shatterspire
 
     /// <summary>
     /// Erzeugt alle Klaenge zur Laufzeit aus Rechnung, so wie das Projekt auch seine Geometrie baut.
-    /// Kein Audio-Asset im Repo, keine Lizenzfrage, und jeder Klang laesst sich an einer Zahl aendern
-    /// statt in einem Editor.
+    /// Kein Audio-Asset im Repo, keine Lizenzfrage, und jeder Klang laesst sich an einer Zahl aendern.
     ///
-    /// Aufbau: in einen Puffer werden Stimmen addiert - Toene mit Frequenzverlauf und gefiltertes
-    /// Rauschen, jeweils mit eigener Huellkurve. Am Ende wird auf einen Zielpegel normiert, damit
-    /// nichts uebersteuert und die Mischung ohne Regler stimmt.
+    /// Verfahren: <b>modale Synthese</b>. Ein echter Einschlag ist kein Ton, sondern ein kurzer Stoss,
+    /// der einen Koerper zum Klingen bringt - Knochen, Stahl, Holz. Genau so entsteht er hier: ein
+    /// Rauschstoss von wenigen Millisekunden regt Resonatoren an, deren Frequenzen absichtlich nicht
+    /// im ganzzahligen Verhaeltnis stehen. Dazu ein Raum aus verzoegerten, gedaempften Kopien.
+    ///
+    /// Die erste Fassung arbeitete mit reinen Oszillatoren und klang deshalb nach Synthesizer:
+    /// Rechteck- und Saegezaehne fuer Treffer, Dreiecks-Arpeggien fuer Melodien. Beides ist hier
+    /// ersetzt - Treffer durch angeregte Koerper, Melodien durch Glockenpartiale.
     /// </summary>
     public static class ProceduralSound
     {
@@ -77,6 +81,8 @@ namespace Shatterspire
             var buffer = new float[Mathf.Max(64, Mathf.RoundToInt(length * SampleRate))];
             var noise = new Noise((uint)(sound.GetHashCode() * 2654435761u + 12345u));
             Compose(sound, buffer, ref noise);
+            var room = RoomFor(sound);
+            if (room > 0f) ApplyRoom(buffer, room);
             Normalize(buffer, PeakFor(sound));
             if (Loops(sound)) CrossfadeEnds(buffer, 0.25f);
             else FadeTail(buffer, 0.01f);
@@ -85,27 +91,43 @@ namespace Shatterspire
             return clip;
         }
 
+        /// <summary>
+        /// Anteil des Raums. Der Turm ist Stein: Weltklaenge bekommen eine Fahne, Menuetoene keine -
+        /// die kommen aus der Oberflaeche und nicht aus dem Raum.
+        /// </summary>
+        private static float RoomFor(Sound sound) => sound switch
+        {
+            Sound.UiClick or Sound.UiConfirm or Sound.Ambience => 0f,
+            Sound.Footstep => 0.2f,
+            Sound.Explosion or Sound.GuardBreak or Sound.UltimateRise => 0.42f,
+            Sound.Block or Sound.Shockwave or Sound.HitHeavy or Sound.Death => 0.32f,
+            Sound.CoreActivated or Sound.FloorCleared or Sound.HeavyReady => 0.3f,
+            _ => 0.24f
+        };
+
         private static float LengthOf(Sound sound) => sound switch
         {
-            Sound.UiClick => 0.09f,
-            Sound.Footstep => 0.12f,
-            Sound.HitLight => 0.14f,
-            Sound.Shot or Sound.Release => 0.2f,
-            Sound.Stab => 0.22f,
-            Sound.Swing => 0.26f,
-            Sound.HitHeavy or Sound.Block => 0.3f,
-            Sound.Dash or Sound.HitCritical => 0.32f,
-            Sound.Cast or Sound.UiConfirm => 0.36f,
-            Sound.Smash or Sound.Telegraph => 0.4f,
-            Sound.Shockwave or Sound.EnemyArrival => 0.45f,
-            Sound.Spin or Sound.PlayerHurt => 0.5f,
-            Sound.Draw or Sound.HeavyReady => 0.55f,
-            Sound.Explosion or Sound.Death or Sound.GuardBreak => 0.7f,
-            Sound.CoreActivated => 0.85f,
-            Sound.UltimateRise => 1.1f,
-            Sound.FloorCleared => 1.3f,
+            Sound.UiClick => 0.1f,
+            Sound.Footstep => 0.24f,
+            Sound.HitLight => 0.28f,
+            Sound.Shot or Sound.Release => 0.3f,
+            Sound.Stab => 0.3f,
+            Sound.Swing => 0.3f,
+            Sound.HitHeavy => 0.5f,
+            Sound.Block => 0.55f,
+            Sound.Dash or Sound.HitCritical => 0.45f,
+            Sound.Cast or Sound.UiConfirm => 0.45f,
+            Sound.Smash or Sound.Telegraph => 0.55f,
+            Sound.Shockwave or Sound.EnemyArrival => 0.6f,
+            Sound.Spin or Sound.PlayerHurt => 0.6f,
+            Sound.Draw or Sound.HeavyReady => 0.7f,
+            Sound.Explosion or Sound.GuardBreak => 1f,
+            Sound.Death => 0.9f,
+            Sound.CoreActivated => 1.3f,
+            Sound.UltimateRise => 1.3f,
+            Sound.FloorCleared => 1.9f,
             Sound.Ambience => 5f,
-            _ => 0.3f
+            _ => 0.4f
         };
 
         private static void Compose(Sound sound, float[] buffer, ref Noise noise)
@@ -113,181 +135,323 @@ namespace Shatterspire
             switch (sound)
             {
                 // ── Nahkampf ────────────────────────────────────────────
-                // Ein Schlag ist Luft plus Einschlag: erst gefiltertes Rauschen, das aufzieht und
-                // wieder abfaellt, dann ein tiefer Ton, der nach unten laeuft.
+                // Luftzug: Rauschen, dessen Durchlassbereich mit dem Schwung wandert. Ein fester
+                // Filter klingt wie Zischen, ein wandernder wie bewegte Luft.
                 case Sound.Swing:
-                    AddNoise(buffer, ref noise, 0f, 0.24f, 1f, 0.09f, 9f, 2600f, 420f);
-                    AddTone(buffer, 0.05f, 0.16f, 210f, 120f, Wave.Sine, 0.5f, 0.01f, 13f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.28f, 1f, 0.1f, 7f, 700f, 3200f, 260f);
+                    AddResonator(buffer, ref noise, 0.07f, 170f, 0.1f, 0.3f, 0.004f);
                     break;
                 case Sound.Smash:
-                    AddNoise(buffer, ref noise, 0f, 0.14f, 0.7f, 0.06f, 12f, 1900f, 300f);
-                    AddTone(buffer, 0.1f, 0.3f, 150f, 62f, Wave.Sine, 1f, 0.004f, 9f);
-                    AddTone(buffer, 0.1f, 0.12f, 320f, 180f, Wave.Triangle, 0.35f, 0.003f, 22f);
-                    AddNoise(buffer, ref noise, 0.1f, 0.2f, 0.8f, 0.002f, 16f, 3400f, 700f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.13f, 0.6f, 0.07f, 9f, 500f, 2200f, 200f);
+                    // Der Einschlag: Stahl auf Stein. Tiefer Koerper, darueber zwei harte Moden.
+                    Strike(buffer, ref noise, 0.12f, 0.004f, 3400f, 1f);
+                    AddResonator(buffer, ref noise, 0.12f, 78f, 0.34f, 1f, 0.004f);
+                    AddResonator(buffer, ref noise, 0.12f, 146f, 0.22f, 0.7f, 0.003f);
+                    AddResonator(buffer, ref noise, 0.12f, 395f, 0.1f, 0.4f, 0.002f);
                     break;
                 case Sound.Spin:
-                    // Wirbel: zwei Luftzuege hintereinander, dann der Einschlag der Runde.
-                    AddNoise(buffer, ref noise, 0f, 0.2f, 0.7f, 0.08f, 10f, 2400f, 500f);
-                    AddNoise(buffer, ref noise, 0.14f, 0.22f, 0.85f, 0.08f, 9f, 3000f, 500f);
-                    AddTone(buffer, 0.3f, 0.2f, 140f, 58f, Wave.Sine, 1f, 0.004f, 11f);
-                    AddNoise(buffer, ref noise, 0.3f, 0.18f, 0.7f, 0.002f, 18f, 4200f, 800f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.22f, 0.65f, 0.09f, 8f, 600f, 2600f, 240f);
+                    AddSweptNoise(buffer, ref noise, 0.16f, 0.24f, 0.8f, 0.09f, 7f, 800f, 3400f, 260f);
+                    Strike(buffer, ref noise, 0.34f, 0.005f, 3000f, 1f);
+                    AddResonator(buffer, ref noise, 0.34f, 72f, 0.34f, 1f, 0.005f);
+                    AddResonator(buffer, ref noise, 0.34f, 132f, 0.24f, 0.65f, 0.004f);
                     break;
                 case Sound.Stab:
-                    AddNoise(buffer, ref noise, 0f, 0.1f, 0.8f, 0.03f, 20f, 3800f, 900f);
-                    AddTone(buffer, 0.02f, 0.16f, 420f, 190f, Wave.Triangle, 0.6f, 0.004f, 16f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.09f, 0.7f, 0.03f, 16f, 1400f, 4200f, 700f);
+                    Strike(buffer, ref noise, 0.06f, 0.002f, 5200f, 0.8f);
+                    AddResonator(buffer, ref noise, 0.06f, 430f, 0.12f, 0.7f, 0.002f);
+                    AddResonator(buffer, ref noise, 0.06f, 690f, 0.09f, 0.4f, 0.002f);
                     break;
 
                 // ── Fernkampf ───────────────────────────────────────────
+                // Armbrust: harter Schnapper plus schwingende Sehne.
                 case Sound.Shot:
-                    AddNoise(buffer, ref noise, 0f, 0.07f, 1f, 0.002f, 42f, 6000f, 1200f);
-                    AddTone(buffer, 0f, 0.14f, 760f, 240f, Wave.Square, 0.45f, 0.002f, 26f);
+                    Strike(buffer, ref noise, 0f, 0.0015f, 7000f, 1f);
+                    AddResonator(buffer, ref noise, 0f, 240f, 0.07f, 0.8f, 0.0015f);
+                    AddResonator(buffer, ref noise, 0f, 620f, 0.05f, 0.5f, 0.0015f);
+                    AddResonator(buffer, ref noise, 0.002f, 1480f, 0.1f, 0.35f, 0.001f);
+                    AddSweptNoise(buffer, ref noise, 0.004f, 0.12f, 0.35f, 0.01f, 22f, 2600f, 700f, 400f);
                     break;
                 case Sound.Draw:
-                    // Spannen: ein knarzender Aufzug, der sich langsam strafft.
-                    AddNoise(buffer, ref noise, 0f, 0.5f, 0.55f, 0.16f, 2.4f, 1500f, 260f);
-                    AddTone(buffer, 0.05f, 0.45f, 120f, 260f, Wave.Saw, 0.16f, 0.15f, 2f);
+                    // Spannen: viele kleine Knackser, wie eine Sehne, die sich ueber Holz strafft.
+                    for (var i = 0; i < 16; i++)
+                    {
+                        var at = 0.02f + i * 0.031f;
+                        AddResonator(buffer, ref noise, at, 300f + i * 42f, 0.022f, 0.3f + i * 0.03f, 0.0015f);
+                    }
+                    AddSweptNoise(buffer, ref noise, 0f, 0.55f, 0.3f, 0.2f, 1.6f, 300f, 900f, 120f);
                     break;
                 case Sound.Release:
-                    AddNoise(buffer, ref noise, 0f, 0.06f, 1f, 0.001f, 48f, 7000f, 1600f);
-                    AddTone(buffer, 0f, 0.12f, 540f, 150f, Wave.Triangle, 0.5f, 0.001f, 30f);
+                    Strike(buffer, ref noise, 0f, 0.001f, 9000f, 1f);
+                    AddResonator(buffer, ref noise, 0f, 340f, 0.06f, 0.7f, 0.001f);
+                    AddResonator(buffer, ref noise, 0f, 1180f, 0.09f, 0.45f, 0.001f);
+                    AddSweptNoise(buffer, ref noise, 0.003f, 0.14f, 0.4f, 0.008f, 20f, 3400f, 900f, 500f);
                     break;
                 case Sound.Cast:
-                    // Magie: zwei leicht verstimmte Stimmen, die zusammen aufsteigen - das Schweben
-                    // entsteht durch die Schwebung zwischen beiden.
-                    AddTone(buffer, 0f, 0.32f, 300f, 780f, Wave.Sine, 0.8f, 0.03f, 6f);
-                    AddTone(buffer, 0f, 0.32f, 303f, 792f, Wave.Sine, 0.6f, 0.03f, 6f);
-                    AddTone(buffer, 0.02f, 0.2f, 900f, 1500f, Wave.Triangle, 0.22f, 0.02f, 9f);
+                    // Magie darf synthetisch sein - das ist kein Gegenstand, der angeschlagen wird.
+                    // Zwei leicht verstimmte Stimmen, deren Schwebung das Schweben macht.
+                    AddTone(buffer, 0f, 0.4f, 300f, 780f, Wave.Sine, 0.8f, 0.04f, 5f);
+                    AddTone(buffer, 0f, 0.4f, 303f, 792f, Wave.Sine, 0.6f, 0.04f, 5f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.35f, 0.2f, 0.06f, 7f, 900f, 4000f, 600f);
                     break;
 
                 // ── Bewegung ────────────────────────────────────────────
                 case Sound.Dash:
-                    AddNoise(buffer, ref noise, 0f, 0.3f, 1f, 0.05f, 8f, 5200f, 600f);
-                    AddTone(buffer, 0f, 0.2f, 180f, 420f, Wave.Sine, 0.35f, 0.02f, 8f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.34f, 1f, 0.06f, 7f, 900f, 4600f, 300f);
+                    AddResonator(buffer, ref noise, 0f, 120f, 0.12f, 0.3f, 0.004f);
                     break;
                 case Sound.Footstep:
-                    AddNoise(buffer, ref noise, 0f, 0.1f, 1f, 0.002f, 38f, 1300f, 90f);
-                    AddTone(buffer, 0f, 0.06f, 110f, 70f, Wave.Sine, 0.5f, 0.002f, 34f);
+                    // Stiefel auf Stein: ein kurzer Schabgeraeusch-Anteil, darunter der dumpfe Koerper.
+                    Strike(buffer, ref noise, 0f, 0.003f, 2600f, 0.5f);
+                    AddResonator(buffer, ref noise, 0f, 86f, 0.09f, 1f, 0.004f);
+                    AddResonator(buffer, ref noise, 0f, 148f, 0.06f, 0.55f, 0.003f);
+                    AddSweptNoise(buffer, ref noise, 0.001f, 0.05f, 0.3f, 0.002f, 40f, 1800f, 500f, 260f);
                     break;
 
                 // ── Treffer ─────────────────────────────────────────────
+                // Waffe auf Knochen: harter Anschlag, drei Moden, kurzer Nachklang.
                 case Sound.HitLight:
-                    AddNoise(buffer, ref noise, 0f, 0.1f, 1f, 0.001f, 36f, 4200f, 500f);
-                    AddTone(buffer, 0f, 0.1f, 260f, 150f, Wave.Triangle, 0.55f, 0.001f, 30f);
+                    Strike(buffer, ref noise, 0f, 0.002f, 6000f, 1f);
+                    AddResonator(buffer, ref noise, 0f, 318f, 0.09f, 0.9f, 0.002f);
+                    AddResonator(buffer, ref noise, 0f, 547f, 0.07f, 0.6f, 0.002f);
+                    AddResonator(buffer, ref noise, 0f, 892f, 0.05f, 0.35f, 0.002f);
+                    AddResonator(buffer, ref noise, 0f, 132f, 0.11f, 0.55f, 0.003f);
                     break;
                 case Sound.HitHeavy:
-                    AddNoise(buffer, ref noise, 0f, 0.16f, 1f, 0.002f, 22f, 3200f, 260f);
-                    AddTone(buffer, 0f, 0.26f, 170f, 70f, Wave.Sine, 1f, 0.002f, 12f);
+                    Strike(buffer, ref noise, 0f, 0.004f, 4200f, 1f);
+                    AddResonator(buffer, ref noise, 0f, 62f, 0.4f, 1f, 0.005f);
+                    AddResonator(buffer, ref noise, 0f, 118f, 0.3f, 0.8f, 0.004f);
+                    AddResonator(buffer, ref noise, 0f, 231f, 0.16f, 0.5f, 0.003f);
+                    AddResonator(buffer, ref noise, 0f, 402f, 0.1f, 0.3f, 0.002f);
                     break;
                 case Sound.HitCritical:
-                    // Kritischer Treffer bekommt einen hellen Oberton, damit er sich vom Rest abhebt.
-                    AddNoise(buffer, ref noise, 0f, 0.12f, 1f, 0.001f, 30f, 6500f, 900f);
-                    AddTone(buffer, 0f, 0.2f, 300f, 140f, Wave.Triangle, 0.7f, 0.001f, 18f);
-                    AddTone(buffer, 0.005f, 0.26f, 1580f, 1420f, Wave.Sine, 0.4f, 0.001f, 11f);
-                    AddTone(buffer, 0.005f, 0.26f, 2370f, 2180f, Wave.Sine, 0.22f, 0.001f, 13f);
+                    Strike(buffer, ref noise, 0f, 0.002f, 9000f, 1f);
+                    AddResonator(buffer, ref noise, 0f, 96f, 0.3f, 0.9f, 0.004f);
+                    AddResonator(buffer, ref noise, 0f, 276f, 0.14f, 0.7f, 0.002f);
+                    // Zwei helle Moden mehr als beim normalen Treffer: so hebt sich der Krit ab,
+                    // ohne einfach lauter zu sein.
+                    AddResonator(buffer, ref noise, 0.004f, 1560f, 0.3f, 0.5f, 0.0015f);
+                    AddResonator(buffer, ref noise, 0.004f, 2330f, 0.26f, 0.3f, 0.0015f);
                     break;
                 case Sound.Explosion:
-                    AddNoise(buffer, ref noise, 0f, 0.6f, 1f, 0.004f, 7f, 2400f, 60f);
-                    AddTone(buffer, 0f, 0.45f, 120f, 38f, Wave.Sine, 1f, 0.003f, 7f);
-                    AddNoise(buffer, ref noise, 0f, 0.1f, 0.7f, 0.001f, 30f, 8000f, 1500f);
+                    // Detonation: Knall, dann ein Rauschen, dessen Filter zufaellt - so entsteht das
+                    // Rollen, statt einfach leiser zu werden.
+                    Strike(buffer, ref noise, 0f, 0.004f, 9000f, 1f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.75f, 1f, 0.006f, 4.2f, 4200f, 160f, 40f);
+                    AddResonator(buffer, ref noise, 0f, 44f, 0.55f, 1f, 0.008f);
+                    AddResonator(buffer, ref noise, 0f, 79f, 0.4f, 0.6f, 0.006f);
                     break;
                 case Sound.Shockwave:
-                    AddTone(buffer, 0f, 0.4f, 190f, 52f, Wave.Sine, 1f, 0.003f, 9f);
-                    AddNoise(buffer, ref noise, 0f, 0.22f, 0.85f, 0.002f, 15f, 2600f, 200f);
-                    AddTone(buffer, 0f, 0.1f, 380f, 200f, Wave.Triangle, 0.3f, 0.002f, 26f);
+                    Strike(buffer, ref noise, 0f, 0.003f, 5000f, 0.8f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.4f, 0.7f, 0.004f, 8f, 2400f, 200f, 60f);
+                    AddResonator(buffer, ref noise, 0f, 54f, 0.42f, 1f, 0.006f);
+                    AddResonator(buffer, ref noise, 0f, 101f, 0.26f, 0.55f, 0.004f);
                     break;
                 case Sound.PlayerHurt:
-                    AddTone(buffer, 0f, 0.4f, 240f, 90f, Wave.Saw, 0.7f, 0.004f, 7f);
-                    AddNoise(buffer, ref noise, 0f, 0.2f, 0.8f, 0.003f, 14f, 1800f, 120f);
+                    // Eigener Schaden: dumpfer Einschlag plus ein kurzer, tiefer Laut.
+                    Strike(buffer, ref noise, 0f, 0.005f, 2600f, 0.8f);
+                    AddResonator(buffer, ref noise, 0f, 74f, 0.3f, 1f, 0.006f);
+                    AddTone(buffer, 0.01f, 0.32f, 190f, 96f, Wave.Sine, 0.45f, 0.02f, 7f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.3f, 0.4f, 0.01f, 8f, 1400f, 300f, 120f);
                     break;
 
                 // ── Schildtraeger ───────────────────────────────────────
-                // Metall klingt unharmonisch. Drei Partiale ohne ganzzahliges Verhaeltnis geben das
-                // "Tink", das ein einzelner Sinus nie hinbekommt.
+                // Stahl klingt unharmonisch und lange. Vier Moden ohne ganzzahliges Verhaeltnis,
+                // angeregt von einem Stoss von zwei Millisekunden - das ist ein echtes "Tink".
                 case Sound.Block:
-                    AddTone(buffer, 0f, 0.28f, 1190f, 1150f, Wave.Sine, 1f, 0.001f, 14f);
-                    AddTone(buffer, 0f, 0.24f, 1790f, 1730f, Wave.Sine, 0.6f, 0.001f, 18f);
-                    AddTone(buffer, 0f, 0.2f, 2670f, 2590f, Wave.Sine, 0.35f, 0.001f, 22f);
-                    AddNoise(buffer, ref noise, 0f, 0.06f, 0.5f, 0.001f, 46f, 9000f, 2200f);
+                    Strike(buffer, ref noise, 0f, 0.0015f, 11000f, 0.7f);
+                    AddResonator(buffer, ref noise, 0f, 1187f, 0.42f, 1f, 0.0015f);
+                    AddResonator(buffer, ref noise, 0f, 1793f, 0.36f, 0.7f, 0.0015f);
+                    AddResonator(buffer, ref noise, 0f, 2671f, 0.3f, 0.45f, 0.0015f);
+                    AddResonator(buffer, ref noise, 0f, 3907f, 0.22f, 0.25f, 0.0015f);
+                    AddResonator(buffer, ref noise, 0f, 214f, 0.1f, 0.35f, 0.002f);
                     break;
                 case Sound.GuardBreak:
-                    AddTone(buffer, 0f, 0.6f, 820f, 760f, Wave.Sine, 1f, 0.002f, 6f);
-                    AddTone(buffer, 0f, 0.55f, 1310f, 1210f, Wave.Sine, 0.8f, 0.002f, 7f);
-                    AddTone(buffer, 0f, 0.5f, 1970f, 1840f, Wave.Sine, 0.5f, 0.002f, 9f);
-                    AddTone(buffer, 0f, 0.45f, 3050f, 2860f, Wave.Sine, 0.3f, 0.002f, 11f);
-                    AddNoise(buffer, ref noise, 0f, 0.3f, 0.7f, 0.002f, 11f, 6000f, 700f);
-                    AddTone(buffer, 0f, 0.3f, 150f, 60f, Wave.Sine, 0.6f, 0.003f, 10f);
+                    Strike(buffer, ref noise, 0f, 0.003f, 9000f, 1f);
+                    AddResonator(buffer, ref noise, 0f, 611f, 0.75f, 1f, 0.003f);
+                    AddResonator(buffer, ref noise, 0f, 947f, 0.65f, 0.8f, 0.003f);
+                    AddResonator(buffer, ref noise, 0f, 1523f, 0.55f, 0.6f, 0.002f);
+                    AddResonator(buffer, ref noise, 0f, 2411f, 0.45f, 0.35f, 0.002f);
+                    AddResonator(buffer, ref noise, 0f, 58f, 0.35f, 0.7f, 0.006f);
+                    // Zweiter Anschlag kurz danach: der Schild gibt in zwei Stufen nach.
+                    Strike(buffer, ref noise, 0.06f, 0.002f, 6000f, 0.6f);
+                    AddResonator(buffer, ref noise, 0.06f, 1088f, 0.4f, 0.5f, 0.002f);
                     break;
 
                 // ── Ansagen ─────────────────────────────────────────────
                 case Sound.Telegraph:
-                    // Zwei kurze Stoesse: ein einzelner Ton wird im Kampflaerm ueberhoert.
-                    AddTone(buffer, 0f, 0.12f, 680f, 680f, Wave.Square, 0.5f, 0.004f, 18f);
-                    AddTone(buffer, 0.17f, 0.14f, 680f, 640f, Wave.Square, 0.6f, 0.004f, 16f);
+                    // Statt Piepton: zwei angeschlagene Glocken. Traegt genauso weit, klingt aber
+                    // nach Gegenstand und nicht nach Menuefehler.
+                    AddBell(buffer, ref noise, 0f, 784f, 0.22f, 0.9f);
+                    AddBell(buffer, ref noise, 0.2f, 784f, 0.3f, 1f);
                     break;
                 case Sound.EnemyArrival:
-                    AddTone(buffer, 0f, 0.42f, 90f, 46f, Wave.Saw, 1f, 0.06f, 5f);
-                    AddNoise(buffer, ref noise, 0f, 0.4f, 0.45f, 0.08f, 6f, 900f, 60f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.55f, 0.8f, 0.1f, 4f, 240f, 900f, 30f);
+                    AddResonator(buffer, ref noise, 0f, 41f, 0.5f, 1f, 0.05f);
+                    AddResonator(buffer, ref noise, 0.02f, 63f, 0.42f, 0.7f, 0.04f);
+                    // Knochenklappern beim Auftauchen.
+                    for (var i = 0; i < 7; i++)
+                        AddResonator(buffer, ref noise, 0.12f + i * 0.045f, 420f + i * 130f, 0.05f, 0.22f, 0.0015f);
                     break;
                 case Sound.HeavyReady:
-                    AddTone(buffer, 0f, 0.5f, 660f, 880f, Wave.Sine, 1f, 0.01f, 5f);
-                    AddTone(buffer, 0.06f, 0.44f, 990f, 1320f, Wave.Sine, 0.45f, 0.01f, 6f);
+                    AddBell(buffer, ref noise, 0f, 523f, 0.55f, 0.8f);
+                    AddBell(buffer, ref noise, 0.07f, 784f, 0.5f, 0.7f);
                     break;
                 case Sound.UltimateRise:
-                    // Aufstieg mit Einschlag am Ende: das Warten wird hoerbar, der Ausloeser sitzt.
-                    AddTone(buffer, 0f, 0.8f, 70f, 640f, Wave.Saw, 0.55f, 0.25f, 0.9f);
-                    AddTone(buffer, 0f, 0.8f, 105f, 960f, Wave.Sine, 0.4f, 0.25f, 0.9f);
-                    AddNoise(buffer, ref noise, 0f, 0.8f, 0.35f, 0.5f, 1.2f, 5000f, 200f);
-                    AddTone(buffer, 0.78f, 0.32f, 200f, 55f, Wave.Sine, 1f, 0.002f, 10f);
-                    AddNoise(buffer, ref noise, 0.78f, 0.3f, 0.9f, 0.002f, 12f, 7000f, 400f);
+                    // Aufstieg mit Einschlag: erst Luft und Spannung, dann trifft es.
+                    AddTone(buffer, 0f, 0.85f, 60f, 520f, Wave.Sine, 0.4f, 0.3f, 0.8f);
+                    AddSweptNoise(buffer, ref noise, 0f, 0.85f, 0.45f, 0.55f, 1f, 400f, 5200f, 200f);
+                    Strike(buffer, ref noise, 0.85f, 0.005f, 9000f, 1f);
+                    AddResonator(buffer, ref noise, 0.85f, 48f, 0.45f, 1f, 0.006f);
+                    AddResonator(buffer, ref noise, 0.85f, 92f, 0.35f, 0.6f, 0.005f);
+                    AddSweptNoise(buffer, ref noise, 0.85f, 0.42f, 0.6f, 0.004f, 7f, 3600f, 200f, 60f);
                     break;
                 case Sound.CoreActivated:
-                    AddTone(buffer, 0f, 0.3f, 440f, 440f, Wave.Sine, 0.8f, 0.01f, 7f);
-                    AddTone(buffer, 0.14f, 0.3f, 587f, 587f, Wave.Sine, 0.85f, 0.01f, 7f);
-                    AddTone(buffer, 0.28f, 0.5f, 880f, 880f, Wave.Sine, 1f, 0.01f, 4.5f);
-                    AddTone(buffer, 0.28f, 0.5f, 1320f, 1320f, Wave.Sine, 0.4f, 0.01f, 5f);
+                    // Glockenpartiale statt Arpeggio: derselbe Aufstieg, aber wie angeschlagenes Metall.
+                    AddBell(buffer, ref noise, 0f, 440f, 0.5f, 0.7f);
+                    AddBell(buffer, ref noise, 0.16f, 587f, 0.55f, 0.8f);
+                    AddBell(buffer, ref noise, 0.32f, 880f, 0.9f, 1f);
+                    AddResonator(buffer, ref noise, 0.32f, 110f, 0.7f, 0.5f, 0.006f);
                     break;
                 case Sound.FloorCleared:
-                    AddTone(buffer, 0f, 0.45f, 523f, 523f, Wave.Triangle, 0.8f, 0.01f, 4.5f);
-                    AddTone(buffer, 0.12f, 0.5f, 659f, 659f, Wave.Triangle, 0.85f, 0.01f, 4.2f);
-                    AddTone(buffer, 0.24f, 0.9f, 784f, 784f, Wave.Triangle, 1f, 0.01f, 2.8f);
-                    AddTone(buffer, 0.24f, 0.9f, 1046f, 1046f, Wave.Sine, 0.55f, 0.01f, 2.8f);
-                    AddTone(buffer, 0.24f, 0.9f, 261f, 261f, Wave.Sine, 0.6f, 0.01f, 2.6f);
+                    AddBell(buffer, ref noise, 0f, 523f, 0.6f, 0.7f);
+                    AddBell(buffer, ref noise, 0.16f, 659f, 0.7f, 0.8f);
+                    AddBell(buffer, ref noise, 0.32f, 784f, 1.3f, 1f);
+                    AddBell(buffer, ref noise, 0.34f, 1046f, 1.2f, 0.6f);
+                    AddResonator(buffer, ref noise, 0.32f, 131f, 1f, 0.55f, 0.008f);
                     break;
                 case Sound.Death:
-                    AddTone(buffer, 0f, 0.6f, 300f, 70f, Wave.Saw, 0.8f, 0.006f, 4.5f);
-                    AddNoise(buffer, ref noise, 0f, 0.55f, 0.7f, 0.004f, 5.5f, 2200f, 90f);
-                    AddNoise(buffer, ref noise, 0.3f, 0.35f, 0.5f, 0.03f, 7f, 5000f, 1200f);
+                    // Skelett faellt: ein tiefer Aufprall, dann Knochen, die ueber Stein klappern.
+                    Strike(buffer, ref noise, 0f, 0.004f, 3600f, 0.9f);
+                    AddResonator(buffer, ref noise, 0f, 68f, 0.3f, 0.9f, 0.005f);
+                    for (var i = 0; i < 13; i++)
+                    {
+                        var at = 0.05f + i * 0.055f + noise.Next() * 0.014f;
+                        var hz = 380f + Mathf.Abs(noise.Next()) * 900f;
+                        AddResonator(buffer, ref noise, at, hz, 0.05f, 0.34f - i * 0.02f, 0.0015f);
+                        AddResonator(buffer, ref noise, at, hz * 1.72f, 0.035f, 0.2f - i * 0.012f, 0.0015f);
+                    }
                     break;
 
                 // ── Menue ───────────────────────────────────────────────
                 case Sound.UiClick:
-                    AddTone(buffer, 0f, 0.07f, 880f, 760f, Wave.Square, 0.6f, 0.001f, 40f);
-                    AddNoise(buffer, ref noise, 0f, 0.03f, 0.3f, 0.001f, 70f, 7000f, 2500f);
+                    Strike(buffer, ref noise, 0f, 0.001f, 9000f, 0.6f);
+                    AddResonator(buffer, ref noise, 0f, 2180f, 0.05f, 1f, 0.001f);
+                    AddResonator(buffer, ref noise, 0f, 3410f, 0.035f, 0.4f, 0.001f);
                     break;
                 case Sound.UiConfirm:
-                    AddTone(buffer, 0f, 0.16f, 660f, 660f, Wave.Triangle, 0.8f, 0.004f, 14f);
-                    AddTone(buffer, 0.1f, 0.26f, 990f, 990f, Wave.Triangle, 1f, 0.004f, 9f);
+                    AddBell(buffer, ref noise, 0f, 660f, 0.2f, 0.7f);
+                    AddBell(buffer, ref noise, 0.11f, 990f, 0.32f, 1f);
                     break;
 
                 // ── Hintergrund ─────────────────────────────────────────
                 case Sound.Ambience:
-                    // Ein Turm, der unter Spannung steht: tiefe Grundstimme, dazu zwei leicht
-                    // verstimmte Partiale, deren Schwebung die Flaeche in Bewegung haelt.
+                    // Ein Turm unter Spannung: tiefe Grundstimme, verstimmte Partiale, dazu ein Zug
+                    // von Luft, der die Flaeche atmen laesst.
                     AddDrone(buffer, 55f, 0.9f);
                     AddDrone(buffer, 82.6f, 0.45f);
                     AddDrone(buffer, 110.3f, 0.3f);
                     AddDrone(buffer, 164.5f, 0.12f);
-                    AddNoise(buffer, ref noise, 0f, LengthOf(Sound.Ambience), 0.1f, 1.2f, 0.05f, 380f, 40f);
+                    AddSweptNoise(buffer, ref noise, 0f, LengthOf(Sound.Ambience), 0.16f, 1.5f, 0.04f,
+                        200f, 420f, 30f);
                     break;
             }
         }
 
-        // ── Stimmen ─────────────────────────────────────────────────────
+        // ── Bausteine ───────────────────────────────────────────────────
 
         /// <summary>
-        /// Addiert einen Ton mit gleitender Frequenz. <paramref name="attack"/> ist die Anstiegszeit in
-        /// Sekunden, <paramref name="decay"/> der Abfall in 1/Sekunden - grosse Werte klingen perkussiv.
+        /// Angeregter Resonator: ein Zweipol-Filter mit hoher Guete, angestossen von einem kurzen
+        /// Rauschstoss. Das ist der Kern der modalen Synthese - <paramref name="decay"/> ist die Zeit
+        /// bis zur Unhoerbarkeit, <paramref name="burst"/> die Dauer des Anstosses in Sekunden.
+        ///
+        /// Rekursion: y[n] = 2·r·cos(w)·y[n-1] − r²·y[n-2] + x[n], mit r aus der Abklingzeit.
         /// </summary>
+        private static void AddResonator(float[] buffer, ref Noise noise, float start, float hz,
+            float decay, float gain, float burst)
+        {
+            if (hz <= 0f || hz >= SampleRate * 0.45f) return;
+            var first = Mathf.Max(0, Mathf.RoundToInt(start * SampleRate));
+            var omega = 2f * Mathf.PI * hz / SampleRate;
+            // Radius so, dass die Amplitude nach decay Sekunden auf etwa 1/1000 gefallen ist.
+            var radius = Mathf.Exp(-6.9f / Mathf.Max(0.001f, decay) / SampleRate);
+            var a1 = 2f * radius * Mathf.Cos(omega);
+            var a2 = -radius * radius;
+            var burstSamples = Mathf.Max(1, Mathf.RoundToInt(burst * SampleRate));
+            var total = Mathf.Min(buffer.Length - first, Mathf.RoundToInt(decay * 1.1f * SampleRate) + burstSamples);
+            if (total <= 0) return;
+            var previous = 0f;
+            var older = 0f;
+            // Grundverstaerkung so, dass hohe Guete nicht automatisch laut wird.
+            var scale = gain * (1f - radius) * 12f;
+            for (var i = 0; i < total; i++)
+            {
+                var excitation = i < burstSamples ? noise.Next() : 0f;
+                var value = a1 * previous + a2 * older + excitation;
+                older = previous;
+                previous = value;
+                buffer[first + i] += value * scale;
+            }
+        }
+
+        /// <summary>
+        /// Glocke: eine Grundmode plus die typischen unharmonischen Partiale eines Roehrenglockenspiels
+        /// (Verhaeltnisse um 2,76 / 5,40 / 8,93). Klingt nach angeschlagenem Metall statt nach Piepton.
+        /// </summary>
+        private static void AddBell(float[] buffer, ref Noise noise, float start, float hz,
+            float decay, float gain)
+        {
+            AddResonator(buffer, ref noise, start, hz, decay, gain, 0.0015f);
+            AddResonator(buffer, ref noise, start, hz * 2.76f, decay * 0.72f, gain * 0.5f, 0.0012f);
+            AddResonator(buffer, ref noise, start, hz * 5.4f, decay * 0.45f, gain * 0.26f, 0.001f);
+            AddResonator(buffer, ref noise, start, hz * 8.93f, decay * 0.3f, gain * 0.12f, 0.001f);
+        }
+
+        /// <summary>Der Anschlag selbst: sehr kurzer, sehr heller Stoss. Ohne ihn klingt jeder Treffer weich.</summary>
+        private static void Strike(float[] buffer, ref Noise noise, float start, float duration,
+            float brightnessHz, float gain)
+            => AddSweptNoise(buffer, ref noise, start, Mathf.Max(0.001f, duration * 6f), gain, 0.0002f,
+                1f / Mathf.Max(0.0005f, duration), brightnessHz, brightnessHz * 0.35f, 600f);
+
+        /// <summary>
+        /// Rauschen, dessen Durchlassbereich waehrend des Klangs wandert. Der wandernde Filter ist der
+        /// Unterschied zwischen "Zischen" und "bewegter Luft" beziehungsweise "rollendem Donner".
+        /// Tiefpass vierpolig, Hochpass zweipolig - einpolig laesst oberhalb der Grenze mehr Energie
+        /// stehen als darunter liegt, weil weisses Rauschen gleich viel Energie je Hertz hat.
+        /// </summary>
+        private static void AddSweptNoise(float[] buffer, ref Noise noise, float start, float duration,
+            float gain, float attack, float decay, float lowpassFromHz, float lowpassToHz, float highpassHz)
+        {
+            var first = Mathf.Max(0, Mathf.RoundToInt(start * SampleRate));
+            var count = Mathf.RoundToInt(duration * SampleRate);
+            if (count <= 0) return;
+            var highpass = Coefficient(highpassHz);
+            var a = 0f;
+            var b = 0f;
+            var c = 0f;
+            var d = 0f;
+            var e = 0f;
+            var f = 0f;
+            const float makeUp = 3.6f;
+            for (var i = 0; i < count; i++)
+            {
+                var index = first + i;
+                if (index >= buffer.Length) break;
+                var t = i / (float)count;
+                // Logarithmisch wandern: so liest das Ohr die Bewegung als gleichmaessig.
+                var cutoff = Mathf.Exp(Mathf.Lerp(Mathf.Log(Mathf.Max(20f, lowpassFromHz)),
+                    Mathf.Log(Mathf.Max(20f, lowpassToHz)), t));
+                var lowpass = Coefficient(cutoff);
+                a += (noise.Next() - a) * lowpass;
+                b += (a - b) * lowpass;
+                c += (b - c) * lowpass;
+                d += (c - d) * lowpass;
+                e += (d - e) * highpass;
+                f += (e - f) * highpass;
+                buffer[index] += (d - f) * gain * makeUp * Envelope(i / (float)SampleRate, attack, decay);
+            }
+        }
+
         private static void AddTone(float[] buffer, float start, float duration, float fromHz, float toHz,
             Wave wave, float gain, float attack, float decay)
         {
@@ -306,44 +470,6 @@ namespace Shatterspire
             }
         }
 
-        /// <summary>
-        /// Addiert gefiltertes Rauschen. Der Tiefpass ist vierpolig (vier Einpolstufen in Reihe, rund
-        /// 24 dB je Oktave), der Hochpass zweipolig.
-        ///
-        /// Einpolig reichte nicht: weisses Rauschen hat gleich viel Energie je Hertz, und ein Abfall
-        /// von nur 6 dB je Oktave laesst oberhalb der Grenze mehr Energie stehen als darunter liegt.
-        /// Gemessen landete dadurch jeder Einschlag bei 5 bis 9 kHz - ein Zischen statt eines
-        /// Schlages. Mit der Kaskade sitzt der Klang dort, wo die Grenzfrequenz es sagt.
-        /// </summary>
-        private static void AddNoise(float[] buffer, ref Noise noise, float start, float duration, float gain,
-            float attack, float decay, float lowpassHz, float highpassHz)
-        {
-            var first = Mathf.Max(0, Mathf.RoundToInt(start * SampleRate));
-            var count = Mathf.RoundToInt(duration * SampleRate);
-            var lowpass = Coefficient(lowpassHz);
-            var highpass = Coefficient(highpassHz);
-            var a = 0f;
-            var b = 0f;
-            var c = 0f;
-            var d = 0f;
-            var e = 0f;
-            var f = 0f;
-            // Die Kaskade daempft auch im Durchlassbereich; das holt der Faktor wieder herein.
-            const float makeUp = 3.6f;
-            for (var i = 0; i < count; i++)
-            {
-                var index = first + i;
-                if (index >= buffer.Length) break;
-                a += (noise.Next() - a) * lowpass;
-                b += (a - b) * lowpass;
-                c += (b - c) * lowpass;
-                d += (c - d) * lowpass;
-                e += (d - e) * highpass;
-                f += (e - f) * highpass;
-                buffer[index] += (d - f) * gain * makeUp * Envelope(i / (float)SampleRate, attack, decay);
-            }
-        }
-
         /// <summary>Dauerstimme fuer die Hintergrundflaeche, ueber die ganze Laenge und ohne Abfall.</summary>
         private static void AddDrone(float[] buffer, float hz, float gain)
         {
@@ -352,7 +478,6 @@ namespace Shatterspire
             {
                 phase += hz / SampleRate;
                 if (phase > 1f) phase -= Mathf.Floor(phase);
-                // Langsame Lautstaerkeatmung, je Stimme eine andere Geschwindigkeit.
                 var breath = 0.82f + 0.18f * Mathf.Sin(i / (float)SampleRate * (0.21f + hz * 0.0013f) * Mathf.PI * 2f);
                 buffer[i] += Mathf.Sin(phase * Mathf.PI * 2f) * gain * breath;
             }
@@ -372,11 +497,36 @@ namespace Shatterspire
             return rise * Mathf.Exp(-decay * Mathf.Max(0f, seconds - attack));
         }
 
-        /// <summary>Koeffizient eines Einpol-Filters fuer die gegebene Grenzfrequenz.</summary>
         private static float Coefficient(float hz)
             => Mathf.Clamp01(1f - Mathf.Exp(-2f * Mathf.PI * hz / SampleRate));
 
         // ── Nachbearbeitung ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Raum aus vier gegeneinander verstimmten Verzoegerungen mit Rueckfuehrung und Daempfung.
+        /// Kein Hall-Prozessor, aber genau das, was einen Klang aus dem Kopfhoerer in einen Steinraum
+        /// setzt - trockene Einschlaege klingen immer nach Labor.
+        /// </summary>
+        private static void ApplyRoom(float[] buffer, float mix)
+        {
+            int[] delays = { 1237, 1619, 2029, 2503 };
+            float[] feedback = { 0.62f, 0.58f, 0.54f, 0.5f };
+            var wet = new float[buffer.Length];
+            for (var line = 0; line < delays.Length; line++)
+            {
+                var delay = delays[line];
+                var gain = feedback[line];
+                var damped = 0f;
+                var lowpass = Coefficient(2600f);
+                for (var i = delay; i < buffer.Length; i++)
+                {
+                    var fed = buffer[i - delay] + wet[i - delay] * gain;
+                    damped += (fed - damped) * lowpass;
+                    wet[i] += damped * 0.25f;
+                }
+            }
+            for (var i = 0; i < buffer.Length; i++) buffer[i] += wet[i] * mix;
+        }
 
         private static void Normalize(float[] buffer, float peak)
         {
@@ -387,7 +537,6 @@ namespace Shatterspire
             for (var i = 0; i < buffer.Length; i++) buffer[i] *= scale;
         }
 
-        /// <summary>Letzte Millisekunden ausblenden, sonst knackt das Ende.</summary>
         private static void FadeTail(float[] buffer, float seconds)
         {
             var count = Mathf.Min(buffer.Length, Mathf.RoundToInt(seconds * SampleRate));
@@ -395,7 +544,6 @@ namespace Shatterspire
                 buffer[buffer.Length - 1 - i] *= i / (float)count;
         }
 
-        /// <summary>Blendet das Ende ueber den Anfang, damit die Schleife keine hoerbare Naht hat.</summary>
         private static void CrossfadeEnds(float[] buffer, float seconds)
         {
             var count = Mathf.Min(buffer.Length / 3, Mathf.RoundToInt(seconds * SampleRate));

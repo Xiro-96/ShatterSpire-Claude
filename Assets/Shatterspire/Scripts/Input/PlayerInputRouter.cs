@@ -37,6 +37,16 @@ namespace Shatterspire
         /// <summary>Nur fuer automatische Vorfuehrungen: feste Laufrichtung statt Tastatur.</summary>
         public Vector2? ScriptedMove { get; set; }
 
+        /// <summary>
+        /// Zielhilfe: zieht die selbst gewaehlte Richtung auf ein Ziel, aber nur wenn es dicht daneben
+        /// liegt. Volles Selbstzielen hat sich im Handytest falsch angefuehlt - die Figur schoss auf
+        /// Gegner, die gerade erschienen, statt dorthin, wohin gezielt wurde.
+        /// </summary>
+        public static bool AimAssist = true;
+        /// <summary>Bis zu diesem Winkel darf die Zielhilfe die Richtung verschieben.</summary>
+        private const float AimAssistDegrees = 16f;
+        private Vector3 aimDirection = Vector3.forward;
+
         private void Start()
         {
             worldCamera = Camera.main;
@@ -50,7 +60,7 @@ namespace Shatterspire
             // Auf dem Telefon meldet Unity jede Beruehrung zusaetzlich als linke Maustaste. Wer den Stick
             // hielt, griff dadurch dauernd an. Mit Touch zaehlen nur noch die Aktionsknoepfe.
             var mouse = !Application.isMobilePlatform && Input.touchCount == 0;
-            AttackHeld = (mouse && Input.GetMouseButton(0)) || MobileInput.Attack || ScriptedAttack;
+            AttackHeld = (mouse && Input.GetMouseButton(0)) || MobileInput.Attack || MobileInput.AimFire || ScriptedAttack;
             HeavyPressed = (mouse && Input.GetMouseButtonDown(1)) || MobileInput.ConsumeHeavyPressed();
             HeavyReleased = (mouse && Input.GetMouseButtonUp(1)) || MobileInput.ConsumeHeavyReleased();
             HeavyHeld = (mouse && Input.GetMouseButton(1)) || MobileInput.Heavy;
@@ -58,23 +68,49 @@ namespace Shatterspire
             DashPressed = Input.GetKeyDown(KeyCode.Space) || MobileInput.ConsumeDash();
             UltimatePressed = Input.GetKeyDown(KeyCode.R) || MobileInput.ConsumeUltimate();
 
-            if (worldCamera && !Application.isMobilePlatform)
+            if (worldCamera && !Application.isMobilePlatform && Input.touchCount == 0)
             {
                 var ray = worldCamera.ScreenPointToRay(Input.mousePosition);
-                AimPoint = aimPlane.Raycast(ray, out var distance) ? ray.GetPoint(distance) : transform.position + transform.forward * 10f;
+                AimPoint = aimPlane.Raycast(ray, out var distance)
+                    ? ray.GetPoint(distance)
+                    : transform.position + transform.forward * 10f;
             }
             else
             {
-                var target = Targeting.FindBestAutoAim(transform.position, transform.forward, 18f, TeamId.Enemy);
-                AimPoint = target ? target.transform.position : transform.position + transform.forward * 10f;
+                AimPoint = transform.position + ResolveTouchAim() * 10f;
             }
             if (ScriptedAim.HasValue) AimPoint = transform.position + ScriptedAim.Value;
+        }
+
+        /// <summary>
+        /// Zielrichtung auf dem Telefon. Der Zielstick hat Vorrang; ohne ihn zeigt der Held dorthin,
+        /// wohin er laeuft, und im Stand behaelt er seine letzte Richtung. So ist jederzeit manuell
+        /// steuerbar, und die Zielhilfe korrigiert nur noch dicht daneben.
+        /// </summary>
+        private Vector3 ResolveTouchAim()
+        {
+            var stick = MobileInput.Aim;
+            if (stick.sqrMagnitude > 0.0004f) aimDirection = new Vector3(stick.x, 0f, stick.y).normalized;
+            else if (Move.sqrMagnitude > 0.02f) aimDirection = new Vector3(Move.x, 0f, Move.y).normalized;
+            if (!AimAssist) return aimDirection;
+
+            var target = Targeting.FindBestAutoAim(transform.position, aimDirection, 18f, TeamId.Enemy);
+            if (!target) return aimDirection;
+            var toTarget = target.transform.position - transform.position;
+            toTarget.y = 0f;
+            if (toTarget.sqrMagnitude < 0.04f) return aimDirection;
+            toTarget.Normalize();
+            return Vector3.Angle(aimDirection, toTarget) <= AimAssistDegrees ? toTarget : aimDirection;
         }
     }
 
     public static class MobileInput
     {
         public static Vector2 Move;
+        /// <summary>Richtung des Zielsticks, Null wenn niemand zielt.</summary>
+        public static Vector2 Aim;
+        /// <summary>Der Zielstick ist ausgelenkt und feuert damit mit.</summary>
+        public static bool AimFire;
         public static bool Attack;
         public static bool Heavy;
         private static bool skill;
@@ -99,6 +135,8 @@ namespace Shatterspire
         public static void Reset()
         {
             Move = Vector2.zero;
+            Aim = Vector2.zero;
+            AimFire = false;
             Attack = Heavy = false;
             skill = dash = ultimate = heavyPressed = heavyReleased = false;
         }

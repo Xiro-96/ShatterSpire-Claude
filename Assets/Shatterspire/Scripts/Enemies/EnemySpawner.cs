@@ -194,6 +194,10 @@ namespace Shatterspire
         {
             enemy.Defeated -= OnDefeated;
             enemy.Engaged -= OnCampEngaged;
+            // Gold fuer den Aufstieg. Der Spawner kennt den Spieler ohnehin, deshalb faellt die
+            // Belohnung hier und nicht in einer statischen Kasse.
+            if (player && player.TryGetComponent<RunWallet>(out var wallet))
+                wallet.Earn(RunWallet.RewardFor(enemy.Kind, activeFloor));
             camps.Remove(enemy);
             campOf.Remove(enemy);
             if (encounter.Remove(enemy))

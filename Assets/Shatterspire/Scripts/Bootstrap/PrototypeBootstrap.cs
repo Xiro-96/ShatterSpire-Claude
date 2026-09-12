@@ -139,6 +139,7 @@ namespace Shatterspire
             var build = root.AddComponent<PlayerBuild>();
             var health = root.AddComponent<Health>();
             root.AddComponent<LevelSystem>();
+            root.AddComponent<RunWallet>();
             var controller = root.AddComponent<PlayerController>();
             var weapon = root.AddComponent<WeaponSystem>();
 

@@ -183,6 +183,14 @@ namespace Shatterspire
             }
             Button(screen.transform, "META FORGE", new Vector2(56, 28), new Vector2(486, 62), new Vector2(0, 0),
                 new Color(1f, 0.55f, 0.08f), ShowForge, labelSize: 20);
+            // Sprachschalter: der Text steht bewusst in der jeweils anderen Sprache, damit man
+            // sieht, worauf man umschaltet. Nach dem Wechsel baut die Lobby sich neu auf.
+            Button(screen.transform, Loc.LanguageName, new Vector2(56, 100), new Vector2(238, 52), new Vector2(0, 0),
+                new Color(0.35f, 0.55f, 0.72f), () =>
+                {
+                    Loc.Toggle();
+                    ShowLobby();
+                }, labelSize: 16);
         }
 
         private void BuildPathColumn()
@@ -451,7 +459,8 @@ namespace Shatterspire
             if (anchorMin != anchorMax) { rect.offsetMin = Vector2.zero; rect.offsetMax = Vector2.zero; }
             var text = go.GetComponent<Text>();
             text.font = font;
-            text.text = value;
+            // Einziger Durchlass fuer Menuetexte - hier wird uebersetzt.
+            text.text = Loc.T(value);
             text.fontSize = size;
             text.alignment = align;
             text.color = Color.white;

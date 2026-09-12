@@ -37,6 +37,9 @@ namespace Shatterspire
         private float heavyMeter;
         private float heavyCharge;
         private bool chargingHeavy;
+        /// <summary>So lange gilt ein Tipp als noch offen, wenn die Aktion gerade nicht bereit war.</summary>
+        private const float AttackBufferSeconds = 0.15f;
+        private float attackRequestedAt = -10f;
         private float ultimateCharge;
         private bool ultimateActive;
         private int lightComboStep;
@@ -94,7 +97,11 @@ namespace Shatterspire
             if (!health.IsAlive || Time.timeScale <= 0f) return;
             UpdateHeavyAttack();
             UpdateTargetLock();
-            if (!chargingHeavy && input.AttackHeld && !ultimateActive) TryLightAttack();
+            // Angriffswunsch kurz merken: ein schneller Tipp auf dem Telefon fiel bisher unter den
+            // Tisch, wenn er in die Abklingzeit fiel. Jetzt loest er aus, sobald sie endet.
+            if (input.AttackHeld) attackRequestedAt = Time.time;
+            if (!chargingHeavy && !ultimateActive && Time.time - attackRequestedAt <= AttackBufferSeconds)
+                TryLightAttack();
             if (!chargingHeavy && input.SkillPressed && Time.time >= skillReadyAt && !ultimateActive)
                 StartCoroutine(ClassSkill());
             if (!chargingHeavy && input.UltimatePressed && UltimateReady && !ultimateActive)
