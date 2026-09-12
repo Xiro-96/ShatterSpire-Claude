@@ -184,11 +184,25 @@ namespace Shatterspire
             // A trigger alone can miss a whole enemy when a fast tracer moves farther
             // than its own diameter in one frame. Sweep the complete travelled segment
             // so damage remains deterministic at low and high frame rates alike.
-            if (travel > 0f && TrySweepHit(start, next, travel, out var health, out var hitPoint))
+            // Feste Etagengeometrie zuerst: ein Ziel hinter einer Wand oder Deckung wird nicht
+            // getroffen. Ohne das flog jeder Schuss durch den halben Turm, und Deckung waere
+            // gegen Fernkampf wirkungslos.
+            var obstacleDistance = float.PositiveInfinity;
+            var obstaclePoint = next;
+            var blocked = travel > 0f && TryObstacleHit(start, travel, out obstacleDistance, out obstaclePoint);
+            if (travel > 0f && TrySweepHit(start, next, travel, out var health, out var hitPoint) &&
+                (!blocked || (hitPoint - start).magnitude <= obstacleDistance))
             {
                 ResolveHit(health, hitPoint);
                 if (!gameObject.activeSelf) return;
                 transform.position = hitPoint + direction * (collisionRadius + 0.035f);
+            }
+            else if (blocked)
+            {
+                transform.position = obstaclePoint;
+                PrototypeVfx.SpawnHit(obstaclePoint, -direction, payload.Type, false);
+                Despawn();
+                return;
             }
             else
             {
@@ -202,6 +216,24 @@ namespace Shatterspire
             var health = other.GetComponentInParent<Health>();
             if (!IsValidTarget(health)) return;
             ResolveHit(health, other.ClosestPoint(transform.position));
+        }
+
+        /// <summary>Naechster Einschlag in Wand oder Deckung auf der Strecke dieses Frames.</summary>
+        private bool TryObstacleHit(Vector3 start, float distance, out float hitDistance, out Vector3 hitPoint)
+        {
+            hitDistance = float.PositiveInfinity;
+            hitPoint = start;
+            var count = Physics.SphereCastNonAlloc(start, collisionRadius, direction, SweepHits, distance,
+                Physics.AllLayers, QueryTriggerInteraction.Ignore);
+            for (var i = 0; i < count; i++)
+            {
+                var hit = SweepHits[i];
+                if (!hit.collider || !hit.collider.GetComponentInParent<LevelObstacle>()) continue;
+                if (hit.distance >= hitDistance) continue;
+                hitDistance = hit.distance;
+                hitPoint = hit.point == Vector3.zero ? start + direction * hit.distance : hit.point;
+            }
+            return hitDistance < float.PositiveInfinity;
         }
 
         private bool TrySweepHit(Vector3 start, Vector3 next, float distance, out Health target, out Vector3 hitPoint)

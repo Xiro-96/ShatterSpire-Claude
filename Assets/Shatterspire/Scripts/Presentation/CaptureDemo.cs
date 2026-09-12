@@ -20,6 +20,8 @@ namespace Shatterspire
         private bool framing;
         private float frameSize = 2.1f;
         private Transform frameOn;
+        private bool overview;
+        private Vector3? overviewPoint;
 
         public static bool Requested => Array.IndexOf(Environment.GetCommandLineArgs(), Flag) >= 0;
 
@@ -46,6 +48,24 @@ namespace Shatterspire
             framing = true;
             input.ScriptedAim = new Vector3(0.75f, 0f, -1f);
             yield return new WaitForSecondsRealtime(0.8f);
+
+            // Uebersicht von oben ueber einen Kampfraum - der Startraum hat bewusst keine Deckung.
+            var director = FindFirstObjectByType<RunDirector>();
+            var layout = director && director.Navigation != null ? director.Navigation.Layout : null;
+            frameSize = 13f;
+            overview = true;
+            foreach (var room in layout != null ? layout.Rooms : new System.Collections.Generic.List<LayoutRoom>())
+            {
+                if (room.Cover.Count == 0) continue;
+                overviewPoint = room.Bounds.Center;
+                break;
+            }
+            yield return new WaitForSecondsRealtime(0.3f);
+            yield return Shot("map");
+            overview = false;
+            overviewPoint = null;
+            frameSize = 2.1f;
+            yield return new WaitForSecondsRealtime(0.3f);
             yield return Shot("idle");
 
             input.ScriptedAttack = true;
@@ -149,9 +169,9 @@ namespace Shatterspire
             if (!framing || !view || !player) return;
             // Bei den Gegner-Vorfuehrungen steiler von oben: flach schiebt sich staendig eine Wand
             // oder ein Gelaender zwischen Kamera und Motiv.
-            var focus = frameOn ? frameOn.position : player.position;
+            var focus = overviewPoint ?? (frameOn ? frameOn.position : player.position);
             view.orthographicSize = frameSize;
-            view.transform.rotation = Quaternion.Euler(frameOn ? 42f : 28f, 0f, 0f);
+            view.transform.rotation = Quaternion.Euler(overview ? 62f : frameOn ? 42f : 28f, 0f, 0f);
             view.transform.position = focus + Vector3.up * 1.35f - view.transform.forward * 16f;
         }
 

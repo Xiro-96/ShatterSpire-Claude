@@ -71,6 +71,13 @@ namespace Shatterspire
 
         /// <summary>Indizes in <see cref="FloorLayout.Doors"/>.</summary>
         public List<int> Doors { get; } = new();
+
+        /// <summary>
+        /// Deckung im Raum: achsparallele Hindernisse, die weder Figuren noch Geschosse durchlassen.
+        /// Sie liegen immer mit Abstand zu allen Waenden, damit aussen herum ein Weg bleibt, und mit
+        /// Abstand zu Core, Lager und Aufzug, damit kein Ziel darin verschwindet.
+        /// </summary>
+        public List<Area> Cover { get; } = new();
     }
 
     /// <summary>

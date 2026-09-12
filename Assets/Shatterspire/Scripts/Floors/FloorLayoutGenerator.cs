@@ -17,6 +17,15 @@ namespace Shatterspire
         public const int CoresPerFloor = 2;
         private const int GridLimit = 3;
         private const float CorridorOverlap = 0.6f;
+        /// <summary>
+        /// Abstand jeder Deckung zu allen Waenden. Weil Tueren in Waenden liegen, haelt derselbe Wert
+        /// auch die Durchgaenge frei, und aussen herum bleibt in jedem Raum ein Rundweg.
+        /// </summary>
+        private const float CoverWallMargin = 3.4f;
+        /// <summary>Freiraum um Core, Lagermitte und Aufzug.</summary>
+        private const float CoverSpotMargin = 2.6f;
+        /// <summary>Luecke zwischen zwei Deckungen, damit man dazwischen durchlaufen kann.</summary>
+        private const float CoverSpacing = 2.4f;
 
         private static readonly int[] StepX = { 1, -1, 0, 0 };
         private static readonly int[] StepZ = { 0, 0, 1, -1 };
@@ -55,6 +64,7 @@ namespace Shatterspire
 
             AssignRoles(layout, rng);
             AssignCamps(layout, kind);
+            AssignCover(layout, rng);
             layout.Bounds = ComputeBounds(layout);
             return layout;
         }
@@ -244,6 +254,83 @@ namespace Shatterspire
                     _ => center
                 };
             }
+        }
+
+        /// <summary>
+        /// Verteilt Deckung in den Kampfraeumen. In R.I.S.E. wird in grossen Arealen gekaempft, in denen
+        /// Stellung zaehlt - ohne etwas, hinter das man treten kann, ist jede Position gleich gut.
+        /// Der Startraum bleibt leer: dort soll niemand gleich um eine Ecke suchen muessen.
+        /// </summary>
+        private static void AssignCover(FloorLayout layout, System.Random rng)
+        {
+            foreach (var room in layout.Rooms)
+            {
+                if (room.Role == RoomRole.Start) continue;
+                var wanted = room.Role == RoomRole.Boss ? 4 : 3;
+                foreach (var candidate in CoverCandidates(room, rng))
+                {
+                    if (room.Cover.Count >= wanted) break;
+                    if (!CoverFits(room, candidate)) continue;
+                    room.Cover.Add(candidate);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Moegliche Deckungen eines Raums, in zufaelliger aber seedfester Reihenfolge. Die Mittelpunkte
+        /// sind Bruchteile des Spielraums, der nach Abzug von Wandabstand und halber Groesse bleibt -
+        /// damit liegt jede Deckung von vornherein vollstaendig im Raum.
+        /// </summary>
+        private static List<Area> CoverCandidates(LayoutRoom room, System.Random rng)
+        {
+            var bounds = room.Bounds;
+            var result = new List<Area>();
+            var shapes = new[] { new Vector2(3.6f, 1.4f), new Vector2(1.4f, 3.6f), new Vector2(1.9f, 1.9f) };
+            var fractions = new[] { -0.84f, 0f, 0.84f };
+            for (var shapeIndex = 0; shapeIndex < shapes.Length; shapeIndex++)
+            {
+                var size = shapes[shapeIndex];
+                var spanX = bounds.Width * 0.5f - CoverWallMargin - size.x * 0.5f;
+                var spanZ = bounds.Depth * 0.5f - CoverWallMargin - size.y * 0.5f;
+                if (spanX < 0f || spanZ < 0f) continue;
+                foreach (var fx in fractions)
+                foreach (var fz in fractions)
+                {
+                    if (fx == 0f && fz == 0f) continue;
+                    result.Add(Area.Around(bounds.Center.x + spanX * fx, bounds.Center.z + spanZ * fz,
+                        size.x, size.y));
+                }
+            }
+            // Fisher-Yates mit dem Etagen-Zufall: gleicher Seed, gleiche Raeume.
+            for (var i = result.Count - 1; i > 0; i--)
+            {
+                var j = rng.Next(i + 1);
+                (result[i], result[j]) = (result[j], result[i]);
+            }
+            return result;
+        }
+
+        private static bool CoverFits(LayoutRoom room, Area candidate)
+        {
+            foreach (var placed in room.Cover)
+                if (Expand(placed, CoverSpacing).Overlaps(candidate)) return false;
+            if (DistanceToArea(room.CampCenter, candidate) < CoverSpotMargin) return false;
+            if (room.Role == RoomRole.Core && DistanceToArea(room.CorePosition, candidate) < CoverSpotMargin)
+                return false;
+            // Im Aufzugs- und im Bossraum steht in der Mitte etwas, das frei bleiben muss.
+            if (room.Role is RoomRole.Lift or RoomRole.Boss &&
+                DistanceToArea(room.Bounds.Center, candidate) < CoverSpotMargin) return false;
+            return true;
+        }
+
+        private static Area Expand(Area area, float margin)
+            => new(area.MinX - margin, area.MaxX + margin, area.MinZ - margin, area.MaxZ + margin);
+
+        private static float DistanceToArea(Vector3 point, Area area)
+        {
+            var dx = Math.Max(Math.Max(area.MinX - point.x, 0f), point.x - area.MaxX);
+            var dz = Math.Max(Math.Max(area.MinZ - point.z, 0f), point.z - area.MaxZ);
+            return (float)Math.Sqrt(dx * dx + dz * dz);
         }
 
         private static Area ComputeBounds(FloorLayout layout)

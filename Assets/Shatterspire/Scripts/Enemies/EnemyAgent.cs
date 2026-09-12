@@ -197,7 +197,9 @@ namespace Shatterspire
                 var movement = Vector3.zero;
                 if (kind is EnemyKind.Shooter or EnemyKind.Marksman)
                 {
-                    if (distance > attackRange * 0.86f) movement = direction;
+                    // Ohne freie Sicht bringt Abstandhalten nichts - dann wird die Deckung umlaufen.
+                    if (!CanSeeTarget()) movement = direction;
+                    else if (distance > attackRange * 0.86f) movement = direction;
                     else if (distance < attackRange * 0.52f) movement = -direction;
                     else movement = Vector3.Cross(Vector3.up, direction) * strafeDirection * 0.56f;
                 }
@@ -214,9 +216,18 @@ namespace Shatterspire
                 }
                 if (offset.sqrMagnitude > 0.05f)
                     transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(offset), 10f * Time.deltaTime);
-                if (distance <= attackRange && Time.time >= attackReadyAt) StartCoroutine(AttackRoutine());
+                if (distance <= attackRange && Time.time >= attackReadyAt && HasFiringLine())
+                    StartCoroutine(AttackRoutine());
             }
         }
+
+        /// <summary>Freie Sicht auf das Ziel. Ohne Etagendaten gilt die Sicht als frei.</summary>
+        private bool CanSeeTarget()
+            => navigation == null || !target || navigation.HasLineOfSight(transform.position, target.position);
+
+        /// <summary>Fernkaempfer schiessen nicht in eine Deckung. Nahkampf braucht die Pruefung nicht.</summary>
+        private bool HasFiringLine()
+            => kind is not (EnemyKind.Shooter or EnemyKind.Marksman) || CanSeeTarget();
 
         private void IdleUpdate(float distanceToTarget)
         {
@@ -482,6 +493,13 @@ namespace Shatterspire
             var elapsed = 0f;
             while (elapsed < stats.TelegraphSeconds && state != State.Dead)
             {
+                // Wer waehrend des Spannens hinter eine Deckung tritt, bekommt den Schuss nicht ab.
+                if (!CanSeeTarget())
+                {
+                    if (telegraph) Destroy(telegraph);
+                    FinishAttack(0.7f);
+                    yield break;
+                }
                 if (elapsed < trackingSeconds)
                 {
                     direction = FlatDirectionToTarget();

@@ -9,6 +9,8 @@ namespace Shatterspire
         private const float WallThickness = 0.8f;
         private const float WallColliderHeight = 2.6f;
         private const float WallModelSpacing = 3.8f;
+        /// <summary>Hoehe der Deckungs-Kollider. Hoch genug, dass nichts darueber hinwegfliegt.</summary>
+        private const float CoverHeight = 2.05f;
         /// <summary>Oberkante einer Bodenkachel je Einheit Kachelgroesse, einmal gemessen. -1 = noch nicht.</summary>
         private static float tileTopPerSize = -1f;
 
@@ -25,7 +27,29 @@ namespace Shatterspire
             BuildAbyss(root, layout);
             foreach (var room in layout.Rooms) BuildRoom(root, layout, room, themeTint);
             foreach (var door in layout.Doors) BuildCorridor(root, layout, door, themeTint);
+            LogCover(layout);
             return root.gameObject;
+        }
+
+        /// <summary>
+        /// Schreibt je Raum, wie viel Deckung gesetzt wurde. Auf einem Bild laesst sich Deko nicht von
+        /// Deckung unterscheiden - diese Zeile schon.
+        /// </summary>
+        private static void LogCover(FloorLayout layout)
+        {
+            var text = new System.Text.StringBuilder("SHATTERSPIRE Deckung Etage ").Append(layout.Floor).Append(':');
+            foreach (var room in layout.Rooms)
+            {
+                text.Append(" [").Append(room.Index).Append(' ').Append(room.Role).Append(' ')
+                    .Append(room.Cover.Count).Append('x');
+                foreach (var cover in room.Cover)
+                    text.Append(" (").Append(cover.Center.x.ToString("0.0")).Append('/')
+                        .Append(cover.Center.z.ToString("0.0")).Append(' ')
+                        .Append(cover.Width.ToString("0.0")).Append('×')
+                        .Append(cover.Depth.ToString("0.0")).Append(')');
+                text.Append(']');
+            }
+            Debug.Log(text.ToString());
         }
 
         private static Color FloorThemeTint(FloorTheme theme) => theme switch
@@ -59,6 +83,7 @@ namespace Shatterspire
 
             TileArea(roomRoot, bounds, themeTint, room.Role is RoomRole.Start or RoomRole.Lift);
             BuildRoomWalls(roomRoot, layout, room);
+            BuildCover(roomRoot, room);
             DecorateRoom(roomRoot, room);
             CreateAccentLight(roomRoot, center + Vector3.up * 3.2f, RoleLight(room.Role),
                 Mathf.Max(bounds.Width, bounds.Depth) * 0.75f, 0.55f);
@@ -174,6 +199,8 @@ namespace Shatterspire
             blocker.AddComponent<BoxCollider>().size = alongX
                 ? new Vector3(length, WallColliderHeight, WallThickness)
                 : new Vector3(WallThickness, WallColliderHeight, length);
+            // Auch Waende halten Geschosse auf - vorher flog jeder Schuss durch die halbe Etage.
+            blocker.AddComponent<LevelObstacle>();
 
             var count = Mathf.Max(1, Mathf.RoundToInt(length / WallModelSpacing));
             var step = length / count;
@@ -220,6 +247,62 @@ namespace Shatterspire
             {
                 WallSegment(corridorRoot, false, corridor.MinX - WallThickness * 0.5f, span.MinZ, span.MaxZ);
                 WallSegment(corridorRoot, false, corridor.MaxX + WallThickness * 0.5f, span.MinZ, span.MaxZ);
+            }
+        }
+
+        /// <summary>
+        /// Baut die Deckung eines Raums: sichtbare Props auf der Flaeche aus dem Layout und ein
+        /// Kollider, der genau dieses Rechteck fuellt. Figuren laufen ueber <see cref="FloorNavigation"/>
+        /// darum herum, der Spieler stoesst physisch dagegen, Geschosse schlagen ein.
+        /// </summary>
+        private static void BuildCover(Transform parent, LayoutRoom room)
+        {
+            for (var i = 0; i < room.Cover.Count; i++)
+            {
+                var area = room.Cover[i];
+                var centre = area.Center;
+                var longSide = Mathf.Max(area.Width, area.Depth);
+                var alongX = area.Width >= area.Depth;
+                var barricade = longSide > Mathf.Min(area.Width, area.Depth) * 1.6f;
+                var seed = room.Index * 7 + i;
+
+                if (barricade)
+                {
+                    // Laengliche Deckung aus mehreren Teilen, damit sie nicht wie ein gedehnter Klotz wirkt.
+                    var pieces = Mathf.Max(2, Mathf.RoundToInt(longSide / 1.8f));
+                    var step = longSide / pieces;
+                    for (var piece = 0; piece < pieces; piece++)
+                    {
+                        var offset = -longSide * 0.5f + step * (piece + 0.5f);
+                        var position = alongX
+                            ? new Vector3(centre.x + offset, 0.03f, centre.z)
+                            : new Vector3(centre.x, 0.03f, centre.z + offset);
+                        // Kisten stapeln sich hoch genug, um wirklich Deckung zu geben; die Bruchwand
+                        // lockert die Reihe auf, bleibt aber auf derselben Hoehe.
+                        var model = (seed + piece) % 3 == 0 ? "wall_broken" : "crates_stacked";
+                        SpawnDungeonModel(parent, model, position, alongX ? 0f : 90f,
+                            model == "wall_broken" ? step + 0.35f : 1.95f,
+                            model == "wall_broken" ? FitAxis.Horizontal : FitAxis.Height,
+                            new Color(0.93f, 0.89f, 0.83f));
+                    }
+                }
+                else
+                {
+                    // Bewusst hohe Props: ein flacher Schutthaufen sieht aus, als koennte man darueber
+                    // springen und schiessen - er haelt aber Figuren und Geschosse auf. Was blockt,
+                    // muss auch so aussehen.
+                    var model = seed % 3 == 0 ? "pillar_decorated"
+                        : seed % 3 == 1 ? "crates_stacked" : "barrel_large_decorated";
+                    var height = model == "pillar_decorated" ? 2.9f : 2.05f;
+                    SpawnDungeonModel(parent, model, new Vector3(centre.x, 0.03f, centre.z),
+                        (seed * 53) % 360, height, FitAxis.Height, new Color(0.95f, 0.91f, 0.85f));
+                }
+
+                var blocker = new GameObject("Cover Collider");
+                blocker.transform.SetParent(parent, false);
+                blocker.transform.localPosition = new Vector3(centre.x, CoverHeight * 0.5f, centre.z);
+                blocker.AddComponent<BoxCollider>().size = new Vector3(area.Width, CoverHeight, area.Depth);
+                blocker.AddComponent<LevelObstacle>();
             }
         }
 

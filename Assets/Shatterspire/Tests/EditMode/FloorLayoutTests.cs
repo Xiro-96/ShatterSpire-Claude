@@ -222,6 +222,98 @@ namespace Shatterspire.Tests
             Assert.That(navigation.IsWalkable(layout.SpawnPoint, 0.4f), Is.True);
         }
 
+        // ── Deckung ──────────────────────────────────────────────
+
+        [Test]
+        public void DeckungHaeltAbstandZuWaendenZielenUndZueinander()
+        {
+            foreach (var layout in SampleFloors())
+            foreach (var room in layout.Rooms)
+            {
+                for (var i = 0; i < room.Cover.Count; i++)
+                {
+                    var cover = room.Cover[i];
+                    // Vollstaendig im Raum, mit genug Rand fuer einen Rundweg aussen herum.
+                    Assert.That(room.Bounds.Contains(new Vector3(cover.MinX, 0f, cover.MinZ), 3f), Is.True,
+                        $"Seed {layout.Seed}, Raum {room.Index}: Deckung zu nah an der Wand.");
+                    Assert.That(room.Bounds.Contains(new Vector3(cover.MaxX, 0f, cover.MaxZ), 3f), Is.True,
+                        $"Seed {layout.Seed}, Raum {room.Index}: Deckung zu nah an der Wand.");
+                    Assert.That(cover.Contains(room.CampCenter), Is.False,
+                        $"Seed {layout.Seed}, Raum {room.Index}: Lagermitte steckt in einer Deckung.");
+                    if (room.Role == RoomRole.Core)
+                        Assert.That(cover.Contains(room.CorePosition), Is.False,
+                            $"Seed {layout.Seed}, Raum {room.Index}: Core steckt in einer Deckung.");
+                    if (room.Role is RoomRole.Lift or RoomRole.Boss)
+                        Assert.That(cover.Contains(room.Bounds.Center), Is.False,
+                            $"Seed {layout.Seed}, Raum {room.Index}: Raummitte ist verstellt.");
+                    for (var j = i + 1; j < room.Cover.Count; j++)
+                        Assert.That(cover.Overlaps(room.Cover[j]), Is.False,
+                            $"Seed {layout.Seed}, Raum {room.Index}: zwei Deckungen ueberlappen.");
+                }
+            }
+        }
+
+        [Test]
+        public void KampfraeumeHabenDeckungDerStartraumNicht()
+        {
+            foreach (var layout in SampleFloors())
+            {
+                Assert.That(layout.Rooms[layout.StartRoom].Cover, Is.Empty,
+                    $"Seed {layout.Seed}: Deckung im Startraum.");
+                foreach (var room in layout.Rooms.Where(r => r.Role != RoomRole.Start))
+                    Assert.That(room.Cover, Is.Not.Empty,
+                        $"Seed {layout.Seed}: Raum {room.Index} ({room.Role}) ohne Deckung.");
+            }
+        }
+
+        [Test]
+        public void DeckungIstNichtBegehbarUndSchiebtHeraus()
+        {
+            foreach (var layout in SampleFloors().Take(40))
+            {
+                var navigation = new FloorNavigation(layout);
+                foreach (var room in layout.Rooms)
+                foreach (var cover in room.Cover)
+                {
+                    var centre = cover.Center;
+                    Assert.That(navigation.IsWalkable(centre, 0.45f), Is.False,
+                        $"Seed {layout.Seed}: man kann in eine Deckung laufen.");
+                    var pushed = navigation.ClampToWalkable(centre, 0.45f);
+                    Assert.That(navigation.IsWalkable(pushed, 0.44f), Is.True,
+                        $"Seed {layout.Seed}: Herausschieben landet nicht auf begehbarem Boden.");
+                }
+            }
+        }
+
+        [Test]
+        public void DeckungUnterbrichtDieSichtlinie()
+        {
+            foreach (var layout in SampleFloors().Take(40))
+            {
+                var navigation = new FloorNavigation(layout);
+                foreach (var room in layout.Rooms)
+                foreach (var cover in room.Cover)
+                {
+                    var centre = cover.Center;
+                    var acrossX = cover.Width * 0.5f + 2f;
+                    var acrossZ = cover.Depth * 0.5f + 2f;
+                    Assert.That(navigation.HasLineOfSight(centre + Vector3.left * acrossX, centre + Vector3.right * acrossX),
+                        Is.False, $"Seed {layout.Seed}: Sicht geht quer durch eine Deckung.");
+                    Assert.That(navigation.HasLineOfSight(centre + Vector3.back * acrossZ, centre + Vector3.forward * acrossZ),
+                        Is.False, $"Seed {layout.Seed}: Sicht geht laengs durch eine Deckung.");
+                }
+            }
+        }
+
+        [Test]
+        public void SichtlinieBleibtOhneDeckungDazwischenFrei()
+        {
+            var layout = FloorLayoutGenerator.Generate(1234, 2, RoomKind.Combat);
+            var navigation = new FloorNavigation(layout);
+            var start = layout.SpawnPoint;
+            Assert.That(navigation.HasLineOfSight(start, start + Vector3.right * 2f), Is.True);
+        }
+
         // ── Pfade ────────────────────────────────────────────────
 
         [Test]
