@@ -128,6 +128,40 @@ namespace Shatterspire.Tests
             });
         }
 
+        [Test]
+        public void JedeSeltenheitUndJedeAktionsgruppeIstUebersetzt()
+        {
+            // Die Seltenheit wird als Name des Enum-Werts angezeigt, nicht aus einem Katalog
+            // gelesen. EPIC stand deshalb englisch ueber der Verbesserungs-Wahl.
+            WithGerman(() =>
+            {
+                var missing = new List<string>();
+                foreach (PerkRarity rarity in Enum.GetValues(typeof(PerkRarity)))
+                    Check(missing, rarity.ToString().ToUpperInvariant(), $"Seltenheit {rarity}");
+                Assert.That(missing, Is.Empty, "Nicht uebersetzt: " + string.Join(" | ", missing));
+            });
+        }
+
+        [Test]
+        public void JedeAnomalieIstUebersetzt()
+        {
+            WithGerman(() =>
+            {
+                var missing = new List<string>();
+                foreach (var modifier in FloorModifierCatalog.All)
+                {
+                    Check(missing, modifier.Name, $"Anomalie {modifier.Id}");
+                    // Die Wirkung wird aus Bausteinen gesetzt; bleibt einer englisch, faellt es hier auf.
+                    var effects = FloorModifierCatalog.Effects(modifier);
+                    // GOLD steht nicht in der Liste: das Wort ist im Deutschen dasselbe, wie HAMMER.
+                    foreach (var english in new[] { "ENEMY", "SHARDS", "NO ANOMALY" })
+                        if (effects.Contains(english))
+                            missing.Add($"Wirkung {modifier.Id}: '{english}' in '{effects}'");
+                }
+                Assert.That(missing, Is.Empty, "Nicht uebersetzt: " + string.Join(" | ", missing));
+            });
+        }
+
         /// <summary>Merkt sich alles, was unverändert zurueckkommt - mit Ausnahme der Eigennamen.</summary>
         private static void Check(List<string> missing, string text, string where)
         {

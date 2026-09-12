@@ -476,7 +476,7 @@ namespace Shatterspire
             var text = go.GetComponent<Text>();
             text.font = font;
             // Einziger Durchlass fuer Menuetexte - hier wird uebersetzt.
-            text.text = Loc.T(value);
+            text.text = Loc.TQuiet(value);
             text.fontSize = size;
             text.alignment = align;
             text.color = Color.white;

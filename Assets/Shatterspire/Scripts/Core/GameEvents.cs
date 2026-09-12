@@ -13,6 +13,8 @@ namespace Shatterspire
         public static event Action<int, RoomKind> RoomStarted;
         public static event Action<int, RoomKind> RoomCompleted;
         public static event Action<int, int, string> ObjectiveChanged;
+        /// <summary>Anomalie der begonnenen Etage.</summary>
+        public static event Action<FloorModifierId> AnomalyChanged;
         public static event Action<Vector3, string, bool> ObjectiveTargetChanged;
         public static event Action<int, int, bool> EncounterChanged;
         public static event Action<int, int> WaveChanged;
@@ -28,6 +30,7 @@ namespace Shatterspire
         public static void RaiseRoomStarted(int index, RoomKind kind) => RoomStarted?.Invoke(index, kind);
         public static void RaiseRoomCompleted(int index, RoomKind kind) => RoomCompleted?.Invoke(index, kind);
         public static void RaiseObjectiveChanged(int current, int required, string instruction) => ObjectiveChanged?.Invoke(current, required, instruction);
+        public static void RaiseAnomalyChanged(FloorModifierId anomaly) => AnomalyChanged?.Invoke(anomaly);
         public static void RaiseObjectiveTargetChanged(Vector3 position, string label, bool visible)
             => ObjectiveTargetChanged?.Invoke(position, label, visible);
         public static void RaiseEncounterChanged(int remaining, int total, bool boss)
@@ -50,6 +53,7 @@ namespace Shatterspire
             RoomStarted = null;
             RoomCompleted = null;
             ObjectiveChanged = null;
+            AnomalyChanged = null;
             ObjectiveTargetChanged = null;
             EncounterChanged = null;
             WaveChanged = null;

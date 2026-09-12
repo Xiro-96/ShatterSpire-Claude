@@ -30,6 +30,8 @@ namespace Shatterspire
         private int enemiesDefeated;
         private int runSeed;
         private RoomKind currentKind;
+        /// <summary>Anomalie der laufenden Etage. Der Spieler hat sie am Aufzug mitgewaehlt.</summary>
+        private FloorModifierId currentAnomaly;
         private bool ended;
         private bool transitioning;
         private bool downed;
@@ -51,12 +53,14 @@ namespace Shatterspire
             build = player.GetComponent<PlayerBuild>();
             // Ein Seed je Aufstieg, jede Etage leitet ihren eigenen daraus ab. So ist ein ganzer
             // Aufstieg spaeter reproduzierbar - fuer Fehlersuche und fuer Co-op-Clients.
-            runSeed = Environment.TickCount;
+            // Fuer die automatische Vorfuehrung festgenagelt, sonst aus der Uhr.
+            var fixedSeed = CaptureDemo.FixedSeed;
+            runSeed = fixedSeed != 0 ? fixedSeed : Environment.TickCount;
             spawner.WaveCleared += CompleteRoom;
             playerHealth.Died += OnPlayerDied;
             GameEvents.EntityDied += OnEntityDied;
             GameEvents.RaiseKnockoutChanged(0, MaximumKnockouts, 0f, false);
-            StartRoom(RoomKind.Combat);
+            StartRoom(RoomKind.Combat, FloorModifierId.None);
         }
 
         private void OnDestroy()
@@ -66,13 +70,16 @@ namespace Shatterspire
             GameEvents.EntityDied -= OnEntityDied;
         }
 
-        private void StartRoom(RoomKind kind)
+        private void StartRoom(RoomKind kind, FloorModifierId anomaly)
         {
             if (ended) return;
             transitioning = false;
             roomIndex++;
             currentKind = PathCatalog.IsBossFloor(roomIndex) ? RoomKind.Boss
                 : kind == RoomKind.Boss ? RoomKind.Combat : kind;
+            // Wird die Raumart korrigiert, verfaellt die dazu angebotene Anomalie: sie war an die
+            // gewaehlte Route gebunden, und der Warden laeuft ohnehin ohne.
+            currentAnomaly = currentKind == kind ? anomaly : FloorModifierId.None;
 
             if (floorRoot) Destroy(floorRoot);
             var seed = unchecked(runSeed * 486187739 + roomIndex * 7919);
@@ -82,8 +89,12 @@ namespace Shatterspire
             floorRoot = AuthoredArt.BuildFloor(layout, null);
 
             PlaceParty(layout);
-            spawner.BeginFloor(navigation, roomIndex);
+            spawner.BeginFloor(navigation, roomIndex, currentAnomaly);
+            // Zuerst die Anomalie: der Etagenkopf nennt sie in derselben Ansage, also muss sie
+            // beim HUD schon angekommen sein.
+            GameEvents.RaiseAnomalyChanged(currentAnomaly);
             GameEvents.RaiseRoomStarted(roomIndex, currentKind);
+            Debug.Log($"SHATTERSPIRE Anomalie: Etage {roomIndex}, {currentKind}, {currentAnomaly}.");
 
             if (currentKind == RoomKind.Boss)
             {
@@ -132,7 +143,8 @@ namespace Shatterspire
             spawner.Clear();
             var baseReward = currentKind switch { RoomKind.Elite => 14, RoomKind.Boss => 50, RoomKind.Treasure => 8, _ => 6 };
             var tier = Mathf.Max(0, (roomIndex - 1) / 5);
-            shards += Mathf.RoundToInt(baseReward * (1f + tier * 0.35f));
+            var anomaly = FloorModifierCatalog.For(currentAnomaly);
+            shards += Mathf.RoundToInt(baseReward * (1f + tier * 0.35f) * anomaly.Shards);
             floorsCleared++;
             if (currentKind == RoomKind.Boss) bossesDefeated++;
             GameEvents.RaiseRoomCompleted(roomIndex, currentKind);
@@ -217,9 +229,9 @@ namespace Shatterspire
             // Oben angekommen: jetzt faellt die Wahl, danach steht die neue Etage.
             // Sperre loesen, bevor die naechste Etage die Gruppe setzt.
             if (playerController) playerController.Land(player.position);
-            hud.ShowFloorUpgrade(() => hud.ShowRoutes(roomIndex + 1, kind =>
+            hud.ShowFloorUpgrade(() => hud.ShowRoutes(roomIndex + 1, runSeed, (kind, anomaly) =>
             {
-                StartRoom(kind);
+                StartRoom(kind, anomaly);
                 Sfx.Play2D(Sound.LiftArrive);
                 hud.Fade(0f, 0.55f);
             }));

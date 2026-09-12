@@ -74,6 +74,14 @@ namespace Shatterspire
         private void OnDisable() => ActiveAgents.Remove(this);
 
         public void Configure(EnemyKind value, Transform player, int floor)
+            => Configure(value, player, floor, FloorModifierCatalog.For(FloorModifierId.None));
+
+        /// <summary>
+        /// Setzt den Gegner auf. Die Anomalie der Etage greift nach der Tiefenskalierung an,
+        /// nicht davor: sonst wuerde sie sich mit der Etagenkurve multiplizieren und auf Etage 14
+        /// ein Vielfaches dessen bedeuten, was auf Etage 2 angekuendigt war.
+        /// </summary>
+        public void Configure(EnemyKind value, Transform player, int floor, in FloorModifier modifier)
         {
             kind = value;
             target = player;
@@ -97,12 +105,27 @@ namespace Shatterspire
             health.IncreaseMaximum(health.Maximum * (healthScale - 1f), true);
             attackDamage *= damageScale;
             speed *= 1f + Mathf.Min(EnemyBalance.MaximumSpeedBonus, depth * EnemyBalance.SpeedPerFloor);
+            if (!modifier.IsCalm)
+            {
+                // Der Boss bleibt von der Anomalie unberuehrt: seine Phasen sind auf feste Werte
+                // gebaut, und halbes Leben wuerde Phase 3 ueberspringen.
+                if (kind != EnemyKind.IronWarden)
+                {
+                    // Dieselbe Form wie die Etagenkurve darueber: der Gegner ist hier noch voll
+                    // geheilt, deshalb zieht ein negativer Betrag Maximum und Stand gemeinsam nach.
+                    health.IncreaseMaximum(health.Maximum * (modifier.EnemyHealth - 1f), true);
+                    attackDamage *= modifier.EnemyDamage;
+                    speed *= modifier.EnemySpeed;
+                }
+            }
             health.Died += Die;
             health.Damaged += OnDamaged;
             if (kind == EnemyKind.Shieldbearer)
             {
                 // Ein aufgeladener Heavy liegt weit ueber diesem Wert, ein Light-Treffer weit darunter.
                 // So bricht die Deckung genau dann, wenn jemand richtig ausgeholt hat.
+                // Nach der Anomalie gerechnet: bei halbem Leben muss auch die Schwelle halb sein,
+                // sonst bricht die Deckung des Schildtraegers im Glasbruch nie.
                 guardBreakDamage = health.Maximum * 0.42f;
                 health.DamageFilter = FilterGuardedDamage;
             }

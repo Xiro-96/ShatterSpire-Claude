@@ -22,6 +22,20 @@ namespace Shatterspire
 
         public static bool IsBossFloor(int floor) => floor > 0 && floor % BossInterval == 0;
 
+        /// <summary>
+        /// Welche Routen am Aufzug angeboten werden. Immer Kampf und Elite, dazu als drittes
+        /// abwechselnd Schatz oder Raetsel - eine sichere, eine harte und eine offene Wahl.
+        ///
+        /// Aus dem Lauf-Seed gezogen und nicht aus <see cref="UnityEngine.Random"/>: im Co-op
+        /// muessen alle drei Spieler dieselben drei Knoepfe vor sich haben, bevor abgestimmt wird.
+        /// </summary>
+        public static RoomKind[] RoutesFor(int runSeed, int floor)
+        {
+            if (IsBossFloor(floor)) return new[] { RoomKind.Boss };
+            var third = RunRandom.Chance(runSeed, floor, 97, 0.5f) ? RoomKind.Treasure : RoomKind.Mystery;
+            return new[] { RoomKind.Combat, RoomKind.Elite, third };
+        }
+
         /// <summary>Nach dieser Etage endet der Aufstieg ohne Wahl zwischen Extrahieren und Aufsteigen.</summary>
         public static bool IsFinalFloor(RunMode path, int floor) => !IsEndless(path) && floor >= FloorCount(path);
 

@@ -45,7 +45,53 @@ namespace Shatterspire
         public static string T(string english)
         {
             if (language == Language.English || string.IsNullOrEmpty(english)) return english;
-            return German.TryGetValue(english, out var translated) ? translated : english;
+            if (German.TryGetValue(english, out var translated)) return translated;
+            ReportMissing(english);
+            return english;
+        }
+
+        /// <summary>
+        /// Wie <see cref="T"/>, aber ohne Meldung. Fuer den Sammel-Durchlass beim Aufbau der
+        /// Oberflaeche: der bekommt auch fertig zusammengesetzte und schon uebersetzte Texte, und
+        /// die sind keine Schluessel. Wuerde er melden, waere die Meldung nicht mehr zu lesen.
+        /// </summary>
+        public static string TQuiet(string text)
+        {
+            if (language == Language.English || string.IsNullOrEmpty(text)) return text;
+            return German.TryGetValue(text, out var translated) ? translated : text;
+        }
+
+        /// <summary>
+        /// Meldet einen fehlenden Eintrag - einmal je Text, nicht einmal je Bild.
+        ///
+        /// Der Grund: ein Text ohne Eintrag faellt sichtbar auf Englisch zurueck, aber nur dort, wo
+        /// gerade jemand hinsieht. "FLOOR CLEARED" und "EPIC" standen so ueber der Verbesserungs-
+        /// Wahl, obwohl der Aufruf korrekt durch Loc lief - es fehlte nur die Zeile in der Tabelle.
+        /// Jeder Aufnahmelauf ist damit auch eine Sprachpruefung: nach "SHATTERSPIRE Sprache" im
+        /// Log suchen.
+        /// </summary>
+        private static void ReportMissing(string english)
+        {
+            if (!Missing.Add(english)) return;
+            Debug.LogWarning($"SHATTERSPIRE Sprache: kein deutscher Eintrag fuer \"{english}\".");
+        }
+
+        private static readonly HashSet<string> Missing = new();
+
+        /// <summary>Alles, was im Lauf ohne Uebersetzung geblieben ist. Fuer Tests und Berichte.</summary>
+        public static IReadOnlyCollection<string> MissingEntries => Missing;
+
+        /// <summary>
+        /// Eine Zahl fuer die Anzeige. Im Deutschen mit Komma, im Englischen mit Punkt.
+        ///
+        /// Bewusst nicht ueber die Kultur des Geraets: die Sprache der Oberflaeche waehlt der
+        /// Spieler im Menue, und ein deutscher Text mit "1.5" darin liest sich falsch, egal
+        /// welche Kultur Android gerade meldet.
+        /// </summary>
+        public static string Number(float value)
+        {
+            var text = value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            return language == Language.German ? text.Replace('.', ',') : text;
         }
 
         /// <summary>Raumart, wie sie im Kopf der Etage steht.</summary>
@@ -94,7 +140,8 @@ namespace Shatterspire
             { "PERFECT!  RELEASE", "PERFEKT!  LOSLASSEN" },
             { "PERFECT!  RELEASE RMB", "PERFEKT!  RECHTE MAUSTASTE LOSLASSEN" },
             { "NO UPGRADES YET", "NOCH KEINE VERBESSERUNGEN" },
-            { "UPGRADES SHOWN ON YOUR ACTIONS", "VERBESSERUNGEN STEHEN AN DEINEN AKTIONEN" },
+            // Kurz gehalten: das Feld ist 258 px breit, der laengere Satz wurde abgeschnitten.
+            { "UPGRADES SHOWN ON YOUR ACTIONS", "AN DEINEN AKTIONEN" },
             { "TEAM LIVES", "TEAM-LEBEN" },
             { "ALLY REVIVING", "VERBÜNDETER BELEBT" },
             { "LV", "STUFE" },
@@ -332,6 +379,66 @@ namespace Shatterspire
             { "AFTERGLOW", "NACHGLUT" },
             { "BULWARK", "BOLLWERK" },
             { "SPLINTER", "SPLITTERUNG" },
+
+            // ── Anomalien der Etage ─────────────────────────────────────
+            { "ANOMALY", "ANOMALIE" },
+            { "CALM FLOOR", "RUHIGE ETAGE" },
+            { "NO ANOMALY", "KEINE ANOMALIE" },
+            { "OVERLOAD", "ÜBERLADUNG" },
+            { "GLASS BREAK", "GLASBRUCH" },
+            { "SWARM", "SCHWARM" },
+            { "BOUNTY", "KOPFGELD" },
+            { "WARDED", "BANNKREIS" },
+            { "ENEMY HEALTH", "GEGNERLEBEN" },
+            { "ENEMY DAMAGE", "GEGNERSCHADEN" },
+            { "ENEMY SPEED", "GEGNERTEMPO" },
+            { "ENEMY COUNT", "GEGNERZAHL" },
+            // ── Wahl am Aufzug ──────────────────────────────────────────
+            { "TEAM VOTE", "ABSTIMMUNG" },
+            { "YOUR PARTY FOLLOWS THE SELECTED ROUTE", "DEINE GRUPPE FOLGT DER GEWÄHLTEN ROUTE" },
+            { "BALANCED RESISTANCE", "AUSGEWOGENER WIDERSTAND" },
+            { "ELITE FIGHT", "ELITEKAMPF" },
+            { "HIGH RISK, MORE SHARDS", "HOHES RISIKO, MEHR SPLITTER" },
+            { "EXTRA HEALING", "ZUSÄTZLICHE HEILUNG" },
+            { "UNKNOWN ENCOUNTER", "UNBEKANNTE BEGEGNUNG" },
+            { "ASCENSION TRIAL", "PRÜFUNG DES AUFSTIEGS" },
+            // ── Aufstiegstor ────────────────────────────────────────────
+            { "SHARDS AT STAKE", "SPLITTER IM SPIEL" },
+            { "CLEARED", "GESCHAFFT" },
+            { "CORE DEFENDERS", "KERN-VERTEIDIGER" },
+            { "REMAINING", "ÜBRIG" },
+            { "EXTRACT", "AUSSTEIGEN" },
+            { "SECURE ALL SHARDS", "ALLE SPLITTER SICHERN" },
+            { "RETURN TO SKYHOLD", "ZURÜCK NACH SKYHOLD" },
+            { "ASCEND", "AUFSTEIGEN" },
+            { "STRONGER ENEMIES", "STÄRKERE GEGNER" },
+            { "+35% TIER REWARDS", "+35 % BELOHNUNG JE STUFE" },
+            // ── Verbesserungs-Wahl ──────────────────────────────────────
+            { "LEVEL UP", "STUFENAUFSTIEG" },
+            { "FLOOR CLEARED", "ETAGE GESCHAFFT" },
+            { "EPIC", "EPISCH" },
+            { "CHOOSE AN UPGRADE", "WÄHLE EINE VERBESSERUNG" },
+            { "COMMON", "GEWÖHNLICH" },
+            { "RARE", "SELTEN" },
+            { "LEGENDARY", "LEGENDÄR" },
+            { "ONLY FOR", "NUR FÜR" },
+            // ── Abrechnung ──────────────────────────────────────────────
+            { "CLIMB ENDED", "AUFSTIEG BEENDET" },
+            { "A PORTION OF YOUR SHARDS SURVIVED", "EIN TEIL DEINER SPLITTER HAT ÜBERLEBT" },
+            { "CLIMB SCORE", "PUNKTE DES AUFSTIEGS" },
+            { "EXTRACTED", "AUSGESTIEGEN" },
+            { "FALLEN", "GEFALLEN" },
+            { "FROM YOUR", "AUS DEINEN" },
+            { "BEST CLIMBS", "BESTEN AUFSTIEGEN" },
+            { "HIGHEST RANK REACHED", "HÖCHSTER RANG ERREICHT" },
+            { "POINTS TO", "PUNKTE BIS" },
+            { "SHIFT ENDS IN", "SHIFT ENDET IN" },
+            { "TOTAL", "GESAMT" },
+            { "BEST", "BESTE" },
+            { "FUSION", "FUSION" },
+            { "INFERNO", "INFERNO" },
+            { "SHATTER", "SPLITTERUNG" },
+            { "CHAIN STORM", "KETTENSTURM" },
 
             // ── Verbesserungen: Beschreibungen ──────────────────────────
             { "Heavy attacks deal 40% more damage.", "Schwere Angriffe machen 40 % mehr Schaden." },

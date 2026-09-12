@@ -8,6 +8,13 @@ using UnityEngine.UI;
 
 namespace Shatterspire
 {
+    /// <summary>
+    /// Welches der Modals gerade offen steht. Zwischen zwei Etagen laufen drei hintereinander -
+    /// Verbesserung, Haendler, Route - und die automatische Vorfuehrung muss wissen, in welchem
+    /// sie steht, statt Knopfnummern zu raten.
+    /// </summary>
+    public enum ModalKind { None, Perk, Shop, Routes, Ascension, RunEnd }
+
     public sealed class PrototypeHUD : MonoBehaviour
     {
         private Font font;
@@ -46,6 +53,9 @@ namespace Shatterspire
         private Text levelText;
         private Text goldText;
         private Text scoreText;
+        private FloorModifierId floorAnomaly;
+        private Image anomalyPanel;
+        private Text anomalyText;
         private Text streakText;
         private ScreenFade screenFade;
         private KillStreak killStreak;
@@ -57,7 +67,8 @@ namespace Shatterspire
         private Sprite[] abilitySprites;
         private GameObject modal;
         private readonly List<Button> modalButtons = new();
-        private Action<RoomKind> routeCallback;
+        private ModalKind openModal;
+        private Action<RoomKind, FloorModifierId> routeCallback;
         private Action postPerkCallback;
         private Vector3 objectiveTarget;
         private string objectiveTargetLabel;
@@ -98,6 +109,7 @@ namespace Shatterspire
             GameEvents.HealthChanged -= RefreshHealth;
             GameEvents.PerkSelected -= OnPerkSelected;
             GameEvents.RoomStarted -= OnRoomStarted;
+            GameEvents.AnomalyChanged -= RefreshAnomaly;
             GameEvents.ObjectiveChanged -= RefreshObjective;
             GameEvents.ObjectiveTargetChanged -= RefreshObjectiveTarget;
             GameEvents.EncounterChanged -= RefreshEncounter;
@@ -114,6 +126,7 @@ namespace Shatterspire
             GameEvents.HealthChanged += RefreshHealth;
             GameEvents.PerkSelected += OnPerkSelected;
             GameEvents.RoomStarted += OnRoomStarted;
+            GameEvents.AnomalyChanged += RefreshAnomaly;
             GameEvents.ObjectiveChanged += RefreshObjective;
             GameEvents.ObjectiveTargetChanged += RefreshObjectiveTarget;
             GameEvents.EncounterChanged += RefreshEncounter;
@@ -162,7 +175,7 @@ namespace Shatterspire
             ApplyRoundedFill(hpChip);
             hpFill = CreateFill(hpBack.transform, new Color(0.95f, 0.16f, 0.2f));
             ApplyRoundedFill(hpFill);
-            hpText = CreateText(hpBack.transform, "100 / 100", 15, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
+            hpText = CreateText(hpBack.transform, string.Empty, 15, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
 
             var objectivePanel = CreateImage(root.transform, "Floor Objective Panel", new Color(0.09f, 0.06f, 0.05f, 0.9f),
                 new Vector2(0, -16), new Vector2(500, 106), new Vector2(0.5f, 1));
@@ -175,10 +188,10 @@ namespace Shatterspire
                 new Color(1f, 0.76f, 0.22f, 0.92f), new Vector2(0, -1), new Vector2(500, 5), new Vector2(0.5f, 1));
             objectiveAccent.raycastTarget = false;
 
-            roomText = CreateText(objectivePanel.transform, "FLOOR 1 / 15", 24, TextAnchor.UpperCenter,
+            roomText = CreateText(objectivePanel.transform, string.Empty, 24, TextAnchor.UpperCenter,
                 new Vector2(0, -7), new Vector2(468, 28), new Vector2(0.5f, 1));
             roomText.fontStyle = FontStyle.Bold;
-            objectiveText = CreateText(objectivePanel.transform, "FIND THE RIFT CELLS", 16, TextAnchor.UpperCenter,
+            objectiveText = CreateText(objectivePanel.transform, string.Empty, 16, TextAnchor.UpperCenter,
                 new Vector2(0, -34), new Vector2(468, 25), new Vector2(0.5f, 1));
             objectiveText.color = new Color(1f, 0.95f, 0.86f);
             navigationText = CreateText(objectivePanel.transform, string.Empty, 17, TextAnchor.UpperCenter,
@@ -189,7 +202,18 @@ namespace Shatterspire
                 new Vector2(0, -82), new Vector2(468, 21), new Vector2(0.5f, 1));
             encounterText.color = new Color(1f, 0.35f, 0.28f);
             encounterText.gameObject.SetActive(false);
-            buildText = CreateText(root.transform, "NO UPGRADES YET", 12, TextAnchor.UpperLeft, new Vector2(112, -91), new Vector2(258, 22), new Vector2(0, 1));
+            // Das Anomalie-Schild sitzt direkt unter dem Etagenkopf und ist nur da, wenn die Etage
+            // eine traegt. Ein Schild, das immer steht, wird nach der dritten Etage nicht mehr
+            // gelesen - und genau diese Information muss im Kampf abrufbar bleiben.
+            anomalyPanel = CreateImage(root.transform, "Floor Anomaly", new Color(0.09f, 0.06f, 0.05f, 0.92f),
+                new Vector2(0, -126), new Vector2(330, 32), new Vector2(0.5f, 1));
+            ApplyRounded(anomalyPanel);
+            anomalyPanel.raycastTarget = false;
+            anomalyText = CreateText(anomalyPanel.transform, string.Empty, 17, TextAnchor.MiddleCenter,
+                Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
+            anomalyText.fontStyle = FontStyle.Bold;
+            anomalyPanel.gameObject.SetActive(false);
+            buildText = CreateText(root.transform, Loc.T("NO UPGRADES YET"), 12, TextAnchor.UpperLeft, new Vector2(112, -91), new Vector2(258, 22), new Vector2(0, 1));
             CreateExperienceBar(root.transform);
             CreateTeamFrames(root.transform);
             // Die Bedienflaechen zuerst: sie liegen damit unter den Aktionsknoepfen, und ein Tipp auf
@@ -271,13 +295,13 @@ namespace Shatterspire
             ApplyRounded(back);
             xpFill = CreateFill(back.transform, new Color(0.62f, 0.28f, 1f));
             ApplyRoundedFill(xpFill);
-            levelText = CreateText(back.transform, "LV 1  ·  0 / 30", 11, TextAnchor.MiddleCenter,
+            levelText = CreateText(back.transform, string.Empty, 11, TextAnchor.MiddleCenter,
                 Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
             levelText.fontStyle = FontStyle.Bold;
 
             // Gold direkt unter dem Erfahrungsbalken: es entsteht im Kampf und wird gleich danach
             // beim Haendler ausgegeben, gehoert also in denselben Blick.
-            goldText = CreateText(back.transform.parent, "0 GOLD", 15, TextAnchor.UpperLeft,
+            goldText = CreateText(back.transform.parent, string.Empty, 15, TextAnchor.UpperLeft,
                 new Vector2(96, -104), new Vector2(240, 22), new Vector2(0, 1));
             goldText.color = new Color(1f, 0.82f, 0.24f);
             goldText.fontStyle = FontStyle.Bold;
@@ -333,8 +357,10 @@ namespace Shatterspire
 
         private void CreateAnnouncement(Transform parent)
         {
+            // Unter dem Anomalie-Schild bei -126 und drei Zeilen hoch: der Etagenkopf nennt
+            // Thema, Etage, Raumart und Anomalie in einem Zug.
             var panel = CreateImage(parent, "Combat Announcement", new Color(0.09f, 0.06f, 0.05f, 0.9f),
-                new Vector2(0, -148), new Vector2(460, 74), new Vector2(0.5f, 1));
+                new Vector2(0, -166), new Vector2(500, 96), new Vector2(0.5f, 1));
             ApplyRounded(panel);
             var outline = panel.gameObject.AddComponent<Outline>();
             outline.effectColor = new Color(1f, 0.76f, 0.22f, 0.92f);
@@ -342,7 +368,7 @@ namespace Shatterspire
             announcementGroup = panel.gameObject.AddComponent<CanvasGroup>();
             announcementGroup.blocksRaycasts = false;
             announcementGroup.interactable = false;
-            announcementText = CreateText(panel.transform, string.Empty, 22, TextAnchor.MiddleCenter,
+            announcementText = CreateText(panel.transform, string.Empty, 20, TextAnchor.MiddleCenter,
                 Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
             announcementText.fontStyle = FontStyle.Bold;
             panel.gameObject.SetActive(false);
@@ -384,7 +410,7 @@ namespace Shatterspire
                 ((RectTransform)fill.transform).offsetMax = new Vector2(-1, -1);
                 teamSupportFill[i] = fill;
             }
-            knockoutText = CreateText(parent, "TEAM LIVES  ◆◆◆", 16, TextAnchor.UpperRight,
+            knockoutText = CreateText(parent, string.Empty, 16, TextAnchor.UpperRight,
                 new Vector2(-20, -24 - team.Length * 74), new Vector2(300, 26), new Vector2(1, 1));
             knockoutText.color = new Color(1f, 0.78f, 0.2f);
         }
@@ -675,6 +701,24 @@ namespace Shatterspire
             }
         }
 
+        /// <summary>Welches Modal gerade offen steht.</summary>
+        public ModalKind OpenModal => modal ? openModal : ModalKind.None;
+
+        /// <summary>Wie viele Knoepfe es hat.</summary>
+        public int OpenModalButtons => modal ? modalButtons.Count : 0;
+
+        /// <summary>
+        /// Drueckt einen Knopf des offenen Modals. Nur fuer die automatische Vorfuehrung: die
+        /// Modals sind der einzige Teil der Oberflaeche, den keine Bildfolge ohne echte Eingabe
+        /// erreicht - und genau dort steht die Wahl, die geprueft werden muss.
+        /// </summary>
+        public bool PressModalForCapture(int index)
+        {
+            if (!modal || index < 0 || index >= modalButtons.Count) return false;
+            InvokeModalButton(index);
+            return true;
+        }
+
         private void InvokeModalButton(int index)
         {
             if (index < 0 || index >= modalButtons.Count) return;
@@ -735,9 +779,7 @@ namespace Shatterspire
             if (!visible) return;
             encounterText.text = boss
                 ? Loc.T("IRON WARDEN  ·  BOSS ENGAGED")
-                : Loc.Language == Language.German
-                    ? $"KERN-VERTEIDIGER  ·  {remaining} ÜBRIG"
-                    : $"CORE DEFENDERS  ·  {remaining} REMAINING";
+                : $"{Loc.T("CORE DEFENDERS")}  ·  {remaining} {Loc.T("REMAINING")}";
             encounterText.color = boss
                 ? new Color(1f, 0.58f, 0.12f)
                 : remaining <= Mathf.Max(2, total / 3)
@@ -760,7 +802,9 @@ namespace Shatterspire
         private void ShowAnnouncement(string message, float seconds)
         {
             if (!announcementGroup || !announcementText) return;
-            announcementText.text = Loc.T(message);
+            // Die Aufrufer setzen ihre Ansage schon uebersetzt zusammen; hier nur noch der
+            // stille Durchlass fuer die, die einen reinen Schluessel uebergeben.
+            announcementText.text = Loc.TQuiet(message);
             announcementGroup.alpha = 1f;
             announcementGroup.gameObject.SetActive(true);
             announcementUntil = Time.unscaledTime + seconds;
@@ -800,9 +844,9 @@ namespace Shatterspire
             if (!heavyStateText) return;
             // Der Erklaertext steht nur, bis der Heavy zum ersten Mal voll war. Danach reicht der Ring.
             heavyStateText.text = perfect ? Loc.T(Application.isMobilePlatform ? "PERFECT!  RELEASE" : "PERFECT!  RELEASE RMB")
-                : charging ? "RELEASE IN GOLD"
-                : ready ? weapon.HeavyName + " READY"
-                : heavyEverReady ? string.Empty : "LIGHT HITS CHARGE HEAVY";
+                : charging ? Loc.T("RELEASE IN GOLD")
+                : ready ? Loc.T(weapon.HeavyName) + " " + Loc.T("READY")
+                : heavyEverReady ? string.Empty : Loc.T("LIGHT HITS CHARGE HEAVY");
             heavyStateText.color = perfect ? new Color(1f, 0.82f, 0.14f) : new Color(1f, 0.95f, 0.86f);
         }
 
@@ -824,8 +868,35 @@ namespace Shatterspire
         {
             var counter = PathCatalog.FloorCounter(runConfig.Mode, index);
             roomText.text = $"{counter}  ·  {Loc.Of(kind)}";
-            ShowAnnouncement($"{FloorCatalog.Name(FloorCatalog.ThemeFor(index))}\n{Loc.T("FLOOR")} {index} · {Loc.Of(kind)}", 1.8f);
+            var anomaly = FloorModifierCatalog.For(floorAnomaly);
+            // Eine Ansage fuer die ganze Etage. Zwei Banner hintereinander haben sich im ersten
+            // Aufnahmelauf gegenseitig ueberdeckt.
+            var line = anomaly.IsCalm
+                ? string.Empty
+                : $"\n{Loc.T("ANOMALY")}: {Loc.T(anomaly.Name)}";
+            ShowAnnouncement($"{Loc.T(FloorCatalog.Name(FloorCatalog.ThemeFor(index)))}"
+                + $"\n{Loc.T("FLOOR")} {index} · {Loc.Of(kind)}{line}", 2.2f);
         }
+        /// <summary>
+        /// Traegt die Anomalie der begonnenen Etage ein. Bei einer ruhigen Etage verschwindet das
+        /// Schild wieder - sonst stuende dort dauerhaft "keine Anomalie", also Platz ohne Inhalt.
+        /// </summary>
+        private void RefreshAnomaly(FloorModifierId id)
+        {
+            floorAnomaly = id;
+            var anomaly = FloorModifierCatalog.For(id);
+            if (!anomalyPanel || !anomalyText) return;
+            anomalyPanel.gameObject.SetActive(!anomaly.IsCalm);
+            if (anomaly.IsCalm) return;
+            // Nur der Name: die Zahlen standen auf dem Knopf, mit dem die Route gewaehlt wurde,
+            // und ein Schild, das im Kampf vier Faktoren aufzaehlt, liest niemand.
+            anomalyText.text = $"{Loc.T("ANOMALY")}:  {Loc.T(anomaly.Name)}";
+            anomalyText.color = anomaly.Accent;
+            var outline = anomalyPanel.GetComponent<Outline>() ?? anomalyPanel.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(anomaly.Accent.r, anomaly.Accent.g, anomaly.Accent.b, 0.9f);
+            outline.effectDistance = new Vector2(2f, -2f);
+        }
+
         private void OnPerkSelected(PerkDefinition _) => RefreshBuild();
 
         /// <summary>Upgrades zeigen sich an der Aktion, die sie veraendern: "+2" am Knopf. Passive stehen unter dem Namen.</summary>
@@ -845,7 +916,10 @@ namespace Shatterspire
             SetBadge(skillButton, counts[(int)ActionSlot.Skill]);
             SetBadge(dashButton, counts[(int)ActionSlot.Dash]);
             SetBadge(ultimateButton, counts[(int)ActionSlot.Ultimate]);
-            var fusion = build.IsInferno ? "  ·  FUSION: INFERNO" : build.IsShatter ? "  ·  FUSION: SHATTER" : build.IsChainStorm ? "  ·  FUSION: CHAIN STORM" : string.Empty;
+            var fusionName = build.IsInferno ? "INFERNO" : build.IsShatter ? "SHATTER"
+                : build.IsChainStorm ? "CHAIN STORM" : null;
+            var fusion = fusionName == null ? string.Empty
+                : $"  ·  {Loc.T("FUSION")}: {Loc.T(fusionName)}";
             buildText.text = passives.Count > 0 ? string.Join(" · ", passives) + fusion
                 : Loc.T(build.Perks.Count > 0 ? "UPGRADES SHOWN ON YOUR ACTIONS" : "NO UPGRADES YET");
         }
@@ -897,6 +971,7 @@ namespace Shatterspire
         {
             if (modal) Destroy(modal);
             modalButtons.Clear();
+            openModal = ModalKind.Shop;
             modal = CreateModal($"{Loc.T("TRADER")}  ·  {wallet.Gold} {Loc.T("GOLD")}",
                 Loc.T("SPEND GOLD OR KEEP IT FOR LATER"));
             var offers = ShopCatalog.All;
@@ -936,6 +1011,7 @@ namespace Shatterspire
                 Sfx.Play2D(Sound.UiClick);
                 Destroy(modal);
                 modal = null;
+                openModal = ModalKind.None;
                 modalButtons.Clear();
                 Time.timeScale = 1f;
                 var next = shopContinue;
@@ -961,15 +1037,19 @@ namespace Shatterspire
         {
             if (modal) return;
             Time.timeScale = 0f;
-            modal = CreateModal(selectingLevelPerk ? "LEVEL UP · CHOOSE AN UPGRADE" : "FLOOR CLEARED · CHOOSE AN UPGRADE",
-                "EVERY UPGRADE CHANGES ONE OF YOUR ACTIONS");
+            openModal = ModalKind.Perk;
+            modal = CreateModal(
+                $"{Loc.T(selectingLevelPerk ? "LEVEL UP" : "FLOOR CLEARED")} · {Loc.T("CHOOSE AN UPGRADE")}",
+                Loc.T("EVERY UPGRADE CHANGES ONE OF YOUR ACTIONS"));
             var hero = runConfig.Hero;
             var choices = PerkCatalog.RollThree(hero, new HashSet<PerkId>(build.Perks), perkRandom);
             for (var i = 0; i < choices.Count; i++)
             {
                 var perk = choices[i];
-                var rarity = perk.Rarity.ToString().ToUpperInvariant() +
-                             (perk.Heroes.Length == 1 ? "  ·  " + HeroCatalog.Name(hero) + " ONLY" : string.Empty);
+                var rarity = Loc.T(perk.Rarity.ToString().ToUpperInvariant()) +
+                             (perk.Heroes.Length == 1
+                                 ? $"  ·  {Loc.T("ONLY FOR")} {HeroCatalog.Name(hero)}"
+                                 : string.Empty);
                 var button = CreateButton(modal.transform,
                     $"[{i + 1}]  {PerkCatalog.SlotLabel(perk.Slot, hero)}\n{Loc.T(perk.Name)}\n\n{Loc.T(perk.Description)}\n\n{rarity}",
                     new Vector2(-390f + i * 390f, -20f), new Vector2(340f, 420f), perk.Color);
@@ -987,6 +1067,7 @@ namespace Shatterspire
             build.Apply(perk);
             Destroy(modal);
             modal = null;
+            openModal = ModalKind.None;
             modalButtons.Clear();
             Time.timeScale = 1f;
             if (selectingLevelPerk) levelSystem?.ConsumeChoice();
@@ -1002,35 +1083,66 @@ namespace Shatterspire
             callback?.Invoke();
         }
 
-        public void ShowRoutes(int nextRoom, Action<RoomKind> callback)
+        /// <summary>
+        /// Die Wahl am Aufzug. Jede Route traegt ihre eigene Anomalie, und die steht vor der Wahl
+        /// offen auf dem Knopf: erst dadurch ist die Entscheidung eine Entscheidung und nicht das
+        /// Antippen einer Beschriftung.
+        /// </summary>
+        public void ShowRoutes(int nextRoom, int runSeed, Action<RoomKind, FloorModifierId> callback)
         {
             if (modal) return;
             routeCallback = callback;
             Time.timeScale = 0f;
-            modal = CreateModal($"TEAM VOTE · FLOOR {nextRoom}", "YOUR OFFLINE PARTY FOLLOWS THE SELECTED ROUTE");
-            var options = nextRoom % 5 == 0 ? new[] { RoomKind.Boss } : new[] { RoomKind.Combat, RoomKind.Elite, UnityEngine.Random.value < 0.5f ? RoomKind.Treasure : RoomKind.Mystery };
+            openModal = ModalKind.Routes;
+            modal = CreateModal($"{Loc.T("TEAM VOTE")} · {Loc.T("FLOOR")} {nextRoom}",
+                Loc.T("YOUR PARTY FOLLOWS THE SELECTED ROUTE"));
+            var options = PathCatalog.RoutesFor(runSeed, nextRoom);
             for (var i = 0; i < options.Length; i++)
             {
                 var kind = options[i];
-                var color = kind switch { RoomKind.Elite => new Color(0.86f, 0.2f, 0.55f), RoomKind.Boss => new Color(1f, 0.45f, 0.08f), RoomKind.Treasure => new Color(1f, 0.78f, 0.16f), _ => new Color(0.15f, 0.7f, 0.82f) };
-                var text = kind switch { RoomKind.Elite => "ELITE FIGHT\nHigh risk · bonus shards", RoomKind.Treasure => "TREASURE\nExtra healing · bonus shards", RoomKind.Mystery => "MYSTERY\nUnknown encounter", RoomKind.Boss => "SPIRE WARDEN\nAscension trial", _ => "COMBAT\nBalanced resistance" };
-                var button = CreateButton(modal.transform, $"[{i + 1}]  {text}", new Vector2((i - (options.Length - 1) * 0.5f) * 390f, -20f), new Vector2(340f, 360f), color);
+                var color = kind switch
+                {
+                    RoomKind.Elite => new Color(0.86f, 0.2f, 0.55f),
+                    RoomKind.Boss => new Color(1f, 0.45f, 0.08f),
+                    RoomKind.Treasure => new Color(1f, 0.78f, 0.16f),
+                    _ => new Color(0.15f, 0.7f, 0.82f)
+                };
+                var heading = kind switch
+                {
+                    RoomKind.Elite => Loc.T("ELITE FIGHT"),
+                    RoomKind.Boss => Loc.T("SPIRE WARDEN"),
+                    _ => Loc.Of(kind)
+                };
+                var blurb = kind switch
+                {
+                    RoomKind.Elite => Loc.T("HIGH RISK, MORE SHARDS"),
+                    RoomKind.Treasure => Loc.T("EXTRA HEALING"),
+                    RoomKind.Mystery => Loc.T("UNKNOWN ENCOUNTER"),
+                    RoomKind.Boss => Loc.T("ASCENSION TRIAL"),
+                    _ => Loc.T("BALANCED RESISTANCE")
+                };
+                var anomalyId = FloorModifierCatalog.Offer(runSeed, nextRoom, kind);
+                var anomaly = FloorModifierCatalog.For(anomalyId);
+                var button = CreateButton(modal.transform,
+                    $"[{i + 1}]  {heading}\n{blurb}\n\n{Loc.T("ANOMALY")}\n{Loc.T(anomaly.Name)}\n{FloorModifierCatalog.Effects(anomaly)}",
+                    new Vector2((i - (options.Length - 1) * 0.5f) * 390f, -20f), new Vector2(340f, 360f), color);
                 button.onClick.AddListener(() =>
                 {
                     Sfx.Play2D(Sound.UiConfirm);
-                    SelectRoute(kind);
+                    SelectRoute(kind, anomalyId);
                 });
                 modalButtons.Add(button);
             }
         }
 
-        private void SelectRoute(RoomKind kind)
+        private void SelectRoute(RoomKind kind, FloorModifierId anomaly)
         {
             Destroy(modal);
             modal = null;
+            openModal = ModalKind.None;
             modalButtons.Clear();
             Time.timeScale = 1f;
-            routeCallback?.Invoke(kind);
+            routeCallback?.Invoke(kind, anomaly);
         }
 
         public void ShowAscensionChoice(int floor, int carriedShards, bool canAscend, Action extract, Action ascend)
@@ -1039,9 +1151,12 @@ namespace Shatterspire
             extractCallback = extract;
             ascendCallback = ascend;
             Time.timeScale = 0f;
-            modal = CreateModal("THE ASCENSION GATE", $"FLOOR {floor} CLEARED  ·  {carriedShards} SHARDS AT STAKE");
+            openModal = ModalKind.Ascension;
+            modal = CreateModal(Loc.T("THE ASCENSION GATE"),
+                $"{Loc.T("FLOOR")} {floor} {Loc.T("CLEARED")}  ·  {carriedShards} {Loc.T("SHARDS AT STAKE")}");
             var extractButton = CreateButton(modal.transform,
-                "[1]  EXTRACT\n\nSECURE ALL SHARDS\nRETURN TO SKYHOLD", new Vector2(-260, -30), new Vector2(420, 390), new Color(0.12f, 0.9f, 0.64f));
+                $"[1]  {Loc.T("EXTRACT")}\n\n{Loc.T("SECURE ALL SHARDS")}\n{Loc.T("RETURN TO SKYHOLD")}",
+                new Vector2(-260, -30), new Vector2(420, 390), new Color(0.12f, 0.9f, 0.64f));
             extractButton.onClick.AddListener(() =>
             {
                 Sfx.Play2D(Sound.UiClick);
@@ -1051,7 +1166,8 @@ namespace Shatterspire
             if (canAscend)
             {
                 var ascendButton = CreateButton(modal.transform,
-                    "[2]  ASCEND\n\nSTRONGER ENEMIES\n+35% TIER REWARDS", new Vector2(260, -30), new Vector2(420, 390), new Color(0.72f, 0.25f, 1f));
+                    $"[2]  {Loc.T("ASCEND")}\n\n{Loc.T("STRONGER ENEMIES")}\n{Loc.T("+35% TIER REWARDS")}",
+                    new Vector2(260, -30), new Vector2(420, 390), new Color(0.72f, 0.25f, 1f));
                 ascendButton.onClick.AddListener(() =>
                 {
                     Sfx.Play2D(Sound.UiConfirm);
@@ -1077,6 +1193,7 @@ namespace Shatterspire
         {
             if (modal) Destroy(modal);
             modal = null;
+            openModal = ModalKind.None;
             modalButtons.Clear();
             Time.timeScale = 1f;
         }
@@ -1091,8 +1208,9 @@ namespace Shatterspire
                 Camera.main.targetDisplay = 0;
             }
             Time.timeScale = 0f;
-            modal = CreateModal(victory ? "TOWER PATH CLEARED" : "CLIMB ENDED",
-                victory ? "THE TEAM RETURNS WITH SECURED SHARDS" : "A PORTION OF YOUR SHARDS SURVIVED");
+            openModal = ModalKind.RunEnd;
+            modal = CreateModal(Loc.T(victory ? "TOWER PATH CLEARED" : "CLIMB ENDED"),
+                Loc.T(victory ? "THE TEAM RETURNS WITH SECURED SHARDS" : "A PORTION OF YOUR SHARDS SURVIVED"));
 
             // Links die Punkte dieses Aufstiegs, rechts was er fuer den Rang
             // bedeutet. Die Aufschluesselung steht bewusst da: ein Rang, dessen
@@ -1100,7 +1218,7 @@ namespace Shatterspire
             var scorePanel = CreateImage(modal.transform, "Climb Score", new Color(0.035f, 0.075f, 0.12f, 0.98f),
                 new Vector2(-345, 25), new Vector2(660, 300), new Vector2(0.5f, 0.5f));
             ApplyRounded(scorePanel);
-            CreateText(scorePanel.transform, "CLIMB SCORE", 22, TextAnchor.UpperCenter,
+            CreateText(scorePanel.transform, Loc.T("CLIMB SCORE"), 22, TextAnchor.UpperCenter,
                 new Vector2(0, -16), new Vector2(600, 30), new Vector2(0.5f, 1));
             CreateText(scorePanel.transform, $"{score:N0}", 58, TextAnchor.UpperCenter,
                 new Vector2(0, -46), new Vector2(600, 70), new Vector2(0.5f, 1));
@@ -1114,7 +1232,7 @@ namespace Shatterspire
                 labels.AppendLine(entry.Label);
                 values.AppendLine($"{entry.Points:N0}");
             }
-            labels.AppendLine(result.Extracted ? "EXTRACTED" : "FALLEN");
+            labels.AppendLine(Loc.T(result.Extracted ? "EXTRACTED" : "FALLEN"));
             values.AppendLine(result.Extracted ? "x1.15" : "x0.70");
             CreateText(scorePanel.transform, labels.ToString(), 24, TextAnchor.UpperLeft,
                 new Vector2(30, -122), new Vector2(320, 150), new Vector2(0f, 1f));
@@ -1125,7 +1243,7 @@ namespace Shatterspire
                 new Vector2(345, 25), new Vector2(660, 300), new Vector2(0.5f, 0.5f));
             ApplyRounded(rankPanel);
             var tier = RankTable.TierFor(rankPoints);
-            CreateText(rankPanel.transform, $"RANK · SHIFT {save.shiftIndex}", 22, TextAnchor.UpperCenter,
+            CreateText(rankPanel.transform, $"{Loc.T("RANK")} · {Loc.T("SHIFT")} {save.shiftIndex}", 22, TextAnchor.UpperCenter,
                 new Vector2(0, -16), new Vector2(600, 30), new Vector2(0.5f, 1));
             var rankLabel = CreateText(rankPanel.transform, RankTable.Name(tier), 52, TextAnchor.UpperCenter,
                 new Vector2(0, -46), new Vector2(600, 66), new Vector2(0.5f, 1));
@@ -1140,22 +1258,23 @@ namespace Shatterspire
 
             var toNext = RankTable.PointsToNext(rankPoints);
             var next = RankTable.IsHighest(tier)
-                ? "HIGHEST RANK REACHED"
-                : $"{toNext:N0} POINTS TO {RankTable.Name((RankTier)((int)tier + 1))}";
+                ? Loc.T("HIGHEST RANK REACHED")
+                : $"{toNext:N0} {Loc.T("POINTS TO")} {RankTable.Name((RankTier)((int)tier + 1))}";
             CreateText(rankPanel.transform,
-                $"RANK POINTS  {rankPoints:N0}\nFROM YOUR {RankTable.ClimbCount} BEST CLIMBS\n{next}\n\nSHIFT ENDS IN  {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}",
+                $"{Loc.T("RANK POINTS")}  {rankPoints:N0}\n{Loc.T("FROM YOUR")} {RankTable.ClimbCount} {Loc.T("BEST CLIMBS")}\n{next}\n\n{Loc.T("SHIFT ENDS IN")}  {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}",
                 24, TextAnchor.UpperCenter, new Vector2(0, -160), new Vector2(600, 130), new Vector2(0.5f, 1));
 
             var walletPanel = CreateImage(modal.transform, "Wallet", new Color(0.03f, 0.06f, 0.1f, 0.96f),
                 new Vector2(0, -140), new Vector2(1010, 62), new Vector2(0.5f, 0.5f));
             ApplyRounded(walletPanel);
             CreateText(walletPanel.transform,
-                $"SHARDS  +{earned}  ·  TOTAL {save.shards}      TOKENS  {save.tokens}      FLOOR  {Mathf.Max(1, roomsCleared)}  ·  BEST {save.bestFloor}",
+                $"{Loc.T("SHARDS")}  +{earned}  ·  {Loc.T("TOTAL")} {save.shards}      {Loc.T("TOKENS")}  {save.tokens}"
+                + $"      {Loc.T("FLOOR")}  {Mathf.Max(1, roomsCleared)}  ·  {Loc.T("BEST")} {save.bestFloor}",
                 26, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
-            var restart = CreateButton(modal.transform, "CLIMB AGAIN", new Vector2(225, -225), new Vector2(360, 96), new Color(0.1f, 0.86f, 0.72f));
+            var restart = CreateButton(modal.transform, Loc.T("CLIMB AGAIN"), new Vector2(225, -225), new Vector2(360, 96), new Color(0.1f, 0.86f, 0.72f));
             restart.onClick.AddListener(RestartRun);
             modalButtons.Add(restart);
-            var home = CreateButton(modal.transform, "MAIN MENU", new Vector2(-225, -225), new Vector2(360, 96), new Color(0.46f, 0.38f, 0.7f));
+            var home = CreateButton(modal.transform, Loc.T("MAIN MENU"), new Vector2(-225, -225), new Vector2(360, 96), new Color(0.46f, 0.38f, 0.7f));
             home.onClick.AddListener(RestartScene);
             modalButtons.Add(home);
         }
@@ -1262,8 +1381,9 @@ namespace Shatterspire
             if (anchorMin != anchorMax) { rect.offsetMin = Vector2.zero; rect.offsetMax = Vector2.zero; }
             var text = go.GetComponent<Text>();
             text.font = font;
-            // Ein Durchlass fuer alle beim Aufbau gesetzten Texte.
-            text.text = Loc.T(value);
+            // Ein Durchlass fuer alle beim Aufbau gesetzten Texte. Ohne Meldung, weil hier auch
+            // fertig zusammengesetzte Texte ankommen - siehe Loc.TQuiet.
+            text.text = Loc.TQuiet(value);
             text.fontSize = size;
             text.alignment = alignment;
             text.color = Color.white;

@@ -82,11 +82,11 @@ namespace Shatterspire
         /// <summary>Aufschluesselung fuer den Endbildschirm, in Anzeigereihenfolge.</summary>
         public static (string Label, int Points)[] Breakdown(in ClimbResult result) => new[]
         {
-            ($"FLOORS  {result.FloorsCleared}", result.FloorsCleared * PerFloor),
-            ($"BOSSES  {result.BossesDefeated}", result.BossesDefeated * PerBoss),
-            ($"ENEMIES  {result.EnemiesDefeated}", result.EnemiesDefeated * PerEnemy),
-            ($"SHARDS  {result.ShardsSecured}", result.ShardsSecured * PerShard),
-            ($"STREAK  {result.BestStreak}", result.StreakBonus)
+            ($"{Loc.T("FLOORS")}  {result.FloorsCleared}", result.FloorsCleared * PerFloor),
+            ($"{Loc.T("BOSSES")}  {result.BossesDefeated}", result.BossesDefeated * PerBoss),
+            ($"{Loc.T("ENEMIES")}  {result.EnemiesDefeated}", result.EnemiesDefeated * PerEnemy),
+            ($"{Loc.T("SHARDS")}  {result.ShardsSecured}", result.ShardsSecured * PerShard),
+            ($"{Loc.T("STREAK")}  {result.BestStreak}", result.StreakBonus)
         };
     }
 }

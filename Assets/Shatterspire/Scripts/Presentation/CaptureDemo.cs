@@ -26,6 +26,23 @@ namespace Shatterspire
         public static bool Requested => Array.IndexOf(Environment.GetCommandLineArgs(), Flag) >= 0;
 
         /// <summary>
+        /// Fester Lauf-Seed aus -shatterspire-seed. Ohne ihn waere jede Bildfolge eine andere Etage
+        /// mit anderen Anomalien, und zwei Aufnahmen liessen sich nicht vergleichen.
+        /// Gibt 0 zurueck, wenn keiner angegeben ist.
+        /// </summary>
+        public static int FixedSeed
+        {
+            get
+            {
+                var args = Environment.GetCommandLineArgs();
+                var index = Array.IndexOf(args, "-shatterspire-seed");
+                return index >= 0 && index + 1 < args.Length && int.TryParse(args[index + 1], out var seed)
+                    ? seed
+                    : 0;
+            }
+        }
+
+        /// <summary>
         /// Welcher Held vorgefuehrt wird. Mit -shatterspire-hero Bomber laeuft die Vorfuehrung als
         /// KORR, sonst als Brax. So lassen sich beide Handschriften pruefen, ohne zwei Builds.
         /// </summary>
@@ -239,6 +256,57 @@ namespace Shatterspire
             {
                 while (Time.unscaledTime - start < i * 0.22f) yield return null;
                 yield return Shot($"l{i:00}");
+            }
+            yield return ShowRouteChoice();
+        }
+
+        /// <summary>
+        /// Die Kette zwischen zwei Etagen: Verbesserung, Haendler, Wahl der Route - und dann die
+        /// neue Etage mit ihrer Anomalie im HUD.
+        ///
+        /// Ohne diese Folge gibt es von der Wahl am Aufzug kein Bild: alle drei Modals halten die
+        /// Zeit an und brauchen eine Eingabe, die in der Stapelverarbeitung niemand gibt. Genau
+        /// dort steht aber der Text, der zweimal englisch geblieben ist.
+        /// </summary>
+        private IEnumerator ShowRouteChoice()
+        {
+            var hud = FindFirstObjectByType<PrototypeHUD>();
+            if (!hud) yield break;
+
+            // Auf das erste Modal warten. Die Blende braucht ihre halbe Sekunde.
+            var waited = 0f;
+            while (hud.OpenModal == ModalKind.None && waited < 6f)
+            {
+                waited += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            var step = 0;
+            // Hoechstens acht Schritte: mehrere Stufenaufstiege koennen mehrere Verbesserungen
+            // hintereinander zeigen, endlos darf es aber nicht werden.
+            for (var guard = 0; guard < 8 && hud.OpenModal != ModalKind.None; guard++)
+            {
+                var kind = hud.OpenModal;
+                yield return new WaitForSecondsRealtime(0.35f);
+                yield return Shot($"r{step++:00}");
+                if (kind == ModalKind.Routes)
+                {
+                    Debug.Log($"SHATTERSPIRE Routenwahl aufgenommen: {hud.OpenModalButtons} Knopf/Knoepfe.");
+                    // Die erste Route: Kampf. Damit ist auf dem naechsten Bild ihre Anomalie zu sehen.
+                    hud.PressModalForCapture(0);
+                    break;
+                }
+                // Beim Haendler ist der letzte Knopf "weiter", bei der Verbesserung der erste.
+                hud.PressModalForCapture(kind == ModalKind.Shop ? hud.OpenModalButtons - 1 : 0);
+                yield return new WaitForSecondsRealtime(0.25f);
+            }
+
+            // Die neue Etage steht: Blende auf, Anomalie-Schild im Kopf.
+            yield return new WaitForSecondsRealtime(0.9f);
+            for (var i = 0; i < 3; i++)
+            {
+                yield return Shot($"r{step++:00}");
+                yield return new WaitForSecondsRealtime(0.4f);
             }
         }
 

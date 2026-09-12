@@ -22,6 +22,12 @@ namespace Shatterspire
         private Transform player;
         private FloorNavigation navigation;
         private int activeFloor = 1;
+        /// <summary>
+        /// Anomalie der laufenden Etage. Liegt am Spawner und nicht in einer statischen Ablage:
+        /// im Co-op laeuft jede Instanz ihre eigene Etage, und zwischen zwei Etagen muss der Wert
+        /// sauber wechseln.
+        /// </summary>
+        private FloorModifier modifier = FloorModifierCatalog.For(FloorModifierId.None);
         private bool spawningEncounter;
         private int encounterTotal;
         private int encounterDefeated;
@@ -41,10 +47,14 @@ namespace Shatterspire
         public void Configure(Transform target) => player = target;
 
         public void BeginFloor(FloorNavigation floorNavigation, int floor)
+            => BeginFloor(floorNavigation, floor, FloorModifierId.None);
+
+        public void BeginFloor(FloorNavigation floorNavigation, int floor, FloorModifierId anomaly)
         {
             Clear();
             navigation = floorNavigation;
             activeFloor = Mathf.Max(1, floor);
+            modifier = FloorModifierCatalog.For(anomaly);
         }
 
         public void SpawnCamps(FloorLayout layout, RoomKind kind)
@@ -52,14 +62,17 @@ namespace Shatterspire
             foreach (var room in layout.Rooms)
             {
                 if (room.CampSize <= 0) continue;
-                for (var i = 0; i < room.CampSize; i++)
+                // Aufgerundet: bei Faktor 1,85 soll aus einem Zweierlager ein Viererlager werden,
+                // nicht ein Dreier. Der Schwarm muss sich als Schwarm anfuehlen.
+                var campSize = Mathf.Max(1, Mathf.CeilToInt(room.CampSize * modifier.EnemyCount));
+                for (var i = 0; i < campSize; i++)
                 {
-                    var angle = i * (360f / room.CampSize) + room.Index * 23f;
+                    var angle = i * (360f / campSize) + room.Index * 23f;
                     var radius = 2.2f + (i % 2) * 1.3f;
                     var position = room.CampCenter + Quaternion.Euler(0f, angle, 0f) * Vector3.forward * radius;
                     var enemyKind = kind == RoomKind.Elite && i == 0 && room.Role != RoomRole.Lift
                         ? EnemyKind.Elite
-                        : i == room.CampSize - 1 && room.CampSize >= 4 ? EnemyKind.Brute
+                        : i == campSize - 1 && campSize >= 4 ? EnemyKind.Brute
                         : ResolveKind(activeFloor, kind, room.Index * 5 + i);
                     // Jeder bleibt an seinem Platz im Lager, statt zur Mitte zu schlurfen:
                     // schlafende Skelette liegen dort, wo sie liegen.
@@ -70,7 +83,8 @@ namespace Shatterspire
                     agent.Engaged += OnCampEngaged;
                 }
             }
-            Debug.Log($"SHATTERSPIRE Lager: {camps.Count} Gegner auf Etage {activeFloor}.");
+            Debug.Log($"SHATTERSPIRE Lager: {camps.Count} Gegner auf Etage {activeFloor}, "
+                      + $"Anomalie {modifier.Id} (Zahl x{modifier.EnemyCount:0.##}).");
         }
 
         public void SpawnBoss(Vector3 position, int floorIndex)
@@ -118,6 +132,7 @@ namespace Shatterspire
             var count = kind == RoomKind.Elite
                 ? 7 + Mathf.Min(5, floorIndex / 2)
                 : 5 + Mathf.Min(5, floorIndex / 2);
+            count = Mathf.Max(1, Mathf.RoundToInt(count * modifier.EnemyCount));
             encounterTotal = count;
             PublishEncounter();
             var waveCount = count >= 5 ? 2 : 1;
@@ -172,7 +187,7 @@ namespace Shatterspire
 
         private EnemyAgent Spawn(EnemyKind kind, Vector3 position, Vector3 home, bool idle)
         {
-            var enemy = EnemyFactory.Create(kind, Walkable(position), player, activeFloor);
+            var enemy = EnemyFactory.Create(kind, Walkable(position), player, activeFloor, modifier);
             enemy.SetBehaviour(navigation, home, idle);
             enemy.Defeated += OnDefeated;
             return enemy;
@@ -201,10 +216,10 @@ namespace Shatterspire
             if (player) HealthOrb.TryDrop(enemy.Kind, enemy.transform.position, player);
             if (player && player.TryGetComponent<RunWallet>(out var wallet))
             {
-                var reward = RunWallet.RewardFor(enemy.Kind, activeFloor);
+                var reward = RunWallet.RewardFor(enemy.Kind, activeFloor) * modifier.Gold;
                 if (player.TryGetComponent<PlayerBuild>(out var build))
-                    reward = Mathf.RoundToInt(reward * build.GoldMultiplier);
-                wallet.Earn(reward);
+                    reward *= build.GoldMultiplier;
+                wallet.Earn(Mathf.Max(1, Mathf.RoundToInt(reward)));
             }
             camps.Remove(enemy);
             campOf.Remove(enemy);

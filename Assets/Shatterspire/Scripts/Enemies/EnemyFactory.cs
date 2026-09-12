@@ -5,6 +5,10 @@ namespace Shatterspire
     public static class EnemyFactory
     {
         public static EnemyAgent Create(EnemyKind kind, Vector3 position, Transform player, int floor)
+            => Create(kind, position, player, floor, FloorModifierCatalog.For(FloorModifierId.None));
+
+        public static EnemyAgent Create(EnemyKind kind, Vector3 position, Transform player, int floor,
+            in FloorModifier modifier)
         {
             var root = new GameObject(kind.ToString());
             root.transform.position = position;
@@ -22,7 +26,7 @@ namespace Shatterspire
             StylizedArt.BuildEnemy(root.transform, kind);
 
             var agent = root.AddComponent<EnemyAgent>();
-            agent.Configure(kind, player, floor);
+            agent.Configure(kind, player, floor, modifier);
             StylizedArt.AddHealthBar(root, kind);
             return agent;
         }
