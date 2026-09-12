@@ -66,7 +66,13 @@ namespace Shatterspire
             new(EnemyKind.Elite,      460f,  2.25f, 2.1f,  22f,  0.18f, 0.045f, 1.65f, 0.78f, 2.05f, 2.2f,  0.7f),
             // Iron Warden: Vorwarnzeit und Abklingzeit sind hier die Phase-1-Werte.
             // Die Phasen-Verkürzung (0,72 / 0,58 bzw. 1,15) bleibt Verhalten im Code.
-            new(EnemyKind.IronWarden, 1900f, 1.75f, 2.5f,  24f,  0.08f, 0.025f, 1.65f, 0.86f, 1.8f,  3.2f,  1.1f)
+            new(EnemyKind.IronWarden, 1900f, 1.75f, 2.5f,  24f,  0.08f, 0.025f, 1.65f, 0.86f, 1.8f,  3.2f,  1.1f),
+            // Schildtraeger: haelt von vorn fast alles aus, ist aber langsam. Das Leben ist bewusst
+            // niedriger als beim Brute - die Haerte kommt aus der Deckung, nicht aus dem Balken.
+            new(EnemyKind.Shieldbearer, 130f, 1.75f, 1.9f,  16f,  0.14f, 0.05f,  1.5f,  0.62f, 1.9f,  2.0f,  0.62f),
+            // Armbruster: wenig Leben, dafuer weite Reichweite und ein Schuss, der wehtut, wenn man
+            // in der Linie stehen bleibt.
+            new(EnemyKind.Marksman,     46f, 2.35f, 12f,    26f,  0.6f,  0.1f,   1.05f, 0.9f,  2.5f,  1.35f, 0.42f)
         };
 
         public static IReadOnlyList<EnemyStats> All => Table;

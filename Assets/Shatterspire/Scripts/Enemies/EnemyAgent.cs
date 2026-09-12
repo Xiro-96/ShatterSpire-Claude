@@ -36,6 +36,16 @@ namespace Shatterspire
         private float hitStaggerUntil;
         private float strafeDirection;
         private Vector3 knockbackVelocity;
+        // Schildtraeger: Deckung nach vorn. Wer von der Seite oder von hinten trifft, trifft voll;
+        // wer von vorn hart genug zuschlaegt, bricht die Deckung fuer ein paar Sekunden auf.
+        private const float GuardArcDegrees = 110f;
+        private const float GuardedDamageFraction = 0.18f;
+        private const float FlankedDamageBonus = 1.3f;
+        private const float GuardBreakSeconds = 2.6f;
+        private float guardBreakDamage;
+        private float guardBrokenUntil;
+        private float regainGuardAt;
+        private bool guarding;
         public event Action<EnemyAgent> Defeated;
         /// <summary>Wird aufmerksam und greift an. Der Spawner alarmiert darueber das restliche Lager.</summary>
         public event Action<EnemyAgent> Engaged;
@@ -81,6 +91,13 @@ namespace Shatterspire
             speed *= 1f + Mathf.Min(EnemyBalance.MaximumSpeedBonus, depth * EnemyBalance.SpeedPerFloor);
             health.Died += Die;
             health.Damaged += OnDamaged;
+            if (kind == EnemyKind.Shieldbearer)
+            {
+                // Ein aufgeladener Heavy liegt weit ueber diesem Wert, ein Light-Treffer weit darunter.
+                // So bricht die Deckung genau dann, wenn jemand richtig ausgeholt hat.
+                guardBreakDamage = health.Maximum * 0.42f;
+                health.DamageFilter = FilterGuardedDamage;
+            }
             strafeDirection = GetInstanceID() % 2 == 0 ? 1f : -1f;
             spawnedAt = Time.time;
             attackReadyAt = Time.time + UnityEngine.Random.Range(0.35f, 0.85f);
@@ -98,6 +115,7 @@ namespace Shatterspire
             aggroRadius = kind switch
             {
                 EnemyKind.Shooter => 10f,
+                EnemyKind.Marksman => 13f,
                 EnemyKind.IronWarden => 12f,
                 _ => 8f
             };
@@ -140,12 +158,14 @@ namespace Shatterspire
                 Busy(motion.PlayPresence(wake, 1.6f, 1.1f));
             }
             dormant = false;
+            RaiseGuard();
             if (alertCamp) Engaged?.Invoke(this);
         }
 
         private void OnDestroy()
         {
             if (!health) return;
+            health.DamageFilter = null;
             health.Died -= Die;
             health.Damaged -= OnDamaged;
         }
@@ -154,6 +174,7 @@ namespace Shatterspire
         {
             if (state == State.Dead || !target) return;
             ApplyKnockback();
+            if (kind == EnemyKind.Shieldbearer) UpdateGuardPose();
             if (Time.time < hitStaggerUntil || Time.time < busyUntil) return;
             var targetHealth = target.GetComponent<Health>();
             if (!targetHealth || !targetHealth.IsAlive) return;
@@ -174,7 +195,7 @@ namespace Shatterspire
             {
                 var direction = SteerTowards(target.position, offset);
                 var movement = Vector3.zero;
-                if (kind == EnemyKind.Shooter)
+                if (kind is EnemyKind.Shooter or EnemyKind.Marksman)
                 {
                     if (distance > attackRange * 0.86f) movement = direction;
                     else if (distance < attackRange * 0.52f) movement = -direction;
@@ -251,6 +272,8 @@ namespace Shatterspire
             if (state == State.Idle) Engage();
             var force = damage.Force;
             force.y = 0f;
+            // In Deckung steht der Schildtraeger fest; erst ein gebrochener Schild laesst ihn wanken.
+            if (guarding) force *= 0.2f;
             knockbackVelocity += force * stats.KnockbackResistance;
             hitStaggerUntil = Mathf.Max(hitStaggerUntil, Time.time + stats.StaggerSeconds);
         }
@@ -315,6 +338,12 @@ namespace Shatterspire
                     break;
                 case EnemyKind.Elite:
                     yield return EliteAttack();
+                    break;
+                case EnemyKind.Shieldbearer:
+                    yield return ShieldBash();
+                    break;
+                case EnemyKind.Marksman:
+                    yield return MarksmanShot();
                     break;
             }
         }
@@ -410,6 +439,148 @@ namespace Shatterspire
             FinishAttack(stats.AttackCooldown);
         }
 
+        /// <summary>
+        /// Schildstoss: kurze Vorwarnung, dann ein Schub nach vorn. Waehrend des Stosses ist die Deckung
+        /// offen - genau das ist das Zeitfenster, in dem sich ein Gegenangriff von vorn lohnt.
+        /// </summary>
+        private IEnumerator ShieldBash()
+        {
+            state = State.Telegraph;
+            var direction = FlatDirectionToTarget();
+            var telegraph = PrototypeVfx.SpawnTelegraphLine(transform.position, direction, 3.2f, 1.1f);
+            yield return new WaitForSeconds(stats.TelegraphSeconds);
+            if (!BeginAttack(telegraph)) yield break;
+
+            guarding = false;
+            motion?.PlayMotion(AttackMotion.Stab, 1.1f);
+            var elapsed = 0f;
+            while (elapsed < 0.16f && state != State.Dead)
+            {
+                transform.position += direction * (7.5f * Time.deltaTime);
+                ClampToArena();
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            CombatUtility.Explode(transform.position + direction * 0.9f, 1.45f,
+                attackDamage, TeamId.Player, DamageType.Physical, gameObject);
+            PrototypeVfx.SpawnShockwave(transform.position + direction * 0.9f, 1.7f, GuardColor);
+            FinishAttack(stats.AttackCooldown);
+        }
+
+        /// <summary>
+        /// Armbrustschuss: die Linie folgt dem Ziel, waehrend gespannt wird, und rastet auf dem letzten
+        /// Drittel ein. Wer bis dahin nicht aus der Linie ist, wird getroffen - Ausweichen zaehlt, nicht Deckung.
+        /// </summary>
+        private IEnumerator MarksmanShot()
+        {
+            state = State.Telegraph;
+            var direction = FlatDirectionToTarget();
+            var telegraph = PrototypeVfx.SpawnTelegraphLine(transform.position, direction, attackRange + 2f, 0.55f);
+            motion?.PlayMotion(AttackMotion.Draw, 0.8f);
+
+            var trackingSeconds = stats.TelegraphSeconds * 0.62f;
+            var elapsed = 0f;
+            while (elapsed < stats.TelegraphSeconds && state != State.Dead)
+            {
+                if (elapsed < trackingSeconds)
+                {
+                    direction = FlatDirectionToTarget();
+                    transform.rotation = Quaternion.LookRotation(direction);
+                    AimTelegraph(telegraph, direction, attackRange + 2f);
+                }
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            if (!BeginAttack(telegraph)) yield break;
+
+            motion?.PlayMotion(AttackMotion.Release, 1.2f);
+            PrototypeVfx.SpawnMuzzle(transform.position + Vector3.up * 0.9f + direction * 0.6f, direction);
+            Projectile.Spawn(transform.position + Vector3.up * 0.9f + direction, direction, new Projectile.Payload
+            {
+                Owner = gameObject,
+                TargetTeam = TeamId.Player,
+                Damage = attackDamage,
+                Type = DamageType.Physical,
+                VisualScale = 0.8f,
+                RemainingPierces = 1
+            }, 26f);
+            FinishAttack(stats.AttackCooldown);
+        }
+
+        /// <summary>Legt die Telegraph-Linie neu aus, ohne sie zu ersetzen - sonst flackert sie beim Nachfuehren.</summary>
+        private void AimTelegraph(GameObject telegraph, Vector3 direction, float length)
+        {
+            if (!telegraph) return;
+            var origin = transform.position;
+            telegraph.transform.position = origin + direction * (length * 0.5f) + Vector3.up * 0.038f;
+            telegraph.transform.rotation = Quaternion.Euler(90f, Quaternion.LookRotation(direction).eulerAngles.y, 0f);
+        }
+
+        private static readonly Color GuardColor = new(0.42f, 0.68f, 1f);
+
+        /// <summary>Deckung wieder aufnehmen: Schild hoch, aber nur im Oberkoerper, damit die Beine weiterlaufen.</summary>
+        private void RaiseGuard()
+        {
+            if (kind != EnemyKind.Shieldbearer || state == State.Dead) return;
+            if (Time.time < guardBrokenUntil) return;
+            guarding = true;
+            regainGuardAt = 0f;
+            motion?.HoldPose(PresenceMotion.Guard, true);
+        }
+
+        /// <summary>
+        /// Haelt die Deckung ueber die Zeit: nur waehrend der Verfolgung - ein schlafender Lagergegner
+        /// soll liegen bleiben - und erneuert die Haltung, nachdem eine Trefferreaktion sie ueberschrieben hat.
+        /// </summary>
+        private void UpdateGuardPose()
+        {
+            if (state != State.Chase || Time.time < guardBrokenUntil) return;
+            if (!guarding)
+            {
+                RaiseGuard();
+                return;
+            }
+            if (regainGuardAt <= 0f || Time.time < regainGuardAt) return;
+            regainGuardAt = 0f;
+            motion?.HoldPose(PresenceMotion.Guard, true);
+        }
+
+        /// <summary>
+        /// Rechnet einen Treffer gegen die Deckung. Von vorn bleibt fast nichts uebrig, von der Seite
+        /// oder von hinten trifft es voll und etwas darueber. Ein harter Treffer von vorn bricht die
+        /// Deckung auf. Der Rueckgabewert ist der Schaden, der wirklich zaehlt.
+        /// </summary>
+        private float FilterGuardedDamage(DamageInfo damage)
+        {
+            if (state == State.Dead) return damage.Amount;
+            var from = damage.Source ? damage.Source.transform.position : damage.HitPoint;
+            var toAttacker = from - transform.position;
+            toAttacker.y = 0f;
+            var frontal = toAttacker.sqrMagnitude > 0.01f &&
+                          Vector3.Angle(transform.forward, toAttacker) <= GuardArcDegrees * 0.5f;
+            if (!guarding || Time.time < guardBrokenUntil || !frontal)
+                return frontal ? damage.Amount : damage.Amount * FlankedDamageBonus;
+
+            if (damage.Amount >= guardBreakDamage)
+            {
+                // Deckung gebrochen: offenes Fenster, in dem alles voll durchgeht.
+                guarding = false;
+                regainGuardAt = 0f;
+                guardBrokenUntil = Time.time + GuardBreakSeconds;
+                hitStaggerUntil = Mathf.Max(hitStaggerUntil, Time.time + 0.45f);
+                motion?.PlayPresence(PresenceMotion.GuardBreak, 1f, 0.7f);
+                PrototypeVfx.SpawnShockwave(transform.position + Vector3.up * 0.9f, 2.2f, GuardColor);
+                CameraController.Impulse(0.1f);
+                return damage.Amount;
+            }
+
+            PrototypeVfx.SpawnHit(damage.HitPoint, -toAttacker.normalized, DamageType.Lightning, false);
+            // Health spielt gleich danach die Trefferreaktion und ueberschreibt damit die Haltung.
+            // Kurz darauf geht der Schild wieder hoch - das liest sich als Zucken, nicht als Aussetzer.
+            regainGuardAt = Time.time + 0.24f;
+            return damage.Amount * GuardedDamageFraction;
+        }
+
         private bool BeginAttack(GameObject telegraph)
         {
             if (telegraph) Destroy(telegraph);
@@ -423,6 +594,7 @@ namespace Shatterspire
             if (state == State.Dead) return;
             attackReadyAt = Time.time + cooldown;
             state = State.Chase;
+            RaiseGuard();
         }
 
         private Vector3 FlatDirectionToTarget()
@@ -549,6 +721,8 @@ namespace Shatterspire
         {
             if (state == State.Dead) return;
             state = State.Dead;
+            guarding = false;
+            if (health) health.DamageFilter = null;
             StopAllCoroutines();
             if (eliteExplosive) CombatUtility.Explode(transform.position, 3.5f, 16f, TeamId.Player, DamageType.Fire, gameObject);
             var bodyRenderer = GetComponentInChildren<Renderer>();

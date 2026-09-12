@@ -21,6 +21,8 @@ namespace Shatterspire
         private CompanionBot[] companions = Array.Empty<CompanionBot>();
         private GameObject floorRoot;
         private FloorNavigation navigation;
+        /// <summary>Wegenetz der laufenden Etage. Wird von der automatischen Vorfuehrung gebraucht.</summary>
+        public FloorNavigation Navigation => navigation;
         private int roomIndex;
         private int shards;
         private int floorsCleared;

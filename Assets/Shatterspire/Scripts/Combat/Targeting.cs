@@ -36,7 +36,12 @@ namespace Shatterspire
                 var facingPenalty = delta.sqrMagnitude > 0.01f ? Vector3.Angle(forward, delta) * 0.055f : 0f;
                 var agent = candidate.GetComponent<EnemyAgent>();
                 var priority = agent && agent.Kind == EnemyKind.IronWarden ? -7f
-                    : agent && agent.Kind == EnemyKind.Elite ? -3.5f : 0f;
+                    : agent && agent.Kind == EnemyKind.Elite ? -3.5f
+                    // Armbruster zuerst: er ist das Ziel, das aus der Entfernung wehtut.
+                    : agent && agent.Kind == EnemyKind.Marksman ? -2.4f
+                    // Der Schildtraeger steht vorn und faengt sonst jede Zielhilfe ab, obwohl
+                    // Treffer auf seine Deckung fast nichts bringen.
+                    : agent && agent.Kind == EnemyKind.Shieldbearer ? 2.6f : 0f;
                 var score = distance + facingPenalty + priority;
                 if (score >= bestScore) continue;
                 bestScore = score;
@@ -81,7 +86,9 @@ namespace Shatterspire
                 var angle = Vector3.Angle(desiredDirection, delta);
                 var enemy = candidate.GetComponent<EnemyAgent>();
                 var threatBonus = enemy && enemy.Kind == EnemyKind.IronWarden ? -2.2f
-                    : enemy && enemy.Kind == EnemyKind.Elite ? -1.1f : 0f;
+                    : enemy && enemy.Kind == EnemyKind.Elite ? -1.1f
+                    : enemy && enemy.Kind == EnemyKind.Marksman ? -0.9f
+                    : enemy && enemy.Kind == EnemyKind.Shieldbearer ? 1.4f : 0f;
                 var score = distance + angle * 0.035f + threatBonus;
                 if (score >= bestScore) continue;
                 bestScore = score;

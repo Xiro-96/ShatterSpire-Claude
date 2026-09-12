@@ -18,6 +18,8 @@ namespace Shatterspire
         private Camera view;
         private string folder;
         private bool framing;
+        private float frameSize = 2.1f;
+        private Transform frameOn;
 
         public static bool Requested => Array.IndexOf(Environment.GetCommandLineArgs(), Flag) >= 0;
 
@@ -54,17 +56,103 @@ namespace Shatterspire
                 yield return Shot($"f{i:00}");
             }
             input.ScriptedAttack = false;
-            yield return new WaitForSecondsRealtime(1f);
+            yield return new WaitForSecondsRealtime(0.6f);
+
+            // Zweiter Durchgang: schlagen waehrend des Laufens. Genau hier zeigt sich, ob die
+            // Beine weiterlaufen oder ob die Figur im Schlag einfriert und ueber den Boden rutscht.
+            input.ScriptedMove = new Vector2(0.6f, -0.8f); // gleiche Richtung wie das Ziel, damit der Lauf natuerlich liest
+            yield return new WaitForSecondsRealtime(0.5f);
+            input.ScriptedAttack = true;
+            start = Time.unscaledTime;
+            for (var i = 0; i < 12; i++)
+            {
+                while (Time.unscaledTime - start < i * 0.1f) yield return null;
+                yield return Shot($"m{i:00}");
+            }
+            input.ScriptedAttack = false;
+            input.ScriptedMove = null;
+            yield return new WaitForSecondsRealtime(0.6f);
+
+            yield return ShowShieldbearer();
+            yield return ShowMarksman();
+
             Debug.Log("SHATTERSPIRE Capture fertig: " + folder);
             Application.Quit();
+        }
+
+        /// <summary>
+        /// Schildtraeger: haelt die Deckung, waehrend er laeuft, faengt Treffer von vorn ab und bricht
+        /// erst auf, wenn ein schwerer Schlag landet. Genau das soll auf der Bildfolge zu sehen sein.
+        /// </summary>
+        private IEnumerator ShowShieldbearer()
+        {
+            var enemy = SpawnDemoEnemy(EnemyKind.Shieldbearer, 7f);
+            if (!enemy) yield break;
+            frameOn = enemy.transform;
+            frameSize = 3.2f;
+            input.ScriptedAim = enemy.transform.position - player.position;
+            yield return new WaitForSecondsRealtime(1.3f);
+
+            // Erst der Anmarsch: Schild oben, Beine laufen. Dann der Schlagabtausch.
+            var start = Time.unscaledTime;
+            for (var i = 0; i < 4; i++)
+            {
+                while (Time.unscaledTime - start < i * 0.22f) yield return null;
+                yield return Shot($"g{i:00}");
+            }
+            input.ScriptedAttack = true;
+            start = Time.unscaledTime;
+            for (var i = 4; i < 10; i++)
+            {
+                while (Time.unscaledTime - start < (i - 4) * 0.16f) yield return null;
+                yield return Shot($"g{i:00}");
+            }
+            input.ScriptedAttack = false;
+            if (enemy) Destroy(enemy.gameObject);
+            yield return new WaitForSecondsRealtime(0.4f);
+        }
+
+        /// <summary>Armbruster: sichtbares Spannen, mitwandernde Ziellinie, dann der Schuss.</summary>
+        private IEnumerator ShowMarksman()
+        {
+            // Weit genug weg, dass er nicht sofort zurueckweicht, und lange genug, dass ein voller
+            // Zyklus aus Spannen und Loesen auf die Bildfolge passt.
+            var enemy = SpawnDemoEnemy(EnemyKind.Marksman, 8.5f);
+            if (!enemy) yield break;
+            frameOn = enemy.transform;
+            frameSize = 3f;
+            input.ScriptedAim = enemy.transform.position - player.position;
+            var start = Time.unscaledTime;
+            for (var i = 0; i < 10; i++)
+            {
+                while (Time.unscaledTime - start < i * 0.34f) yield return null;
+                yield return Shot($"a{i:00}");
+            }
+            if (enemy) Destroy(enemy.gameObject);
+            frameOn = null;
+            yield return new WaitForSecondsRealtime(0.4f);
+        }
+
+        private EnemyAgent SpawnDemoEnemy(EnemyKind kind, float distance)
+        {
+            var director = FindFirstObjectByType<RunDirector>();
+            var navigation = director ? director.Navigation : null;
+            var spot = player.position + player.forward * distance;
+            if (navigation != null) spot = navigation.ClampToWalkable(spot, 0.6f);
+            var enemy = EnemyFactory.Create(kind, spot, player, 1);
+            enemy.SetBehaviour(navigation, spot, false);
+            return enemy;
         }
 
         private void LateUpdate()
         {
             if (!framing || !view || !player) return;
-            view.orthographicSize = 2.1f;
-            view.transform.rotation = Quaternion.Euler(28f, 0f, 0f);
-            view.transform.position = player.position + Vector3.up * 1.35f - view.transform.forward * 16f;
+            // Bei den Gegner-Vorfuehrungen steiler von oben: flach schiebt sich staendig eine Wand
+            // oder ein Gelaender zwischen Kamera und Motiv.
+            var focus = frameOn ? frameOn.position : player.position;
+            view.orthographicSize = frameSize;
+            view.transform.rotation = Quaternion.Euler(frameOn ? 42f : 28f, 0f, 0f);
+            view.transform.position = focus + Vector3.up * 1.35f - view.transform.forward * 16f;
         }
 
         private IEnumerator Shot(string name)

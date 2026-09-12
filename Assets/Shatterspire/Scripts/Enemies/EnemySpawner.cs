@@ -147,7 +147,8 @@ namespace Shatterspire
                         : ResolveKind(floorIndex, kind, encounterIndex * 5 + i);
                     positions.Add(position);
                     kinds.Add(enemyKind);
-                    PrototypeVfx.SpawnEnemyArrival(position, enemyKind is EnemyKind.Elite or EnemyKind.Brute);
+                    PrototypeVfx.SpawnEnemyArrival(position,
+                        enemyKind is EnemyKind.Elite or EnemyKind.Brute or EnemyKind.Shieldbearer);
                 }
 
                 // Die ganze Formation ist sichtbar, bevor sie gefaehrlich wird.
@@ -289,8 +290,21 @@ namespace Shatterspire
         {
             if (kind == RoomKind.Elite && seed == 0) return EnemyKind.Brute;
             var roll = Mathf.Repeat(seed * 0.37f + floorIndex * 0.19f, 1f);
-            if (roll < 0.48f) return EnemyKind.Crawler;
-            if (roll < 0.78f) return EnemyKind.Shooter;
+            // Zwei Rollen, die Stellung erzwingen statt nur Druck zu machen: der Schildtraeger muss
+            // umlaufen oder mit einem schweren Schlag aufgebrochen werden, dem Armbruster muss man aus
+            // der Linie gehen. Auf Etage 1 sind beide selten, ab Etage 2 gehoeren sie zur Mischung.
+            if (floorIndex <= 1)
+            {
+                if (roll < 0.40f) return EnemyKind.Crawler;
+                if (roll < 0.64f) return EnemyKind.Shooter;
+                if (roll < 0.78f) return EnemyKind.Marksman;
+                if (roll < 0.90f) return EnemyKind.Shieldbearer;
+                return EnemyKind.Brute;
+            }
+            if (roll < 0.30f) return EnemyKind.Crawler;
+            if (roll < 0.48f) return EnemyKind.Shooter;
+            if (roll < 0.66f) return EnemyKind.Marksman;
+            if (roll < 0.84f) return EnemyKind.Shieldbearer;
             return EnemyKind.Brute;
         }
 

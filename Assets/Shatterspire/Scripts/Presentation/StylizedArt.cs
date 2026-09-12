@@ -190,6 +190,8 @@ namespace Shatterspire
                 case EnemyKind.Shooter: BuildShooter(model); break;
                 case EnemyKind.Brute: BuildBrute(model, false); break;
                 case EnemyKind.Elite: BuildBrute(model, true); break;
+                case EnemyKind.Shieldbearer: BuildBrute(model, false); break;
+                case EnemyKind.Marksman: BuildShooter(model); break;
                 case EnemyKind.IronWarden: BuildWarden(model); break;
             }
 
@@ -201,7 +203,7 @@ namespace Shatterspire
         public static void AddHealthBar(GameObject enemy, EnemyKind kind)
         {
             var height = kind == EnemyKind.IronWarden ? 4.85f : kind == EnemyKind.Elite ? 3.2f
-                : kind == EnemyKind.Brute ? 2.88f : 2.02f;
+                : kind == EnemyKind.Brute ? 2.88f : kind == EnemyKind.Shieldbearer ? 2.55f : 2.02f;
             var width = kind == EnemyKind.IronWarden ? 3.5f : kind is EnemyKind.Brute or EnemyKind.Elite ? 2.05f : 1.42f;
             var color = kind == EnemyKind.IronWarden ? Gold : kind == EnemyKind.Elite
                 ? new Color(1f, 0.18f, 0.64f) : new Color(0.96f, 0.22f, 0.2f);
@@ -346,10 +348,17 @@ namespace Shatterspire
     /// Angriffsbewegungen. Gespielt mit den Kampfclips aus KayKit Character Animations; fehlt ein Clip,
     /// entsteht die Bewegung aus einem Ersatzclip plus Oberkoerper-Drehung.
     /// </summary>
-    public enum AttackMotion { Swing, Smash, Spin, Shot, Cast, Channel, Leap, Summon }
+    public enum AttackMotion { Swing, Smash, Spin, Shot, Cast, Channel, Leap, Summon, Stab, Draw, Release }
 
     /// <summary>Auftritte der Skelett-Gegner aus KayKit Character Animations (Rig_Medium_Special).</summary>
-    public enum PresenceMotion { SpawnGround, AwakenFloor, AwakenStanding, InactiveFloor, InactiveStanding, Taunt, TauntLong, Death }
+    public enum PresenceMotion
+    {
+        SpawnGround, AwakenFloor, AwakenStanding, InactiveFloor, InactiveStanding, Taunt, TauntLong, Death,
+        /// <summary>Deckung hinter dem Schild - wird als Haltung getragen, waehrend die Beine weiterlaufen.</summary>
+        Guard,
+        /// <summary>Der Schild gibt nach: sichtbares Zurueckwanken nach einem schweren Treffer von vorn.</summary>
+        GuardBreak
+    }
 
     public sealed class StylizedCharacterMotion : MonoBehaviour
     {
@@ -427,7 +436,12 @@ namespace Shatterspire
         public float PlayPresence(PresenceMotion kind, float preferredSpeed = 1f, float maxSeconds = 2f)
             => authoredAnimation ? authoredAnimation.PlayPresence(kind, preferredSpeed, maxSeconds) : 0f;
 
-        public bool HoldPose(PresenceMotion kind) => authoredAnimation && authoredAnimation.HoldPose(kind);
+        /// <summary>
+        /// Haelt eine Pose, bis eine andere Aktion sie abloest. Mit <paramref name="upperBody"/> nur fuer
+        /// Rumpf und Arme - so bleibt die Schilddeckung stehen, waehrend die Figur laeuft.
+        /// </summary>
+        public bool HoldPose(PresenceMotion kind, bool upperBody = false)
+            => authoredAnimation && authoredAnimation.HoldPose(kind, upperBody);
         public void PulseUltimate() => authoredAnimation?.PulseUltimate();
         public void PulseHit() => authoredAnimation?.PulseHit();
 

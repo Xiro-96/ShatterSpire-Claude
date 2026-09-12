@@ -34,6 +34,8 @@ namespace Shatterspire
         public bool ScriptedAttack { get; set; }
         /// <summary>Nur fuer automatische Vorfuehrungen: feste Blickrichtung statt Maus.</summary>
         public Vector3? ScriptedAim { get; set; }
+        /// <summary>Nur fuer automatische Vorfuehrungen: feste Laufrichtung statt Tastatur.</summary>
+        public Vector2? ScriptedMove { get; set; }
 
         private void Start()
         {
@@ -44,7 +46,7 @@ namespace Shatterspire
         private void Update()
         {
             var keyboard = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
-            Move = Vector2.ClampMagnitude(keyboard + MobileInput.Move, 1f);
+            Move = ScriptedMove ?? Vector2.ClampMagnitude(keyboard + MobileInput.Move, 1f);
             // Auf dem Telefon meldet Unity jede Beruehrung zusaetzlich als linke Maustaste. Wer den Stick
             // hielt, griff dadurch dauernd an. Mit Touch zaehlen nur noch die Aktionsknoepfe.
             var mouse = !Application.isMobilePlatform && Input.touchCount == 0;

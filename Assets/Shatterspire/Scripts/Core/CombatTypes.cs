@@ -5,7 +5,9 @@ namespace Shatterspire
 {
     public enum DamageType { Physical, Fire, Ice, Lightning, Poison, Void, Holy, True }
     public enum TeamId { Player, Enemy }
-    public enum EnemyKind { Crawler, Shooter, Brute, Elite, IronWarden }
+    // Shieldbearer und Marksman kommen ans Ende, damit bestehende serialisierte
+    // Werte ihre Zahl behalten.
+    public enum EnemyKind { Crawler, Shooter, Brute, Elite, IronWarden, Shieldbearer, Marksman }
     public enum RoomKind { Combat, Elite, Treasure, Mystery, Boss }
 
     [Serializable]

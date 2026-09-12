@@ -17,6 +17,13 @@ namespace Shatterspire
         private Renderer[] renderers;
         private Color[] baseColors;
 
+        /// <summary>
+        /// Abwehr, die den Schaden vor dem Abzug veraendern darf, und den tatsaechlich wirksamen Betrag
+        /// zurueckgibt - etwa ein Schildtraeger, der Treffer von vorn abfaengt. Bewusst ein Feld der
+        /// Instanz und nichts Statisches: im Co-op hat jede Figur ihre eigene Abwehr.
+        /// </summary>
+        public Func<DamageInfo, float> DamageFilter { get; set; }
+
         public event Action<DamageInfo> Damaged;
         public event Action Died;
         public bool IsAlive => current > 0f;
@@ -64,16 +71,23 @@ namespace Shatterspire
         public void TakeDamage(in DamageInfo damage)
         {
             if (!IsAlive || Time.time < invulnerableUntil || damage.Amount <= 0f) return;
-            current = Mathf.Max(0f, current - damage.Amount);
-            Damaged?.Invoke(damage);
+            // Die Abwehr laeuft vor allem anderen: sie darf den Betrag senken und meldet ihre eigene
+            // Rueckmeldung selbst. Bleibt nichts uebrig, endet der Treffer hier.
+            var effective = DamageFilter != null ? Mathf.Max(0f, DamageFilter(damage)) : damage.Amount;
+            if (effective <= 0f) return;
+            var applied = Mathf.Approximately(effective, damage.Amount)
+                ? damage
+                : new DamageInfo(effective, damage.Type, damage.Source, damage.HitPoint, damage.Force, damage.IsCritical);
+            current = Mathf.Max(0f, current - applied.Amount);
+            Damaged?.Invoke(applied);
             GetComponent<StylizedCharacterMotion>()?.PulseHit();
             GameEvents.RaiseHealthChanged(this);
-            DamageNumber.Spawn(damage.HitPoint, damage.Amount, damage.IsCritical, damage.Type);
-            if (damage.Force.sqrMagnitude > 0.01f || damage.IsCritical)
-                PrototypeVfx.SpawnHit(damage.HitPoint, damage.Force, damage.Type, damage.IsCritical);
+            DamageNumber.Spawn(applied.HitPoint, applied.Amount, applied.IsCritical, applied.Type);
+            if (applied.Force.sqrMagnitude > 0.01f || applied.IsCritical)
+                PrototypeVfx.SpawnHit(applied.HitPoint, applied.Force, applied.Type, applied.IsCritical);
             // Nur bei kritischen Treffern auf Gegner. Ein Stop bei jedem Schaden
             // waere Dauerzeitlupe, und Treffer am Spieler sollen nicht belohnen.
-            if (damage.IsCritical && team == TeamId.Enemy) Hitstop.Freeze(0.045f, 0.08f);
+            if (applied.IsCritical && team == TeamId.Enemy) Hitstop.Freeze(0.045f, 0.08f);
             if (isActiveAndEnabled) StartCoroutine(Flash());
             if (current <= 0f)
             {

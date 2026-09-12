@@ -278,6 +278,8 @@ namespace Shatterspire
                 EnemyKind.Brute => "Skeleton_Warrior",
                 EnemyKind.Elite => "Skeleton_Warrior",
                 EnemyKind.IronWarden => "Skeleton_Warrior",
+                EnemyKind.Shieldbearer => "Skeleton_Warrior",
+                EnemyKind.Marksman => "Skeleton_Rogue",
                 _ => "Skeleton_Minion"
             };
             var source = LoadModel(SkeletonCharacters + modelName);
@@ -293,10 +295,14 @@ namespace Shatterspire
                 EnemyKind.Brute => 2.22f,
                 EnemyKind.Elite => 2.58f,
                 EnemyKind.IronWarden => 4.05f,
+                EnemyKind.Shieldbearer => 2.02f,
+                EnemyKind.Marksman => 1.72f,
                 _ => 1.65f
             };
             FitAndPlace(model, root.position, height, FitAxis.Height);
-            var widthScale = kind == EnemyKind.IronWarden ? 1.22f : kind is EnemyKind.Brute or EnemyKind.Elite ? 1.14f : 1f;
+            var widthScale = kind == EnemyKind.IronWarden ? 1.22f
+                : kind is EnemyKind.Brute or EnemyKind.Elite ? 1.14f
+                : kind == EnemyKind.Shieldbearer ? 1.1f : 1f;
             model.transform.localScale = Vector3.Scale(model.transform.localScale, new Vector3(widthScale, 1f, widthScale));
             Reground(model, root.position);
 
@@ -307,6 +313,10 @@ namespace Shatterspire
                 EnemyKind.Brute => new Color(0.8f, 0.34f, 0.08f),
                 EnemyKind.Elite => new Color(0.82f, 0.08f, 0.55f),
                 EnemyKind.IronWarden => new Color(0.12f, 0.2f, 0.3f),
+                // Stahlblau und Giftgruen: beide Rollen sollen sich im Getuemmel auf einen Blick
+                // von den roten Crawlern und den violetten Shootern unterscheiden.
+                EnemyKind.Shieldbearer => new Color(0.2f, 0.44f, 0.76f),
+                EnemyKind.Marksman => new Color(0.34f, 0.74f, 0.26f),
                 _ => Color.gray
             };
             var accent = kind == EnemyKind.IronWarden ? new Color(1f, 0.45f, 0.08f) : Color.Lerp(primary, Color.white, 0.45f);
@@ -317,6 +327,8 @@ namespace Shatterspire
                     EnemyKind.Shooter => 0.2f,
                     EnemyKind.Elite => 0.26f,
                     EnemyKind.Brute => 0.15f,
+                    EnemyKind.Shieldbearer => 0.34f,
+                    EnemyKind.Marksman => 0.32f,
                     _ => 0.12f
                 });
             ApplyKayKitMaterials(model, SkeletonTexture, corruptionTint);
@@ -332,7 +344,8 @@ namespace Shatterspire
                 kind is EnemyKind.Brute or EnemyKind.Elite ? 1.12f : 1.06f);
             AttachSkeletonLoadout(animator, kind);
             var footprint = kind == EnemyKind.IronWarden ? 1.85f
-                : kind is EnemyKind.Brute or EnemyKind.Elite ? 1.18f : 0.78f;
+                : kind is EnemyKind.Brute or EnemyKind.Elite ? 1.18f
+                : kind == EnemyKind.Shieldbearer ? 0.95f : 0.78f;
             CreateGroundShadow(root, footprint);
             CreateSelectionRing(root, footprint * 1.08f, Color.Lerp(primary, new Color(0.3f, 0.02f, 0.04f), 0.24f));
             if (animator) motion.ConfigureAuthored(visualRig, animator, EnemyBalance.For(kind).Speed, true);
@@ -762,6 +775,18 @@ namespace Shatterspire
                         new Vector3(0.02f, -0.03f, 0.07f), new Vector3(4f, 0f, 92f), 1.22f, SkeletonTexture);
                     AttachKayKitWeapon(leftHand, SkeletonWeapons + "Skeleton_Shield_Large_A", "Riftbone Shield",
                         new Vector3(0f, 0.02f, 0.07f), new Vector3(88f, 0f, 0f), 1.05f, SkeletonTexture);
+                    break;
+                case EnemyKind.Shieldbearer:
+                    // Der Schild ist absichtlich uebergross: er ist die Mechanik und muss von weitem
+                    // als Flaeche lesbar sein, hinter der die Figur verschwindet.
+                    AttachKayKitWeapon(rightHand, SkeletonWeapons + "Skeleton_Blade", "Bulwark Blade",
+                        new Vector3(0.02f, 0f, 0.08f), new Vector3(88f, 0f, 0f), 0.82f, SkeletonTexture);
+                    AttachKayKitWeapon(leftHand, SkeletonWeapons + "Skeleton_Shield_Large_A", "Bulwark Shield",
+                        new Vector3(0f, 0.03f, 0.09f), new Vector3(88f, 0f, 0f), 1.18f, SkeletonTexture);
+                    break;
+                case EnemyKind.Marksman:
+                    AttachKayKitWeapon(rightHand, SkeletonWeapons + "Skeleton_Crossbow", "Riftbone Crossbow",
+                        new Vector3(0.03f, -0.02f, 0.07f), new Vector3(0f, 0f, 92f), 0.95f, SkeletonTexture);
                     break;
                 case EnemyKind.Elite:
                 case EnemyKind.IronWarden:
@@ -1292,6 +1317,28 @@ namespace Shatterspire
                     }
                     break;
 
+                case EnemyKind.Shieldbearer:
+                    // Der Kristall sitzt seitlich am Schildarm: von vorn verdeckt ihn der Schild, von
+                    // der Seite leuchtet er. Damit zeigt die Silhouette selbst, wo der Gegner offen ist.
+                    for (var side = -1; side <= 1; side += 2)
+                    {
+                        CrystalPart(rig, "Bulwark Flank Crystal", new Vector3(side * 0.52f, 1.12f, -0.1f),
+                            new Vector3(0.12f, 0.34f, 0.12f), new Vector3(12f, 0f, side * 26f), accent);
+                    }
+                    CrystalPart(rig, "Bulwark Core", new Vector3(0f, 1.42f, -0.32f),
+                        new Vector3(0.2f, 0.2f, 0.11f), new Vector3(0f, 0f, 45f), accent);
+                    break;
+
+                case EnemyKind.Marksman:
+                    CrystalPart(rig, "Marksman Sight Crystal", new Vector3(0f, 1.5f, 0.34f),
+                        new Vector3(0.15f, 0.15f, 0.09f), new Vector3(0f, 45f, 45f), accent);
+                    for (var side = -1; side <= 1; side += 2)
+                    {
+                        CrystalPart(rig, "Marksman Quiver Shard", new Vector3(side * 0.26f, 1.05f, -0.36f),
+                            new Vector3(0.08f, 0.3f, 0.08f), new Vector3(-28f, 0f, side * 14f), accent);
+                    }
+                    break;
+
                 case EnemyKind.IronWarden:
                     CrystalPart(rig, "Warden Crown Reactor", new Vector3(0f, 2.28f, 0.82f),
                         new Vector3(0.48f, 0.48f, 0.2f), new Vector3(0f, 0f, 45f), accent);
@@ -1456,17 +1503,25 @@ namespace Shatterspire
         private AnimationPlayableOutput output;
 
         // Aufbau des Graphen:
-        //   output -> topMixer [0] locomotion [0] idle  [1] move
-        //                      [1] Action-Slot A
-        //                      [2] Action-Slot B
-        // Zwei Action-Slots, weil sonst ein Combo-Schlag in den naechsten
-        // schneiden wuerde statt hinueberzublenden.
-        private AnimationMixerPlayable topMixer;
+        //   output -> layerMixer [0] locomotion [0] idle [1] move     (Basis, ganzer Koerper)
+        //                        [1] fullMixer  [0] Slot A [1] Slot B (ganzer Koerper)
+        //                        [2] upperMixer [0] Slot A [1] Slot B (nur Oberkoerper, maskiert)
+        // Zwei Action-Slots, weil sonst ein Combo-Schlag in den naechsten schneiden
+        // wuerde statt hinueberzublenden. Zwei Ebenen, weil ein Schlag im Laufen nur
+        // die Arme betreffen darf - sonst bleiben die Beine stehen und die Figur
+        // rutscht ueber den Boden. Beide Ebenen spielen dieselbe Bewegung als zwei
+        // gleich getaktete Kopien; welche zaehlt, entscheidet das Lauftempo.
+        private AnimationLayerMixerPlayable layerMixer;
+        private AnimationMixerPlayable fullMixer;
+        private AnimationMixerPlayable upperMixer;
         private AnimationMixerPlayable locomotion;
         private AnimationClipPlayable idlePlayable;
         private AnimationClipPlayable movePlayable;
-        private readonly AnimationClipPlayable[] actionPlayables = new AnimationClipPlayable[2];
+        private readonly AnimationClipPlayable[] fullPlayables = new AnimationClipPlayable[2];
+        private readonly AnimationClipPlayable[] upperPlayables = new AnimationClipPlayable[2];
         private readonly float[] actionWeights = new float[2];
+        private readonly bool[] actionUpperBody = new bool[2];
+        private AvatarMask upperBodyMask;
         private int activeSlot = -1;
         private float actionHoldUntil;
         private bool actionIsAttack;
@@ -1485,6 +1540,11 @@ namespace Shatterspire
         private AnimationClip channel;
         private AnimationClip leap;
         private AnimationClip summon;
+        private AnimationClip stab;
+        private AnimationClip draw;
+        private AnimationClip release;
+        private AnimationClip guard;
+        private AnimationClip guardBreak;
         private AnimationClip dodgeBack;
         private AnimationClip dodgeLeft;
         private AnimationClip dodgeRight;
@@ -1551,6 +1611,13 @@ namespace Shatterspire
             channel = FindClip(clips, "Ranged_Magic_Spellcasting", "Ranged_Magic_Shoot");
             leap = FindClip(clips, "Melee_1H_Attack_Jump_Chop", "Melee_2H_Attack_Chop");
             summon = FindClip(clips, "Ranged_Magic_Summon", "Ranged_Magic_Raise");
+            // Schildtraeger und Armbruster. Alle vier Clips liegen in CombatMelee bzw. CombatRanged;
+            // ohne sie bleiben Stoss, Spannen und Loesen bei den bisherigen Ersatzbewegungen.
+            stab = FindClip(clips, "Melee_Block_Attack", "Melee_1H_Attack_Stab", "Melee_1H_Attack_Chop");
+            draw = FindClip(clips, "Ranged_Bow_Draw", "Ranged_Bow_Aiming_Idle", "Ranged_1H_Aiming");
+            release = FindClip(clips, "Ranged_Bow_Release", "Ranged_1H_Shoot", "Ranged_2H_Shoot");
+            guard = FindClip(clips, "Melee_Blocking", "Melee_Block");
+            guardBreak = FindClip(clips, "Melee_Block_Hit", "Hit_A");
             WarnAboutMissingClips();
             if (!idle) return;
 
@@ -1568,19 +1635,32 @@ namespace Shatterspire
             locomotion.SetInputWeight(0, 1f);
             locomotion.SetInputWeight(1, 0f);
 
-            topMixer = AnimationMixerPlayable.Create(graph, 3);
-            graph.Connect(locomotion, 0, topMixer, 0);
-            topMixer.SetInputWeight(0, 1f);
-            topMixer.SetInputWeight(1, 0f);
-            topMixer.SetInputWeight(2, 0f);
+            fullMixer = AnimationMixerPlayable.Create(graph, 2);
+            upperMixer = AnimationMixerPlayable.Create(graph, 2);
+            layerMixer = AnimationLayerMixerPlayable.Create(graph, 3);
+            graph.Connect(locomotion, 0, layerMixer, 0);
+            graph.Connect(fullMixer, 0, layerMixer, 1);
+            graph.Connect(upperMixer, 0, layerMixer, 2);
+            layerMixer.SetInputWeight(0, 1f);
+            layerMixer.SetInputWeight(1, 0f);
+            layerMixer.SetInputWeight(2, 0f);
+            upperBodyMask = BuildUpperBodyMask();
+            layerMixer.SetLayerMaskFromAvatarMask(2, upperBodyMask);
 
-            output.SetSourcePlayable(topMixer);
+            output.SetSourcePlayable(layerMixer);
             graph.Play();
             previousPosition = transform.position;
             ready = true;
         }
 
-        public void PulseAttack(float strength) => PlayAction(attack, 0.28f + strength * 0.08f, 1.15f);
+        public void PulseAttack(float strength) => PlayAction(attack, 0.28f + strength * 0.08f, 1.15f, upperBody: true);
+
+        /// <summary>
+        /// Bewegungen, die sich auf den Oberkoerper beschraenken lassen. Nur Wirbel und
+        /// Sprungschlag brauchen den ganzen Koerper; alles andere darf im Laufen passieren.
+        /// </summary>
+        private static bool UsesUpperBodyOnly(AttackMotion kind) =>
+            kind != AttackMotion.Spin && kind != AttackMotion.Leap;
         private AnimationClip ClipFor(AttackMotion kind) => kind switch
         {
             AttackMotion.Swing => swing,
@@ -1590,6 +1670,9 @@ namespace Shatterspire
             AttackMotion.Cast => cast ? cast : smash,
             AttackMotion.Channel => channel ? channel : smash,
             AttackMotion.Leap => leap ? leap : smash,
+            AttackMotion.Stab => stab ? stab : swing,
+            AttackMotion.Draw => draw ? draw : cast,
+            AttackMotion.Release => release ? release : shot,
             _ => summon ? summon : ultimate
         };
 
@@ -1613,6 +1696,9 @@ namespace Shatterspire
                 AttackMotion.Channel => combat ? 0.7f : 0.4f,
                 AttackMotion.Leap => combat ? 0.75f : 0.45f,
                 AttackMotion.Summon => combat ? 0.9f : 0.6f,
+                AttackMotion.Stab => combat ? 0.45f : 0.32f,
+                AttackMotion.Draw => combat ? 0.6f : 0.4f,
+                AttackMotion.Release => combat ? 0.35f : 0.24f,
                 _ => combat ? 0.3f : 0.2f
             };
         }
@@ -1622,7 +1708,7 @@ namespace Shatterspire
         {
             var clip = ClipFor(kind);
             if (!ready || !clip || clip.length <= 0f) return;
-            var (from, to) = HasCombatClip(kind) ? (0f, 0.92f) : kind switch
+            var (from, to) = kind == AttackMotion.Draw ? (0f, 1f) : HasCombatClip(kind) ? (0f, 0.92f) : kind switch
             {
                 AttackMotion.Swing => (0.1f, 0.7f),
                 AttackMotion.Shot => (0.2f, 0.55f),
@@ -1630,7 +1716,8 @@ namespace Shatterspire
                 _ => (0.12f, 0.72f)
             };
             var span = clip.length * (to - from);
-            PlayAction(clip, duration, Mathf.Clamp(span / Mathf.Max(0.05f, duration), 0.5f, 2.8f), clip.length * from);
+            PlayAction(clip, duration, Mathf.Clamp(span / Mathf.Max(0.05f, duration), 0.5f, 2.8f), clip.length * from,
+                       UsesUpperBodyOnly(kind));
             actionIsAttack = true;
         }
 
@@ -1655,6 +1742,8 @@ namespace Shatterspire
             PresenceMotion.InactiveStanding => inactiveStanding,
             PresenceMotion.Taunt => taunt,
             PresenceMotion.TauntLong => tauntLong,
+            PresenceMotion.Guard => guard,
+            PresenceMotion.GuardBreak => guardBreak ? guardBreak : hit,
             _ => death
         };
 
@@ -1673,11 +1762,20 @@ namespace Shatterspire
         }
 
         /// <summary>Haelt eine Pose, bis die naechste Aktion sie abloest - etwa ein Skelett, das reglos am Boden liegt.</summary>
-        public bool HoldPose(PresenceMotion kind)
+        /// <summary>
+        /// Haelt eine Pose, bis die naechste Aktion sie abloest - etwa ein Skelett, das reglos am Boden
+        /// liegt, oder ein Schildtraeger, der in Deckung geht. Mit <paramref name="upperBody"/> nur fuer
+        /// Rumpf und Arme, sodass die Beine weiter ihre Fortbewegung spielen.
+        /// </summary>
+        public bool HoldPose(PresenceMotion kind, bool upperBody = false)
         {
             var clip = ClipFor(kind);
             if (!ready || !clip) return false;
-            PlayAction(clip, float.PositiveInfinity, 0f, Mathf.Max(0f, clip.length - 0.01f));
+            // Die Deckung wird gehalten, also aus der Mitte des Clips heraus, wo der Schild oben ist.
+            var pose = kind == PresenceMotion.Guard
+                ? clip.length * 0.5f
+                : Mathf.Max(0f, clip.length - 0.01f);
+            PlayAction(clip, float.PositiveInfinity, 0f, pose, upperBody);
             return true;
         }
 
@@ -1688,7 +1786,7 @@ namespace Shatterspire
             // Ein eingesteckter Treffer bricht keinen laufenden Angriff ab. Im Nahkampf wird Brax staendig
             // getroffen - vorher kam sein Schwung dadurch nie zu Ende.
             if (actionIsAttack && activeSlot >= 0 && Time.time < actionHoldUntil) return;
-            PlayAction(hit, 0.2f, 1.4f);
+            PlayAction(hit, 0.2f, 1.4f, upperBody: true);
         }
 
         private void Update()
@@ -1733,14 +1831,23 @@ namespace Shatterspire
             {
                 first /= total;
                 second /= total;
-                total = 1f;
             }
-            topMixer.SetInputWeight(0, 1f - total);
-            topMixer.SetInputWeight(1, first);
-            topMixer.SetInputWeight(2, second);
+
+            // Die maskierte Ebene traegt immer voll - der Oberkoerper zeigt den Schlag
+            // unverwaessert. Die Ganzkoerper-Ebene nimmt ab, je schneller die Figur laeuft:
+            // im Stand bleibt der volle Ausfallschritt, im Lauf tragen die Beine weiter.
+            var fullFirst = first * (actionUpperBody[0] ? 1f - moveBlend : 1f);
+            var fullSecond = second * (actionUpperBody[1] ? 1f - moveBlend : 1f);
+            var upperFirst = actionUpperBody[0] ? first : 0f;
+            var upperSecond = actionUpperBody[1] ? second : 0f;
+            Distribute(fullMixer, fullFirst, fullSecond);
+            Distribute(upperMixer, upperFirst, upperSecond);
+            layerMixer.SetInputWeight(1, Mathf.Clamp01(fullFirst + fullSecond));
+            layerMixer.SetInputWeight(2, Mathf.Clamp01(upperFirst + upperSecond));
         }
 
-        private void PlayAction(AnimationClip clip, float holdSeconds, float speed, float startTime = 0f)
+        private void PlayAction(AnimationClip clip, float holdSeconds, float speed, float startTime = 0f,
+                                bool upperBody = false)
         {
             if (!ready || !clip || !graph.IsValid()) return;
             actionIsAttack = false;
@@ -1748,28 +1855,82 @@ namespace Shatterspire
             // ausblenden kann statt abgeschnitten zu werden.
             var slot = activeSlot == 0 ? 1 : 0;
             ReleaseSlot(slot);
+            var layered = upperBody && upperBodyMask;
+            fullPlayables[slot] = ConnectAction(fullMixer, slot, clip, speed, startTime);
+            // Zweite Kopie desselben Clips, gleich getaktet, fuer die maskierte Ebene.
+            if (layered) upperPlayables[slot] = ConnectAction(upperMixer, slot, clip, speed, startTime);
+            actionUpperBody[slot] = layered;
+            activeSlot = slot;
+            actionHoldUntil = Time.time + Mathf.Max(0.05f, holdSeconds);
+        }
+
+        private AnimationClipPlayable ConnectAction(AnimationMixerPlayable mixer, int slot, AnimationClip clip,
+                                                    float speed, float startTime)
+        {
             var playable = AnimationClipPlayable.Create(graph, clip);
             playable.SetApplyFootIK(false);
             playable.SetApplyPlayableIK(false);
             playable.SetSpeed(speed);
             if (startTime > 0f) playable.SetTime(startTime);
-            graph.Connect(playable, 0, topMixer, slot + 1);
-            actionPlayables[slot] = playable;
-            activeSlot = slot;
-            actionHoldUntil = Time.time + Mathf.Max(0.05f, holdSeconds);
+            graph.Connect(playable, 0, mixer, slot);
+            return playable;
+        }
+
+        /// <summary>Verteilt zwei Slotgewichte innerhalb eines Mixers; die Gesamtstaerke traegt die Ebene.</summary>
+        private static void Distribute(AnimationMixerPlayable mixer, float first, float second)
+        {
+            var sum = first + second;
+            if (sum <= 0.0001f)
+            {
+                mixer.SetInputWeight(0, 0f);
+                mixer.SetInputWeight(1, 0f);
+                return;
+            }
+            mixer.SetInputWeight(0, first / sum);
+            mixer.SetInputWeight(1, second / sum);
         }
 
         private void ReleaseSlot(int slot)
         {
-            if (!actionPlayables[slot].IsValid()) return;
+            ReleaseFrom(fullMixer, fullPlayables, slot);
+            ReleaseFrom(upperMixer, upperPlayables, slot);
+            actionWeights[slot] = 0f;
+            actionUpperBody[slot] = false;
+        }
+
+        private void ReleaseFrom(AnimationMixerPlayable mixer, AnimationClipPlayable[] store, int slot)
+        {
+            if (!store[slot].IsValid()) return;
             if (graph.IsValid())
             {
-                graph.Disconnect(topMixer, slot + 1);
-                topMixer.SetInputWeight(slot + 1, 0f);
+                graph.Disconnect(mixer, slot);
+                mixer.SetInputWeight(slot, 0f);
             }
-            actionPlayables[slot].Destroy();
-            actionPlayables[slot] = default;
-            actionWeights[slot] = 0f;
+            store[slot].Destroy();
+            store[slot] = default;
+        }
+
+        /// <summary>
+        /// Maske fuer die obere Ebene: Rumpf, Kopf, Arme und Finger folgen dem Angriff,
+        /// Huefte und Beine bleiben bei der Fortbewegung.
+        /// </summary>
+        private static AvatarMask BuildUpperBodyMask()
+        {
+            var mask = new AvatarMask { name = "Shatterspire Oberkoerper" };
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Root, false);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Body, true);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Head, true);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.LeftLeg, false);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.RightLeg, false);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.LeftArm, true);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.RightArm, true);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.LeftFingers, true);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.RightFingers, true);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.LeftFootIK, false);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.RightFootIK, false);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.LeftHandIK, false);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.RightHandIK, false);
+            return mask;
         }
 
         private AnimationClipPlayable CreateLoop(AnimationClip clip)
@@ -1825,6 +1986,7 @@ namespace Shatterspire
         private void OnDestroy()
         {
             if (graph.IsValid()) graph.Destroy();
+            if (upperBodyMask) Destroy(upperBodyMask);
         }
     }
 }
