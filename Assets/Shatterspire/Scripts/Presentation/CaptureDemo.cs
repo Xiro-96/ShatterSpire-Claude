@@ -93,9 +93,12 @@ namespace Shatterspire
             input.ScriptedMove = null;
             yield return new WaitForSecondsRealtime(0.6f);
 
+            yield return ShowThreatMarker();
             yield return ShowForgePlunge();
             yield return ShowShieldbearer();
             yield return ShowMarksman();
+            // Zuletzt, weil die Fahrt die Etage auswechselt und danach nichts mehr zu zeigen ist.
+            yield return ShowLiftRide();
 
             Debug.Log("SHATTERSPIRE Capture fertig: " + folder);
             Application.Quit();
@@ -155,6 +158,49 @@ namespace Shatterspire
         }
 
         /// <summary>
+        /// Gefahr von ausserhalb des Bildes: ein Armbruster weit weg spannt, die Kamera bleibt beim
+        /// Helden. Am Bildrand muss eine Marke stehen - sonst kommt der Bolzen aus dem Nichts.
+        /// </summary>
+        private IEnumerator ShowThreatMarker()
+        {
+            // Zur Seite, nicht nach vorn. Bei 28 Grad Kameraneigung deckt die Ansicht laengs rund
+            // zehn Meter Boden ab - ein Gegner in neun Meter Entfernung nach vorn ist noch im Bild.
+            // Quer ist die Ansicht nur gut vier Meter breit, dort steht er wirklich draussen.
+            var far = SpawnDemoEnemySideways(EnemyKind.Marksman, 9f);
+            if (!far) yield break;
+            frameOn = null;
+            overviewPoint = null;
+            frameSize = 2.4f;
+            input.ScriptedAim = far.transform.position - player.position;
+            var start = Time.unscaledTime;
+            for (var i = 0; i < 10; i++)
+            {
+                while (Time.unscaledTime - start < i * 0.3f) yield return null;
+                yield return Shot($"t{i:00}");
+            }
+            if (far) Destroy(far.gameObject);
+            yield return new WaitForSecondsRealtime(0.3f);
+        }
+
+        /// <summary>Die Aufzugsfahrt: Abheben, Blende, Ankunft auf der naechsten Etage.</summary>
+        private IEnumerator ShowLiftRide()
+        {
+            var director = FindFirstObjectByType<RunDirector>();
+            if (!director) yield break;
+            frameOn = null;
+            overviewPoint = null;
+            frameSize = 6f;
+            yield return new WaitForSecondsRealtime(0.4f);
+            director.RideLiftForCapture();
+            var start = Time.unscaledTime;
+            for (var i = 0; i < 10; i++)
+            {
+                while (Time.unscaledTime - start < i * 0.22f) yield return null;
+                yield return Shot($"l{i:00}");
+            }
+        }
+
+        /// <summary>
         /// Brax' Ultimate: Absprung, Flug, Aufschlag, Krater. Genau hier greift die Ultimate in den
         /// CharacterController ein - wenn der Held haengen bleibt oder unter dem Boden landet, sieht
         /// man es auf diesen Bildern und nirgends sonst.
@@ -199,6 +245,19 @@ namespace Shatterspire
             overviewPoint = null;
             if (victim) Destroy(victim.gameObject);
             yield return new WaitForSecondsRealtime(0.4f);
+        }
+
+        /// <summary>Wie <see cref="SpawnDemoEnemy"/>, aber seitlich neben dem Helden.</summary>
+        private EnemyAgent SpawnDemoEnemySideways(EnemyKind kind, float distance)
+        {
+            var director = FindFirstObjectByType<RunDirector>();
+            var navigation = director ? director.Navigation : null;
+            var side = Vector3.Cross(Vector3.up, player.forward).normalized;
+            var spot = player.position + side * distance;
+            if (navigation != null) spot = navigation.ClampToWalkable(spot, 0.6f);
+            var enemy = EnemyFactory.Create(kind, spot, player, 1);
+            enemy.SetBehaviour(navigation, spot, false);
+            return enemy;
         }
 
         private EnemyAgent SpawnDemoEnemy(EnemyKind kind, float distance)

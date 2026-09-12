@@ -16,6 +16,41 @@ namespace Shatterspire
 
         public static Sprite Disc() => Shape("disc", 1f);
 
+        /// <summary>
+        /// Pfeilspitze, die nach oben zeigt. Fuer die Randmarkierungen: sie muss auch bei 40 Pixeln
+        /// und im Gewuehl noch eine erkennbare Richtung haben, deshalb ein Dreieck und kein Kreis.
+        /// </summary>
+        public static Sprite Chevron()
+        {
+            const string key = "chevron";
+            if (Cache.TryGetValue(key, out var cached) && cached) return cached;
+            const int size = 128;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "SHATTERSPIRE " + key, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp
+            };
+            var pixels = new Color32[size * size];
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                // Normiert auf -1 bis 1, Spitze oben.
+                var nx = (x + 0.5f) / size * 2f - 1f;
+                var ny = (y + 0.5f) / size * 2f - 1f;
+                // Dreieck: Breite nimmt nach oben ab. Dazu eine ausgesparte Innenkante, damit die
+                // Marke als Spitze und nicht als Klotz liest.
+                var width = Mathf.Lerp(0.88f, 0f, Mathf.InverseLerp(-0.75f, 0.9f, ny));
+                var inside = ny > -0.8f && ny < 0.92f && Mathf.Abs(nx) <= width;
+                var hollow = ny < -0.3f && Mathf.Abs(nx) <= width * 0.42f;
+                var alpha = inside && !hollow ? 1f : 0f;
+                pixels[y * size + x] = new Color32(255, 255, 255, (byte)(alpha * 255f));
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+            var sprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+            Cache[key] = sprite;
+            return sprite;
+        }
+
         private static Sprite Shape(string key, float thickness)
         {
             if (Cache.TryGetValue(key, out var cached) && cached) return cached;

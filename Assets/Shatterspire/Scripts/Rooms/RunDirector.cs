@@ -151,7 +151,7 @@ namespace Shatterspire
             var healing = currentKind == RoomKind.Treasure ? 35f : currentKind == RoomKind.Mystery ? 18f : 12f;
             if (build && build.HasDawnSeed) healing += 10f;
             playerHealth.Heal(healing);
-            hud.ShowFloorUpgrade(() => hud.ShowRoutes(roomIndex + 1, StartRoom));
+            StartCoroutine(RideLift());
         }
 
         private void Ascend()
@@ -159,7 +159,83 @@ namespace Shatterspire
             if (ended) return;
             playerHealth.Heal(playerHealth.Maximum * 0.3f + (build && build.HasDawnSeed ? 10f : 0f));
             PrototypeVfx.SpawnExplosion(player.position + Vector3.up * 0.7f, 3.2f, new Color(0.68f, 0.24f, 1f));
-            hud.ShowFloorUpgrade(() => hud.ShowRoutes(roomIndex + 1, StartRoom));
+            StartCoroutine(RideLift());
+        }
+
+        /// <summary>
+        /// Startet die Aufzugsfahrt von aussen. Nur fuer die automatische Vorfuehrung: eine Etage
+        /// wirklich zu schaffen dauert Minuten, und die Fahrt ist die Stelle mit dem Risiko - sie
+        /// greift in den CharacterController und in die Blende ein.
+        /// </summary>
+        public void RideLiftForCapture()
+        {
+            if (!ended) StartCoroutine(RideLift());
+        }
+
+        /// <summary>
+        /// Die Aufzugsfahrt zwischen zwei Etagen.
+        ///
+        /// Vorher war der Etagenwechsel ein harter Schnitt: eine Etage verschwand, die naechste war
+        /// da. Der Aufstieg zerfiel dadurch in einzelne Raeume statt sich als ein Turm zu lesen - und
+        /// der Aufzug ist in R.I.S.E. genau der Moment, in dem die Gruppe durchatmet und sichtbar
+        /// steigt. Jetzt: die Gruppe hebt mit der Plattform ab, das Bild wird schwarz, die Wahl
+        /// faellt waehrend der Fahrt, und oben kommt sie auf der naechsten Etage an.
+        /// </summary>
+        private IEnumerator RideLift()
+        {
+            if (ended) yield break;
+            var riders = Riders();
+            var lifted = new Vector3[riders.Length];
+            for (var i = 0; i < riders.Length; i++) lifted[i] = riders[i].position;
+
+            Sfx.Play2D(Sound.LiftRise);
+            const float climbSeconds = 1.5f;
+            const float climbHeight = 11f;
+            var elapsed = 0f;
+            while (elapsed < climbSeconds)
+            {
+                var t = elapsed / climbSeconds;
+                // Langsam anfahren, gleichmaessig weiter: so liest es sich als Maschine, nicht als Sprung.
+                var height = Mathf.SmoothStep(0f, 1f, Mathf.Min(1f, t * 1.35f)) * climbHeight;
+                for (var i = 0; i < riders.Length; i++)
+                {
+                    if (!riders[i]) continue;
+                    var target = new Vector3(lifted[i].x, lifted[i].y + height, lifted[i].z);
+                    // Der Held geht ueber dieselbe Sperre wie beim Schmiedesturz: sonst zieht ihn
+                    // sein eigener Controller im selben Bild wieder herunter.
+                    if (riders[i] == player && playerController) playerController.Airborne(target);
+                    else riders[i].position = target;
+                }
+                // Die letzte halbe Sekunde schliesst die Blende.
+                if (t > 0.66f) hud.Fade(1f, 0.45f);
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            hud.Fade(1f, 0.15f);
+            while (!hud.FadeOpaque) yield return null;
+
+            // Oben angekommen: jetzt faellt die Wahl, danach steht die neue Etage.
+            // Sperre loesen, bevor die naechste Etage die Gruppe setzt.
+            if (playerController) playerController.Land(player.position);
+            hud.ShowFloorUpgrade(() => hud.ShowRoutes(roomIndex + 1, kind =>
+            {
+                StartRoom(kind);
+                Sfx.Play2D(Sound.LiftArrive);
+                hud.Fade(0f, 0.55f);
+            }));
+        }
+
+        /// <summary>
+        /// Wer mitfaehrt: der Held und die Bots. Die Kamera bleibt aussen vor - sie folgt dem Helden
+        /// ohnehin jedes Bild, und wuerde man sie zusaetzlich anheben, fuehre sie doppelt.
+        /// </summary>
+        private Transform[] Riders()
+        {
+            var list = new System.Collections.Generic.List<Transform>();
+            if (player) list.Add(player);
+            foreach (var companion in companions)
+                if (companion) list.Add(companion.transform);
+            return list.ToArray();
         }
 
         private void OnPlayerDied()

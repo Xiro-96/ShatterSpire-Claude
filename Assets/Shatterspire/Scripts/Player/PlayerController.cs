@@ -64,6 +64,8 @@ namespace Shatterspire
 
         public void Teleport(Vector3 position)
         {
+            // Eine Versetzung beendet immer auch einen Flug - sonst bliebe der Held gesperrt.
+            airborne = false;
             var wasEnabled = motor.enabled;
             motor.enabled = false;
             transform.position = position;

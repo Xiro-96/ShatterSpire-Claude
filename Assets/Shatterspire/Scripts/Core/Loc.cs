@@ -230,6 +230,7 @@ namespace Shatterspire
             { "+25% damage for every action.", "+25 % Schaden für jede Aktion." },
             { "+12% critical chance.", "+12 % kritische Chance." },
             { "+50% critical damage.", "+50 % kritischer Schaden." },
+            { "READY", "BEREIT" },
             { "HAMMER", "HAMMER" },
             { "ARC BOLT", "LICHTBOGEN" },
             { "GROUND BREAKER", "ERDBRECHER" },

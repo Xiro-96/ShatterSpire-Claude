@@ -45,6 +45,7 @@ namespace Shatterspire
         private Image xpFill;
         private Text levelText;
         private Text goldText;
+        private ScreenFade screenFade;
         private CanvasGroup announcementGroup;
         private Text announcementText;
         private float announcementUntil;
@@ -185,6 +186,17 @@ namespace Shatterspire
             CreateTeamFrames(root.transform);
             // Die Bedienflaechen zuerst: sie liegen damit unter den Aktionsknoepfen, und ein Tipp auf
             // einen Knopf geht an den Knopf, nicht an den Stick darunter.
+            // Gefahr von aussen und kritisches Leben. Liegt unter den Bedienflaechen, damit nichts
+            // davon einen Tipp abfaengt.
+            var threats = new GameObject("Threat Layer", typeof(RectTransform), typeof(ThreatMarkers));
+            threats.transform.SetParent(root.transform, false);
+            var threatRect = (RectTransform)threats.transform;
+            threatRect.anchorMin = Vector2.zero;
+            threatRect.anchorMax = Vector2.one;
+            threatRect.offsetMin = Vector2.zero;
+            threatRect.offsetMax = Vector2.zero;
+            threats.GetComponent<ThreatMarkers>().Configure(playerTransform, Camera.main, canvas);
+
             CreateTouchSticks(root.transform);
             CreateActionCluster(root.transform);
             CreateAnnouncement(root.transform);
@@ -521,7 +533,8 @@ namespace Shatterspire
                 if (ready && !ultimateWasReady)
                 {
                     ultimateButton.Punch();
-                    ShowAnnouncement($"{weapon.UltimateName} READY\n{(Application.isMobilePlatform ? "TAP ULTIMATE" : "PRESS R")}", 1.2f);
+                    ShowAnnouncement(Loc.T(weapon.UltimateName) + " " + Loc.T("READY") + "\n" +
+                        Loc.T(Application.isMobilePlatform ? "TAP ULTIMATE" : "PRESS R"), 1.2f);
                 }
                 ultimateWasReady = ready;
             }
@@ -789,6 +802,16 @@ namespace Shatterspire
             view.BadgeCount = count;
         }
 
+        /// <summary>Blende auf einen Wert fahren. 1 ist schwarz. Gebraucht von der Aufzugsfahrt.</summary>
+        public void Fade(float target, float seconds = 0.4f)
+        {
+            if (!screenFade) screenFade = ScreenFade.Attach(canvas.transform);
+            screenFade.To(target, seconds);
+        }
+
+        /// <summary>Die Blende deckt vollstaendig ab - der Etagenwechsel ist jetzt unsichtbar.</summary>
+        public bool FadeOpaque => screenFade && screenFade.Opaque;
+
         public void ShowFloorUpgrade(Action afterSelection)
         {
             // Reihenfolge zwischen zwei Etagen: erst eine Verbesserung waehlen, dann der Haendler,
@@ -892,7 +915,7 @@ namespace Shatterspire
                 var rarity = perk.Rarity.ToString().ToUpperInvariant() +
                              (perk.Heroes.Length == 1 ? "  ·  " + HeroCatalog.Name(hero) + " ONLY" : string.Empty);
                 var button = CreateButton(modal.transform,
-                    $"[{i + 1}]  {Loc.T(PerkCatalog.SlotLabel(perk.Slot, hero))}\n{Loc.T(perk.Name)}\n\n{Loc.T(perk.Description)}\n\n{rarity}",
+                    $"[{i + 1}]  {PerkCatalog.SlotLabel(perk.Slot, hero)}\n{Loc.T(perk.Name)}\n\n{Loc.T(perk.Description)}\n\n{rarity}",
                     new Vector2(-390f + i * 390f, -20f), new Vector2(340f, 420f), perk.Color);
                 button.onClick.AddListener(() =>
                 {

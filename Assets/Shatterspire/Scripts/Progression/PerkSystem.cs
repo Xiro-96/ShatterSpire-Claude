@@ -146,13 +146,18 @@ namespace Shatterspire
         };
 
         /// <summary>Aktion samt Name beim Helden, etwa "HEAVY · GROUND BREAKER".</summary>
+        /// <summary>
+        /// Aktion samt Name beim Helden, etwa "SCHWER · ERDBRECHER". Beide Haelften laufen einzeln
+        /// durch die Sprachschicht - zusammengesetzt wuerde der Text keinen Tabelleneintrag treffen
+        /// und englisch stehen bleiben.
+        /// </summary>
         public static string SlotLabel(ActionSlot slot, HeroClassId hero) => slot switch
         {
-            ActionSlot.Light => "LIGHT · " + HeroCatalog.LightAttackName(hero),
-            ActionSlot.Heavy => "HEAVY · " + HeroCatalog.HeavyAttackName(hero),
-            ActionSlot.Skill => "SKILL · " + HeroCatalog.SkillName(hero),
-            ActionSlot.Ultimate => "ULTIMATE · " + HeroCatalog.UltimateName(hero),
-            _ => SlotLabel(slot)
+            ActionSlot.Light => Loc.T("LIGHT") + " · " + Loc.T(HeroCatalog.LightAttackName(hero)),
+            ActionSlot.Heavy => Loc.T("HEAVY") + " · " + Loc.T(HeroCatalog.HeavyAttackName(hero)),
+            ActionSlot.Skill => Loc.T("SKILL") + " · " + Loc.T(HeroCatalog.SkillName(hero)),
+            ActionSlot.Ultimate => Loc.T("ULTIMATE") + " · " + Loc.T(HeroCatalog.UltimateName(hero)),
+            _ => Loc.T(SlotLabel(slot))
         };
 
         /// <summary>

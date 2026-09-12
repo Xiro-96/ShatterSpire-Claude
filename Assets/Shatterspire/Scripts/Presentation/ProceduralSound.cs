@@ -13,7 +13,8 @@ namespace Shatterspire
         HeavyReady, UltimateRise, CoreActivated, FloorCleared,
         UiClick, UiConfirm, PlayerHurt, Ambience,
         // Die drei Ultimates vom 12.09.
-        PlungeRise, PlungeImpact, RiftOpen, FocusEnter, FocusExtend, FocusEnd
+        PlungeRise, PlungeImpact, RiftOpen, FocusEnter, FocusExtend, FocusEnd,
+        LiftRise, LiftArrive, Heartbeat
     }
 
     /// <summary>
@@ -93,6 +94,7 @@ namespace Shatterspire
             Sound.Footstep or Sound.HitLight or Sound.Swing => 0.1f,
             // Die Ultimate-Klaenge sollen jedes Mal gleich klingen: sie sind ein Ereignis, kein Treffer.
             Sound.PlungeImpact or Sound.RiftOpen or Sound.FocusEnter or Sound.FocusEnd => 0.01f,
+            Sound.LiftRise or Sound.LiftArrive => 0f,
             _ => 0.055f
         };
 
@@ -128,6 +130,8 @@ namespace Shatterspire
             Sound.PlungeImpact => 0.5f,
             Sound.RiftOpen => 0.4f,
             Sound.PlungeRise or Sound.FocusEnter => 0.2f,
+            Sound.LiftRise or Sound.LiftArrive => 0.34f,
+            Sound.Heartbeat => 0.1f,
             Sound.Block or Sound.Shockwave or Sound.HitHeavy or Sound.Death => 0.32f,
             Sound.CoreActivated or Sound.FloorCleared or Sound.HeavyReady => 0.3f,
             _ => 0.24f
@@ -161,6 +165,9 @@ namespace Shatterspire
             Sound.FocusEnter => 0.7f,
             Sound.FocusExtend => 0.14f,
             Sound.FocusEnd => 0.5f,
+            Sound.Heartbeat => 0.45f,
+            Sound.LiftRise => 1.6f,
+            Sound.LiftArrive => 0.9f,
             _ => 0.4f
         };
 
@@ -383,6 +390,28 @@ namespace Shatterspire
                     break;
 
                 // ── Hintergrund ─────────────────────────────────────────
+                case Sound.Heartbeat:
+                    // Zwei tiefe Stoesse wie ein Herzschlag. Bewusst sehr tief und kurz: es soll
+                    // im Bauch sitzen und nicht mit dem Kampf um Aufmerksamkeit streiten.
+                    Body(buffer, ref noise, 0f, 48f, 0.07f, 0.16f, 1f);
+                    Body(buffer, ref noise, 0.14f, 44f, 0.06f, 0.14f, 0.7f);
+                    break;
+                case Sound.LiftRise:
+                    // Maschine unter den Fuessen: ein tiefer Motor, der anlaeuft, dazu Metall, das
+                    // sich spannt. Steigende Tonhoehe sagt dem Ohr, dass es nach oben geht.
+                    AddTone(buffer, 0f, 1.5f, 42f, 66f, Wave.Saw, 0.5f, 0.35f, 0.15f);
+                    AddTone(buffer, 0f, 1.5f, 84f, 133f, Wave.Sine, 0.3f, 0.35f, 0.15f);
+                    AddSweptNoise(buffer, ref noise, 0f, 1.5f, 0.35f, 0.4f, 0.4f, 260f, 900f, 60f);
+                    for (var i = 0; i < 5; i++)
+                        AddResonator(buffer, ref noise, 0.18f + i * 0.28f, 480f + i * 90f, 0.12f, 0.3f, 0.002f);
+                    break;
+                case Sound.LiftArrive:
+                    // Ankunft: ein Ruck, dann Metall, das zur Ruhe kommt.
+                    Strike(buffer, ref noise, 0f, 0.004f, 5000f, 0.8f);
+                    Body(buffer, ref noise, 0f, 58f, 0.14f, 0.4f, 1f);
+                    Knock(buffer, ref noise, 0f, 620f, 0.12f, 0.6f);
+                    AddResonator(buffer, ref noise, 0.02f, 1240f, 0.3f, 0.3f, 0.0015f);
+                    break;
                 case Sound.PlungeRise:
                     // Absprung: Luft, die unter dem Helden wegzieht, und eine steigende Spannung.
                     AddSweptNoise(buffer, ref noise, 0f, 0.62f, 0.8f, 0.1f, 1.6f, 300f, 2600f, 180f);

@@ -56,6 +56,12 @@ namespace Shatterspire
         public bool IsArriving => Time.time - spawnedAt < ArrivalGraceSeconds;
         /// <summary>Wartet im Lager und hat noch niemanden bemerkt.</summary>
         public bool IsIdle => state == State.Idle;
+        /// <summary>
+        /// Holt gerade zum Angriff aus. Das HUD zeigt solche Gegner am Bildrand an, wenn sie
+        /// ausserhalb des Bildes stehen - auf einem Telefon ist der Blickwinkel eng, und ein
+        /// Armbrustbolzen aus dem Nichts liest sich als unfair, nicht als schwer.
+        /// </summary>
+        public bool IsTelegraphing => state == State.Telegraph;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetRegistry() => ActiveAgents.Clear();
