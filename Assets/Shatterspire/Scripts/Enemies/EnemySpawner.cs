@@ -28,6 +28,24 @@ namespace Shatterspire
         /// sauber wechseln.
         /// </summary>
         private FloorModifier modifier = FloorModifierCatalog.For(FloorModifierId.None);
+        /// <summary>
+        /// Seed des laufenden Aufstiegs. Liegt wie die Anomalie an der Instanz, nicht in einer
+        /// statischen Ablage: aus ihm zieht der Spawner alles, was auf allen Geraeten gleich
+        /// ausfallen muss - welcher Core Verteidiger hat und welche Eigenschaften ein Gegner traegt.
+        /// </summary>
+        private int runSeed;
+        /// <summary>Herkunft eines Gegners, oberste Stelle seines Salzes.</summary>
+        private const int OriginCamp = 1;
+        private const int OriginDefender = 2;
+        private const int OriginBoss = 3;
+
+        /// <summary>
+        /// Salz der Frage nach den Verteidigern. Weit weg von den Gegner-Salzen und von den Salzen
+        /// der Route (<see cref="PathCatalog"/>) und der Anomalie (<see cref="FloorModifierCatalog"/>):
+        /// zwei Fragen mit demselben Salz haetten auf derselben Etage immer dieselbe Antwort.
+        /// </summary>
+        private const int SaltDefenders = 500;
+
         private bool spawningEncounter;
         private int encounterTotal;
         private int encounterDefeated;
@@ -46,15 +64,40 @@ namespace Shatterspire
 
         public void Configure(Transform target) => player = target;
 
-        public void BeginFloor(FloorNavigation floorNavigation, int floor)
-            => BeginFloor(floorNavigation, floor, FloorModifierId.None);
-
-        public void BeginFloor(FloorNavigation floorNavigation, int floor, FloorModifierId anomaly)
+        /// <summary>
+        /// Beginnt eine Etage. Der Lauf-Seed gehoert dazu: ohne ihn koennte der Spawner seine
+        /// Entscheidungen nur wuerfeln, und im Co-op saehen drei Spieler drei verschiedene Etagen.
+        /// </summary>
+        public void BeginFloor(FloorNavigation floorNavigation, int floor, FloorModifierId anomaly, int seed)
         {
             Clear();
             navigation = floorNavigation;
             activeFloor = Mathf.Max(1, floor);
             modifier = FloorModifierCatalog.For(anomaly);
+            runSeed = seed;
+        }
+
+        /// <summary>
+        /// Salz eines einzelnen Gegners: Herkunft, Nummer der Gruppe und Platz darin. Diese drei
+        /// Zahlen stehen auf jedem Geraet gleich fest - anders als GetInstanceID, der von der
+        /// Reihenfolge der Objekterzeugung abhaengt und schon zwischen zwei Starts anders ausfaellt.
+        /// Die Herkunft steht oben, damit der zweite Gegner eines Lagers und der zweite Verteidiger
+        /// eines Cores nicht dieselben Streuwerte ziehen. Die Stellen reichen fuer 99 Gegner je
+        /// Gruppe und 999 Gruppen je Etage, weit ueber allem, was eine Etage aufstellt.
+        /// </summary>
+        public static int EnemySalt(int origin, int group, int slot) => origin * 100000 + group * 100 + slot;
+
+        /// <summary>
+        /// Hat dieser Core Verteidiger? Im Schatzraum nie, im Mysterium in der Haelfte der Faelle,
+        /// sonst immer. Aus dem Lauf-Seed gezogen und nicht aus <see cref="UnityEngine.Random"/>:
+        /// im Co-op muessen alle drei Spieler denselben Raum vorfinden, sonst wartet einer auf eine
+        /// Welle, die bei den anderen nie erscheint.
+        /// </summary>
+        public static bool EncounterHasDefenders(RoomKind kind, int runSeed, int floor, int encounterIndex)
+        {
+            if (kind == RoomKind.Treasure) return false;
+            if (kind != RoomKind.Mystery) return true;
+            return RunRandom.Chance(runSeed, floor, SaltDefenders + encounterIndex, 0.5f);
         }
 
         public void SpawnCamps(FloorLayout layout, RoomKind kind)
@@ -77,7 +120,7 @@ namespace Shatterspire
                     // Jeder bleibt an seinem Platz im Lager, statt zur Mitte zu schlurfen:
                     // schlafende Skelette liegen dort, wo sie liegen.
                     var spot = Walkable(position);
-                    var agent = Spawn(enemyKind, spot, spot, true);
+                    var agent = Spawn(enemyKind, spot, spot, true, EnemySalt(OriginCamp, room.Index, i));
                     camps.Add(agent);
                     campOf[agent] = room.Index;
                     agent.Engaged += OnCampEngaged;
@@ -92,7 +135,7 @@ namespace Shatterspire
             activeFloor = Mathf.Max(1, floorIndex);
             bossClearReported = false;
             // Der Warden wartet in seinem Raum und greift an, sobald die Gruppe eintritt.
-            bosses.Add(Spawn(EnemyKind.IronWarden, position, position, true));
+            bosses.Add(Spawn(EnemyKind.IronWarden, position, position, true, EnemySalt(OriginBoss, 0, 0)));
             GameEvents.RaiseEncounterChanged(1, 1, true);
         }
 
@@ -109,7 +152,7 @@ namespace Shatterspire
             encounterClearReported = false;
             encounterDefeated = 0;
 
-            var noDefenders = kind == RoomKind.Treasure || (kind == RoomKind.Mystery && UnityEngine.Random.value < 0.5f);
+            var noDefenders = !EncounterHasDefenders(kind, runSeed, activeFloor, encounterIndex);
             if (noDefenders)
             {
                 encounterTotal = 0;
@@ -170,7 +213,10 @@ namespace Shatterspire
                 yield return new WaitForSeconds(wave == 0 ? 0.58f : 0.72f);
                 for (var localIndex = 0; localIndex < positions.Count; localIndex++)
                 {
-                    encounter.Add(Spawn(kinds[localIndex], positions[localIndex], center, false));
+                    // spawned waechst erst nach der Welle, also ist spawned + localIndex derselbe
+                    // Platz i wie oben beim Aufstellen - und damit dasselbe Salz.
+                    encounter.Add(Spawn(kinds[localIndex], positions[localIndex], center, false,
+                        EnemySalt(OriginDefender, encounterIndex, spawned + localIndex)));
                     yield return new WaitForSeconds(0.075f);
                 }
                 spawned += inWave;
@@ -185,9 +231,9 @@ namespace Shatterspire
             ReportEncounterClearIfReady();
         }
 
-        private EnemyAgent Spawn(EnemyKind kind, Vector3 position, Vector3 home, bool idle)
+        private EnemyAgent Spawn(EnemyKind kind, Vector3 position, Vector3 home, bool idle, int salt)
         {
-            var enemy = EnemyFactory.Create(kind, Walkable(position), player, activeFloor, modifier);
+            var enemy = EnemyFactory.Create(kind, Walkable(position), player, activeFloor, modifier, runSeed, salt);
             enemy.SetBehaviour(navigation, home, idle);
             enemy.Defeated += OnDefeated;
             return enemy;
@@ -213,7 +259,7 @@ namespace Shatterspire
             // Belohnung hier und nicht in einer statischen Kasse.
             // Lebenskugel fallen lassen. Liegt beim Spawner, weil er den Spieler kennt und den
             // Gegner in derselben Meldung hat.
-            if (player) HealthOrb.TryDrop(enemy.Kind, enemy.transform.position, player);
+            if (player) HealthOrb.TryDrop(enemy.Kind, enemy.transform.position, player, runSeed, activeFloor, enemy.Salt);
             if (player && player.TryGetComponent<RunWallet>(out var wallet))
             {
                 var reward = RunWallet.RewardFor(enemy.Kind, activeFloor) * modifier.Gold;

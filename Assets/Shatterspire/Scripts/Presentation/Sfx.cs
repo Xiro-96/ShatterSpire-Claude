@@ -92,6 +92,8 @@ namespace Shatterspire
             source.loop = false;
             source.volume = Mathf.Clamp01(gain) * volume;
             var spread = ProceduralSound.PitchSpreadFor(sound);
+            // Variante und Tonhoehe bleiben gewuerfelt: sie entscheiden nichts am Spiel, sie
+            // verhindern nur, dass zehn gleiche Treffer wie ein einziger langer Ton klingen.
             source.pitch = spread <= 0f ? 1f : 1f + Random.Range(-spread, spread);
             source.Play();
         }
