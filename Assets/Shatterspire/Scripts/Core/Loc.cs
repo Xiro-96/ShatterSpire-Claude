@@ -406,6 +406,7 @@ namespace Shatterspire
             { "SHARDS AT STAKE", "SPLITTER IM SPIEL" },
             { "CLEARED", "GESCHAFFT" },
             { "CORE DEFENDERS", "KERN-VERTEIDIGER" },
+            { "LEAVE TRADER", "WEITERGEHEN" },
             { "REMAINING", "ÜBRIG" },
             { "EXTRACT", "AUSSTEIGEN" },
             { "SECURE ALL SHARDS", "ALLE SPLITTER SICHERN" },

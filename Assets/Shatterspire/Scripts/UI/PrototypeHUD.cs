@@ -976,14 +976,35 @@ namespace Shatterspire
         /// <summary>Die Blende deckt vollstaendig ab - der Etagenwechsel ist jetzt unsichtbar.</summary>
         public bool FadeOpaque => screenFade && screenFade.Opaque;
 
+        /// <summary>
+        /// Zwischen zwei Etagen bleibt genau ein Fenster: die Verbesserung. Danach die Route.
+        ///
+        /// Vorher standen drei Vollbild-Fenster hintereinander - Verbesserung, Haendler, Route.
+        /// Auf fuenfzehn Etagen sind das fuenfundvierzig, und der Haendler stand jedes Mal da,
+        /// auch mit null Gold. Er ist jetzt ein Stand im Aufzugsraum, an dem man vorbeikommt:
+        /// eine Entscheidung statt einer Unterbrechung.
+        /// </summary>
         public void ShowFloorUpgrade(Action afterSelection)
         {
-            // Reihenfolge zwischen zwei Etagen: erst eine Verbesserung waehlen, dann der Haendler,
-            // danach geht es weiter. Wer beim Haendler nichts kauft, verliert nichts.
-            postPerkCallback = () => ShowShop(afterSelection);
+            postPerkCallback = afterSelection;
             selectingLevelPerk = false;
             ShowPerkChoice();
         }
+
+        /// <summary>
+        /// Oeffnet den Haendler von aussen - vom Stand im Aufzugsraum. Gibt false zurueck, wenn
+        /// gerade schon ein Fenster offen steht.
+        /// </summary>
+        public bool OpenTrader(Action afterShop, bool fromStall = false)
+        {
+            if (modal || !wallet) return false;
+            shopAtStall = fromStall;
+            ShowShop(afterShop);
+            return true;
+        }
+
+        /// <summary>Am Stand geht man weiter, zwischen zwei Etagen steigt man auf.</summary>
+        private bool shopAtStall;
 
         /// <summary>
         /// Haendler zwischen den Etagen. Gold kommt aus erledigten Gegnern, die Preise steigen mit
@@ -1038,7 +1059,8 @@ namespace Shatterspire
                 }
                 modalButtons.Add(button);
             }
-            var leave = CreateButton(modal.transform, Loc.T("CONTINUE CLIMB"), new Vector2(0f, -330f),
+            var leave = CreateButton(modal.transform, Loc.T(shopAtStall ? "LEAVE TRADER" : "CONTINUE CLIMB"),
+                new Vector2(0f, -330f),
                 new Vector2(420f, 90f), new Color(0.2f, 0.82f, 0.6f));
             leave.onClick.AddListener(() =>
             {

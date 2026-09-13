@@ -338,12 +338,29 @@ namespace Shatterspire
             var caches = FindObjectsByType<TreasureCache>(FindObjectsSortMode.None);
             var altars = FindObjectsByType<MysteryAltar>(FindObjectsSortMode.None);
             Transform goal = Nearest(caches);
+            // Ohne Horte und ohne Altaere bleibt der Haendlerstand im Aufzugsraum - auch der ist
+            // neu und soll auf ein Bild.
+            if (!goal && altars.Length == 0)
+            {
+                var stall = FindFirstObjectByType<TraderStall>();
+                if (stall) goal = stall.transform;
+            }
             if (!goal && altars.Length > 0)
             {
                 // Der grosse Einsatz steht rechts; ihn zu waehlen zeigt beide Seiten der Wette.
                 foreach (var altar in altars)
                     if (altar.Offer.Stake == WagerStake.Large) goal = altar.transform;
                 if (!goal) goal = altars[0].transform;
+            }
+            if (goal && Vector3.Distance(player.position, goal.position) > 12f)
+            {
+                // Zu weit fuer die Vorfuehrung, die nicht pfadfinden kann: heransetzen.
+                var navigation = FindFirstObjectByType<RunDirector>()?.Navigation;
+                var approach = goal.position + new Vector3(-5.5f, 0f, -4.5f);
+                if (navigation != null) approach = navigation.ClampToWalkable(approach, 0.6f);
+                if (playerController) playerController.Teleport(approach);
+                else player.position = approach;
+                yield return new WaitForSecondsRealtime(0.3f);
             }
             if (!goal && caches.Length > 0)
             {

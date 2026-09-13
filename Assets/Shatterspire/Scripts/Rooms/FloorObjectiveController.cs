@@ -48,10 +48,20 @@ namespace Shatterspire
                 nodeObject.transform.SetParent(transform, false);
                 nodeObject.transform.position = room.CorePosition;
                 var node = nodeObject.AddComponent<RiftCellNode>();
-                node.Configure(this, player, number, kind == RoomKind.Elite ? 0.9f : 0.7f);
+                // Kuerzer als vorher (0,7 bzw. 0,9): das Stehen im Ring ist der Moment, in dem
+                // der Core kippt, nicht eine Wartezeit. Zweimal je Etage gerechnet war knapp eine
+                // halbe Sekunde davon reine Totzeit.
+                node.Configure(this, player, number, kind == RoomKind.Elite ? 0.6f : 0.45f);
                 node.SetCurrent();
                 nodes.Add(node);
             }
+
+            // Der Haendler steht im Aufzugsraum, seitlich neben dem Aufzug: man kommt ohnehin
+            // vorbei, und ein Umweg von zwei Schritten ist eine Entscheidung, kein Weg.
+            var stallObject = new GameObject("Trader Stall");
+            stallObject.transform.SetParent(transform, false);
+            stallObject.transform.position = StallSpot(layout);
+            stallObject.AddComponent<TraderStall>().Configure(player);
 
             var gateObject = new GameObject("Tower Lift");
             gateObject.transform.SetParent(transform, false);
@@ -257,6 +267,24 @@ namespace Shatterspire
             GameEvents.RaiseObjectiveChanged(nodes.Count, nodes.Count, "FLOOR SECURED");
             Sfx.Play2D(Sound.FloorCleared);
             completed?.Invoke();
+        }
+
+        /// <summary>
+        /// Wo der Stand steht: im Aufzugsraum, mit Abstand zur Plattform.
+        ///
+        /// Die erste Fassung setzte ihn vier Meter neben den Aufzugspunkt - er stand damit halb auf
+        /// der Plattform, und beim Abheben waere er mitgefahren. Jetzt weiter weg, an die Wand
+        /// geschoben, aber innerhalb des Raums.
+        /// </summary>
+        private static Vector3 StallSpot(FloorLayout layout)
+        {
+            var spot = layout.ExitPoint + new Vector3(6f, 0f, -3.4f);
+            foreach (var room in layout.Rooms)
+            {
+                if (!room.Bounds.Contains(layout.ExitPoint)) continue;
+                return room.Bounds.Clamp(spot, 2.6f);
+            }
+            return spot;
         }
 
         private static float FlatDistance(Vector3 a, Vector3 b)
