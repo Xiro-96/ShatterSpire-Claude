@@ -1327,6 +1327,16 @@ namespace Shatterspire
                 $"{Loc.T("SHARDS")}  +{earned}  ·  {Loc.T("TOTAL")} {save.shards}      {Loc.T("TOKENS")}  {save.tokens}"
                 + $"      {Loc.T("FLOOR")}  {Mathf.Max(1, roomsCleared)}  ·  {Loc.T("BEST")} {save.bestFloor}",
                 26, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
+            // Was der Lauf dem gespielten Helden gebracht hat. Steht neben der Kasse, weil es
+            // dieselbe Frage beantwortet: was bleibt davon.
+            var heroExperience = MetaSaveSystem.HeroExperience(save, runConfig.Hero);
+            var heroLevel = HeroProgress.LevelFor(heroExperience);
+            var gained = HeroProgress.ExperienceFor(result);
+            CreateText(walletPanel.transform,
+                $"{HeroCatalog.Name(runConfig.Hero)}  ·  {Loc.T("HERO LEVEL")} {heroLevel}"
+                + $"  ·  {Loc.T(HeroProgress.Title(heroLevel))}  ·  +{gained:N0} {Loc.T("XP")}",
+                20, TextAnchor.MiddleCenter, new Vector2(0, -34), new Vector2(1010, 28),
+                new Vector2(0.5f, 0.5f)).color = HeroProgress.TitleColor(heroLevel);
             var restart = CreateButton(modal.transform, Loc.T("CLIMB AGAIN"), new Vector2(225, -225), new Vector2(360, 96), new Color(0.1f, 0.86f, 0.72f));
             restart.onClick.AddListener(RestartRun);
             modalButtons.Add(restart);

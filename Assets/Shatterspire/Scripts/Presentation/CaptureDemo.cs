@@ -25,6 +25,23 @@ namespace Shatterspire
 
         public static bool Requested => Array.IndexOf(Environment.GetCommandLineArgs(), Flag) >= 0;
 
+        /// <summary>Nur die Lobby ablichten, statt in einen Aufstieg zu springen (-shatterspire-menu).</summary>
+        public static bool MenuOnly
+            => Array.IndexOf(Environment.GetCommandLineArgs(), "-shatterspire-menu") >= 0;
+
+        /// <summary>Wohin die Bilder gehen. Auch der Menue-Modus braucht das, ohne eine Instanz zu haben.</summary>
+        public static string Folder
+        {
+            get
+            {
+                var args = Environment.GetCommandLineArgs();
+                var index = Array.IndexOf(args, Flag);
+                return index >= 0 && index + 1 < args.Length && !args[index + 1].StartsWith("-")
+                    ? args[index + 1]
+                    : Path.Combine(Application.persistentDataPath, "captures");
+            }
+        }
+
         /// <summary>
         /// Welche Route die Vorfuehrung am Aufzug nimmt, aus -shatterspire-route. Ohne Angabe die
         /// erste. Anders kaeme nie ein Bild aus Schatzkammer oder Raetselraum zustande.
@@ -80,11 +97,7 @@ namespace Shatterspire
             player = hero.transform;
             input = hero.GetComponent<PlayerInputRouter>();
             view = runCamera ? runCamera.GetComponent<Camera>() : Camera.main;
-            var args = Environment.GetCommandLineArgs();
-            var index = Array.IndexOf(args, Flag);
-            folder = index >= 0 && index + 1 < args.Length && !args[index + 1].StartsWith("-")
-                ? args[index + 1]
-                : Path.Combine(Application.persistentDataPath, "captures");
+            folder = Folder;
             Directory.CreateDirectory(folder);
             StartCoroutine(Run());
         }

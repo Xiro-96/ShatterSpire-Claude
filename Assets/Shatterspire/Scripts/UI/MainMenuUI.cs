@@ -167,13 +167,51 @@ namespace Shatterspire
             var name = Text(screen.transform, HeroCatalog.Name(hero), 78, TextAnchor.UpperLeft, new Vector2(52, -262), new Vector2(560, 92), new Vector2(0, 1));
             name.fontStyle = FontStyle.Bold;
             Text(screen.transform, HeroCatalog.Role(hero), 22, TextAnchor.UpperLeft, new Vector2(58, -350), new Vector2(560, 30), new Vector2(0, 1)).color = accent;
+            BuildHeroLevel(hero);
             Text(screen.transform,
                 Loc.T("LIGHT") + "   " + Loc.T(HeroCatalog.LightAttackName(hero)) + "\n" +
                 Loc.T("HEAVY") + "   " + Loc.T(HeroCatalog.HeavyAttackName(hero)) + "\n" +
                 Loc.T("SKILL") + "   " + Loc.T(HeroCatalog.SkillName(hero)) + "\n" +
                 Loc.T("ULTIMATE") + "   " + Loc.T(HeroCatalog.UltimateName(hero)) + "\n\n" +
                 Loc.T("HP") + "   " + HeroCatalog.BaseHealth(hero).ToString("0"),
-                19, TextAnchor.UpperLeft, new Vector2(58, -396), new Vector2(520, 150), new Vector2(0, 1)).color = new Color(0.86f, 0.92f, 0.98f);
+                19, TextAnchor.UpperLeft, new Vector2(58, -452), new Vector2(520, 150), new Vector2(0, 1)).color = new Color(0.86f, 0.92f, 0.98f);
+        }
+
+        /// <summary>
+        /// Stufe, Rang und Fortschritt dieses Helden.
+        ///
+        /// Der dauerhafte Fortschritt war bisher gemeinsam: wer den Waechter spielte, machte damit
+        /// auch den Jaeger staerker. Hier steht, was dieser eine Held bisher erreicht hat - und was
+        /// ihm bis zur naechsten Stufe fehlt.
+        /// </summary>
+        private void BuildHeroLevel(HeroClassId hero)
+        {
+            var experience = MetaSaveSystem.HeroExperience(MetaSaveSystem.Load(), hero);
+            var level = HeroProgress.LevelFor(experience);
+            var titleColor = HeroProgress.TitleColor(level);
+
+            var line = Text(screen.transform,
+                $"{Loc.T("HERO LEVEL")} {level}  ·  {Loc.T(HeroProgress.Title(level))}",
+                20, TextAnchor.UpperLeft, new Vector2(58, -378), new Vector2(560, 28), new Vector2(0, 1));
+            line.color = titleColor;
+            line.fontStyle = FontStyle.Bold;
+
+            var barBack = CreateImage(screen.transform, "Hero Level Bar", new Color(0.06f, 0.09f, 0.14f, 0.95f),
+                new Vector2(58, -404), new Vector2(320, 12), new Vector2(0, 1));
+            barBack.raycastTarget = false;
+            var fill = CreateImage(barBack.transform, "Hero Level Fill", titleColor,
+                Vector2.zero, new Vector2(320f * HeroProgress.ProgressInLevel(experience), 12), new Vector2(0, 1));
+            fill.raycastTarget = false;
+
+            var remaining = HeroProgress.ToNextLevel(experience);
+            var hint = level >= HeroProgress.MaximumLevel
+                ? Loc.T("HIGHEST HERO LEVEL")
+                : $"{remaining:N0} {Loc.T("TO NEXT LEVEL")}";
+            if (level > 1)
+                hint += $"   ·   +{HeroProgress.HealthBonus(level):P0} {Loc.T("HP")}"
+                        + $"   +{HeroProgress.DamageBonus(level):P0} {Loc.T("DAMAGE")}";
+            Text(screen.transform, hint, 16, TextAnchor.UpperLeft, new Vector2(58, -420),
+                new Vector2(560, 24), new Vector2(0, 1)).color = new Color(0.62f, 0.72f, 0.84f);
         }
 
         private void BuildRelicSlots(Color accent)
@@ -184,14 +222,18 @@ namespace Shatterspire
             {
                 var filled = i < config.Relics.Count;
                 var label = filled ? Loc.T(RelicCatalog.Name(config.Relics[i])) : Loc.T("+ EMPTY");
+                // Kleinere Schrift als die uebrigen Knoepfe: deutsche Reliktnamen wie
+                // "Windschritt-Siegel" sind laenger als die englischen und liefen aus dem Feld.
                 Button(screen.transform, label, new Vector2(56 + i * 166, 108), new Vector2(154, 96), new Vector2(0, 0),
-                    filled ? accent : new Color(0.32f, 0.4f, 0.5f), ShowRelics, labelSize: 16);
+                    filled ? accent : new Color(0.32f, 0.4f, 0.5f), ShowRelics, labelSize: 13);
             }
-            Button(screen.transform, "META FORGE", new Vector2(56, 28), new Vector2(486, 62), new Vector2(0, 0),
-                new Color(1f, 0.55f, 0.08f), ShowForge, labelSize: 20);
+            // Schmiede und Sprache teilen sich die unterste Zeile. Vorher lag der Sprachschalter
+            // bei y=100 genau auf den Relikt-Feldern - beide waren uebereinander gezeichnet.
+            Button(screen.transform, "META FORGE", new Vector2(56, 28), new Vector2(238, 62), new Vector2(0, 0),
+                new Color(1f, 0.55f, 0.08f), ShowForge, labelSize: 18);
             // Sprachschalter: der Text steht bewusst in der jeweils anderen Sprache, damit man
             // sieht, worauf man umschaltet. Nach dem Wechsel baut die Lobby sich neu auf.
-            Button(screen.transform, Loc.LanguageName, new Vector2(56, 100), new Vector2(238, 52), new Vector2(0, 0),
+            Button(screen.transform, Loc.LanguageName, new Vector2(304, 28), new Vector2(238, 62), new Vector2(0, 0),
                 new Color(0.35f, 0.55f, 0.72f), () =>
                 {
                     Loc.Toggle();

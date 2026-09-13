@@ -83,6 +83,14 @@ namespace Shatterspire
             Sfx.StartAmbience();
 
             // Automatische Bildkontrolle (-shatterspire-capture): ohne Menue direkt in einen Aufstieg mit Brax.
+            // Mit -shatterspire-menu bleibt die Lobby stehen und wird nur abgelichtet - Heldenkarte,
+            // Stufe und Relikte sind sonst auf keinem Bild zu pruefen.
+            if (CaptureDemo.Requested && CaptureDemo.MenuOnly)
+            {
+                BuildFrontEnd();
+                new GameObject("Menu Capture").AddComponent<MenuCapture>();
+                return;
+            }
             if (CaptureDemo.Requested && !RunLaunchSettings.HasPendingRun)
                 RunLaunchSettings.Prepare(new RunConfig { Hero = CaptureDemo.Hero, Mode = RunMode.Brave });
 
@@ -152,7 +160,15 @@ namespace Shatterspire
 
             var meta = MetaSaveSystem.Load();
             build.ConfigureRun(config.Hero, config, meta);
-            health.Configure(TeamId.Player, HeroCatalog.BaseHealth(config.Hero) + meta.vitalityLevel * 5f);
+            // Heldenstufe: der Aufschlag gilt nur fuer diesen Helden und nur auf sein Grundleben,
+            // nicht auf die gemeinsamen Meta-Upgrades - sonst multiplizierten sich zwei Systeme.
+            var heroLevel = MetaSaveSystem.HeroLevel(meta, config.Hero);
+            var baseHealth = HeroCatalog.BaseHealth(config.Hero) * (1f + HeroProgress.HealthBonus(heroLevel));
+            health.Configure(TeamId.Player, baseHealth + meta.vitalityLevel * 5f);
+            if (heroLevel > 1)
+                Debug.Log($"SHATTERSPIRE Heldenstufe: {config.Hero} auf {heroLevel}, "
+                          + $"+{HeroProgress.HealthBonus(heroLevel):P0} Leben, "
+                          + $"+{HeroProgress.DamageBonus(heroLevel):P0} Schaden.");
             return root;
         }
 

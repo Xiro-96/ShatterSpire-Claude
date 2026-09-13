@@ -43,12 +43,20 @@ namespace Shatterspire
         /// <summary>Zuletzt in der Lobby gewaehlt. Alte Staende ohne die Felder starten mit Ranger und Heroic.</summary>
         public int lastHero;
         public int lastPath = (int)RunMode.Heroic;
+
+        /// <summary>
+        /// Erfahrung je Held, nach <see cref="HeroClassId"/> geordnet. Kann kuerzer sein als die
+        /// Zahl der Helden - ein alter Stand kennt neuere Helden nicht, und ein Feld, das fehlt,
+        /// laesst JsonUtility unberuehrt.
+        /// </summary>
+        public int[] heroExperience = Array.Empty<int>();
     }
 
     public static class MetaSaveSystem
     {
-        private const int CurrentVersion = 3;
-        private const string Key = "shatterspire.meta.v3";
+        private const int CurrentVersion = 4;
+        private const string Key = "shatterspire.meta.v4";
+        private const string KeyV3 = "shatterspire.meta.v3";
         private const string KeyV2 = "shatterspire.meta.v2";
         private const string KeyV1 = "shatterspire.meta.v1";
 
@@ -67,6 +75,7 @@ namespace Shatterspire
             if (TryRead(Key, out var current)) return current;
             // Aeltere Staende hochziehen statt wegwerfen. Wer schon Shards und
             // Upgrades hat, soll sie behalten.
+            if (TryRead(KeyV3, out var v3)) return Migrate(v3);
             if (TryRead(KeyV2, out var v2)) return Migrate(v2);
             if (TryRead(KeyV1, out var v1)) return Migrate(v1);
             return new MetaSaveData { version = CurrentVersion };
@@ -83,11 +92,13 @@ namespace Shatterspire
 
         private static MetaSaveData Migrate(MetaSaveData data)
         {
-            // Vor Version 3 gab es Shift und Rang nicht. shiftIndex bleibt -1,
-            // damit der erste Rollover nur registriert und nichts auszahlt.
+            // Vor Version 3 gab es Shift und Rang nicht, vor Version 4 keine Heldenstufen.
+            // shiftIndex bleibt -1, damit der erste Rollover nur registriert und nichts auszahlt;
+            // die Erfahrung beginnt bei null, ohne dass Shards oder Upgrades verloren gehen.
             data.version = CurrentVersion;
             Save(data);
-            Debug.Log("SHATTERSPIRE: Spielstand auf Version 3 migriert, Shards und Upgrades erhalten.");
+            Debug.Log($"SHATTERSPIRE: Spielstand auf Version {CurrentVersion} migriert, "
+                      + "Shards und Upgrades erhalten.");
             return data;
         }
 
@@ -123,6 +134,7 @@ namespace Shatterspire
         {
             var data = Load();
             var score = ClimbScore.Evaluate(result);
+            AddHeroExperience(data, result.Hero, HeroProgress.ExperienceFor(result));
 
             data.runs++;
             if (result.Extracted) data.victories++;
@@ -217,11 +229,42 @@ namespace Shatterspire
             Save(data);
         }
 
+        /// <summary>Erfahrung eines Helden, 0 wenn der Stand ihn noch nicht kennt.</summary>
+        public static int HeroExperience(MetaSaveData data, HeroClassId hero)
+        {
+            var index = (int)hero;
+            var list = data?.heroExperience;
+            return list != null && index >= 0 && index < list.Length ? Mathf.Max(0, list[index]) : 0;
+        }
+
+        public static int HeroLevel(MetaSaveData data, HeroClassId hero)
+            => HeroProgress.LevelFor(HeroExperience(data, hero));
+
+        /// <summary>
+        /// Traegt Erfahrung ein und verlaengert die Liste, falls noetig. Ein alter Stand kennt
+        /// neuere Helden nicht - die Liste waechst dann mit, statt den Eintrag zu verwerfen.
+        /// </summary>
+        private static void AddHeroExperience(MetaSaveData data, HeroClassId hero, int amount)
+        {
+            if (amount <= 0) return;
+            var needed = (int)hero + 1;
+            var list = data.heroExperience ?? Array.Empty<int>();
+            if (list.Length < needed)
+            {
+                var grown = new int[needed];
+                Array.Copy(list, grown, list.Length);
+                list = grown;
+            }
+            list[(int)hero] = Mathf.Max(0, list[(int)hero]) + amount;
+            data.heroExperience = list;
+        }
+
         private static MetaSaveData Sanitize(MetaSaveData data)
         {
             data ??= new MetaSaveData();
             data.equippedRelics ??= Array.Empty<int>();
             data.climbScores ??= Array.Empty<int>();
+            data.heroExperience ??= Array.Empty<int>();
             return data;
         }
 

@@ -286,6 +286,9 @@ namespace Shatterspire
         public void ConfigureRun(HeroClassId hero, RunConfig config, MetaSaveData meta)
         {
             HeroClass = hero;
+            // Die Stufe dieses Helden. Multiplikativ neben den gemeinsamen Meta-Upgrades: das eine
+            // kommt vom Spieler, das andere vom Helden, und beides soll sich zaehlen lassen.
+            storedDamageMultiplier *= 1f + HeroProgress.DamageBonus(MetaSaveSystem.HeroLevel(meta, hero));
             storedDamageMultiplier *= 1f + Mathf.Clamp(meta?.mightLevel ?? 0, 0, 10) * 0.04f;
             storedMoveSpeedMultiplier *= 1f + Mathf.Clamp(meta?.agilityLevel ?? 0, 0, 10) * 0.02f;
             if (config == null) return;
