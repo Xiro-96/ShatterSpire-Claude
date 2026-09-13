@@ -171,7 +171,7 @@ namespace Shatterspire
             var role = hero == HeroClassId.Guardian || hero == HeroClassId.Paladin
                 ? CompanionRole.Guardian
                 : CompanionRole.Support;
-            // KORR bekommt die Schleicherfigur: klein, beweglich, mit Beutel. LYRA den Ritter mit
+            // KORR bekommt die Schleicherfigur: klein, beweglich, mit Beutel. XIRO den Ritter mit
             // Schild - sie ist die einzige mit einem Schild in der Hand, und genau darum geht es
             // bei ihr. Beide sind dadurch auf einen Blick von Brax, Rex und Orion zu unterscheiden.
             var model3D = hero switch
@@ -237,7 +237,7 @@ namespace Shatterspire
 
         /// <summary>
         /// <paramref name="oathGear"/> tauscht den Kriegshammer der Waechter-Rolle gegen Schwert
-        /// und Schild. LYRA hat die Rolle des Waechters, aber nicht seine Waffe - ein Paladin mit
+        /// und Schild. XIRO hat die Rolle des Waechters, aber nicht seine Waffe - ein Paladin mit
         /// Kriegshammer waere ein Barbar in Ruestung.
         /// </summary>
         public static bool TryBuildCompanion(Transform root, CompanionRole role, Color accent,
@@ -272,7 +272,9 @@ namespace Shatterspire
             ApplyKayKitMaterials(model,
                 KayCharacters + (textureName ?? (role == CompanionRole.Guardian ? "barbarian_texture"
                     : role == CompanionRole.Ranger ? "ranger_texture" : "mage_texture")),
-                Color.white);
+                // XIROs Ruestung faellt ins Goldene. Ein Tonwert auf der vorhandenen Textur, kein
+                // eigenes Bild: die Ruestung soll geweiht aussehen, nicht neu gebaut sein.
+                oathGear ? new Color(1f, 0.88f, 0.58f) : Color.white);
             StylizeHumanoidProportions(animator, role == CompanionRole.Guardian ? 1.08f : 1.12f, 1.08f);
 
             var motion = root.gameObject.AddComponent<StylizedCharacterMotion>();
@@ -887,51 +889,47 @@ namespace Shatterspire
         /// zur Seite - die Kampfclips sahen dadurch aus wie "nur so tun".
         /// </summary>
         /// <summary>
-        /// LYRAs Ausruestung: eine schmale Klinge in der rechten Hand, ein Rundschild in der linken.
+        /// XIROs Ausruestung: ein Zweihaender, sonst nichts.
         ///
-        /// Der Schild ist nicht Schmuck - er ist die Aktion, um die ihr ganzes Kit gebaut ist. Er
-        /// muss also zu sehen sein, auch wenn sie ihn gerade nicht hebt.
+        /// Die erste Fassung gab ihm Schwert und Rundschild. Der Zweihaender ist die staerkere
+        /// Ansage: er haelt Schlaege nicht hinter einem Schild ab, sondern hinter der flach
+        /// gestellten Klinge - dieselbe Mechanik, aber die Waffe erzaehlt sie mit.
+        ///
+        /// Die Klinge wird in der rechten Hand gefuehrt; die Zweihand-Clips aus dem KayKit-Satz
+        /// legen die linke ohnehin an den Griff.
         /// </summary>
         private static void AttachOathGear(Animator animator, Transform fallback, Color accent)
         {
-            var steel = new Color(0.78f, 0.8f, 0.86f);
-            var gold = new Color(0.86f, 0.72f, 0.32f);
+            var steel = new Color(0.84f, 0.86f, 0.9f);
+            var gold = new Color(0.95f, 0.78f, 0.3f);
 
             var right = FindNamedBone(animator ? animator.transform : fallback, "handslot.r");
             if (!right) right = animator && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.RightHand) : fallback;
-            if (right)
-            {
-                var blade = new GameObject("Lyra Oathblade").transform;
-                blade.SetParent(right, false);
-                blade.localPosition = Vector3.zero;
-                blade.localRotation = Quaternion.identity;
-                blade.localScale = Vector3.one / Mathf.Max(0.0001f, right.lossyScale.x);
-                GearPart(blade, PrimitiveType.Cube, "Lyra Grip", new Vector3(0f, -0.1f, 0f),
-                    new Vector3(0.07f, 0.24f, 0.07f), Vector3.zero, new Color(0.26f, 0.17f, 0.12f), false, 0.2f, 0f);
-                GearPart(blade, PrimitiveType.Sphere, "Lyra Pommel", new Vector3(0f, -0.24f, 0f),
-                    new Vector3(0.11f, 0.1f, 0.11f), Vector3.zero, gold, false, 0.4f, 0.6f);
-                GearPart(blade, PrimitiveType.Cube, "Lyra Crossguard", new Vector3(0f, 0.04f, 0f),
-                    new Vector3(0.34f, 0.06f, 0.09f), Vector3.zero, gold, false, 0.42f, 0.6f);
-                GearPart(blade, PrimitiveType.Cube, "Lyra Blade", new Vector3(0f, 0.62f, 0f),
-                    new Vector3(0.1f, 1.12f, 0.035f), Vector3.zero, steel, false, 0.62f, 0.75f);
-                GearPart(blade, PrimitiveType.Cube, "Lyra Blade Light", new Vector3(0f, 0.62f, 0f),
-                    new Vector3(0.035f, 1.06f, 0.05f), Vector3.zero, accent, true, 0.5f, 0.1f);
-            }
+            if (!right) return;
 
-            var left = FindNamedBone(animator ? animator.transform : fallback, "handslot.l");
-            if (!left) left = animator && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.LeftHand) : null;
-            if (!left) return;
-            var shield = new GameObject("Lyra Aegis Shield").transform;
-            shield.SetParent(left, false);
-            shield.localPosition = Vector3.zero;
-            shield.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            shield.localScale = Vector3.one / Mathf.Max(0.0001f, left.lossyScale.x);
-            GearPart(shield, PrimitiveType.Cylinder, "Lyra Shield Face", new Vector3(0f, 0.16f, 0f),
-                new Vector3(0.62f, 0.05f, 0.62f), Vector3.zero, steel, false, 0.5f, 0.6f);
-            GearPart(shield, PrimitiveType.Cylinder, "Lyra Shield Rim", new Vector3(0f, 0.14f, 0f),
-                new Vector3(0.7f, 0.035f, 0.7f), Vector3.zero, gold, false, 0.45f, 0.7f);
-            GearPart(shield, PrimitiveType.Sphere, "Lyra Shield Boss", new Vector3(0f, 0.22f, 0f),
-                new Vector3(0.2f, 0.14f, 0.2f), Vector3.zero, accent, true, 0.5f, 0.2f);
+            var blade = new GameObject("Xiro Greatsword").transform;
+            blade.SetParent(right, false);
+            blade.localPosition = Vector3.zero;
+            blade.localRotation = Quaternion.identity;
+            blade.localScale = Vector3.one / Mathf.Max(0.0001f, right.lossyScale.x);
+
+            // Langer Griff fuer zwei Haende, schwerer Knauf als Gegengewicht.
+            GearPart(blade, PrimitiveType.Cube, "Xiro Grip", new Vector3(0f, -0.16f, 0f),
+                new Vector3(0.08f, 0.42f, 0.08f), Vector3.zero, new Color(0.24f, 0.15f, 0.11f), false, 0.2f, 0f);
+            GearPart(blade, PrimitiveType.Sphere, "Xiro Pommel", new Vector3(0f, -0.4f, 0f),
+                new Vector3(0.15f, 0.14f, 0.15f), Vector3.zero, gold, false, 0.42f, 0.65f);
+            GearPart(blade, PrimitiveType.Cube, "Xiro Crossguard", new Vector3(0f, 0.1f, 0f),
+                new Vector3(0.62f, 0.08f, 0.12f), Vector3.zero, gold, false, 0.45f, 0.65f);
+            for (var side = -1; side <= 1; side += 2)
+                GearPart(blade, PrimitiveType.Cube, "Xiro Guard Wing", new Vector3(side * 0.26f, 0.17f, 0f),
+                    new Vector3(0.12f, 0.12f, 0.1f), new Vector3(0f, 0f, side * 32f), gold, false, 0.45f, 0.65f);
+            // Die Klinge selbst: breiter und laenger als eine Einhandwaffe.
+            GearPart(blade, PrimitiveType.Cube, "Xiro Blade", new Vector3(0f, 0.98f, 0f),
+                new Vector3(0.19f, 1.72f, 0.05f), Vector3.zero, steel, false, 0.66f, 0.78f);
+            GearPart(blade, PrimitiveType.Cube, "Xiro Blade Fuller", new Vector3(0f, 0.98f, 0f),
+                new Vector3(0.06f, 1.62f, 0.07f), Vector3.zero, accent, true, 0.5f, 0.1f);
+            GearPart(blade, PrimitiveType.Cube, "Xiro Blade Tip", new Vector3(0f, 1.9f, 0f),
+                new Vector3(0.19f, 0.2f, 0.05f), new Vector3(0f, 0f, 45f), steel, false, 0.66f, 0.78f);
         }
 
         private static void AttachGuardianHammer(Animator animator, Transform fallback, Color accent)

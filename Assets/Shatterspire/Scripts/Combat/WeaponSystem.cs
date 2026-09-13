@@ -44,7 +44,7 @@ namespace Shatterspire
         /// <summary>Bis hierhin laesst jeder Abschuss eine neue Ladung fallen (Kettenzuender).</summary>
         private float chainUntil;
 
-        /// <summary>Was LYRAs Schild im laufenden Schildstand gehalten hat.</summary>
+        /// <summary>Was XIROs Klinge in der laufenden Klingenwehr gehalten hat.</summary>
         private float bracedDamage;
         /// <summary>Rex' Jaegerblick laeuft bis zu diesem Zeitpunkt. Jeder Abschuss verlaengert ihn.</summary>
         private float focusUntil;
@@ -450,7 +450,7 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// LYRAs Licht-Angriff: drei Schwerthiebe, und der dritte schickt eine Weihewelle nach
+        /// XIROs Licht-Angriff: drei Schwerthiebe, und der dritte schickt eine Weihewelle nach
         /// vorn, die Gegner trifft und die Gruppe heilt.
         ///
         /// Das ist ihre Handschrift schon im einfachsten Angriff: jeder Abschluss gibt der Gruppe
@@ -509,7 +509,7 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// Heilt LYRA und jeden Verbuendeten im Umkreis. Laeuft ueber die Lebensregister und nicht
+        /// Heilt XIRO und jeden Verbuendeten im Umkreis. Laeuft ueber die Lebensregister und nicht
         /// ueber eine feste Liste: im Co-op sind die Mitspieler keine Bots dieser Instanz.
         /// </summary>
         private void HealParty(float amount)
@@ -528,7 +528,7 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// LYRAs schwerer Angriff: SCHILDSTAND. Waehrend des Ladens haelt der Schild von vorn fast
+        /// XIROs schwerer Angriff: KLINGENWEHR. Waehrend des Ladens faengt die flach gestellte Klinge von vorn fast
         /// alles ab; beim Loslassen geht das Gehaltene als Stoss nach vorn zurueck.
         ///
         /// Beim perfekten Moment kommt kein hoeherer Multiplikator, sondern ein Betaeuben - bei ihr
@@ -546,7 +546,7 @@ namespace Shatterspire
             var from = damage.Source ? damage.Source.transform.position : damage.HitPoint;
             var toSource = from - transform.position;
             toSource.y = 0f;
-            // Nur von vorn: wer sie umlaeuft, trifft sie voll. Derselbe Winkel wie beim
+            // Nur von vorn: wer ihn umlaeuft, trifft ihn voll. Derselbe Winkel wie beim
             // Schildtraeger unter den Gegnern, damit die Regel im Spiel nur einmal gelernt wird.
             if (toSource.sqrMagnitude > 0.001f &&
                 Vector3.Angle(transform.forward, toSource.normalized) > 55f) return amount;
@@ -566,7 +566,7 @@ namespace Shatterspire
             var accent = HeroCatalog.Accent(heroClass);
             var direction = AcquireAttackDirection();
             var point = transform.position + direction * 2f;
-            // Was der Schild gehalten hat, geht zurueck - das ist ihr ganzes Versprechen in einer Zahl.
+            // Was der Schild gehalten hat, geht zurueck - das ist sein ganzes Versprechen in einer Zahl.
             var damage = (BaseDamage * Mathf.Lerp(1.8f, 3f, normalized) * build.HeavyDamageMultiplier
                           + bracedDamage * (build.Has(PerkId.PaladinIronBrace) ? 2.2f : 1.6f))
                          * build.DamageMultiplier;
@@ -584,7 +584,7 @@ namespace Shatterspire
                 }
                 PrototypeVfx.SpawnExplosion(point, 3.5f, accent);
             }
-            Debug.Log($"SHATTERSPIRE Schildstand: {bracedDamage:0} gehalten, {damage:0} zurueckgegeben, "
+            Debug.Log($"SHATTERSPIRE Klingenwehr: {bracedDamage:0} gehalten, {damage:0} zurueckgegeben, "
                       + $"perfekt {perfect}.");
             bracedDamage = 0f;
             motion?.PlayMotion(AttackMotion.Smash, perfect ? 1.4f : 1.1f);
@@ -593,24 +593,40 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// LYRAs Faehigkeit: GEWEIHTER BODEN. Ein Kreis, in dem die Gruppe weniger einsteckt und
-        /// sich erholt und Gegner langsamer werden.
+        /// XIROs Faehigkeit: ASCHEWELLE. Ein maechtiger Schlag mit dem Zweihaender nach vorn, aus
+        /// dem eine Front aus gluehender Asche ueber den Boden laeuft.
+        ///
+        /// Sie ersetzt den geweihten Boden. Der war ein Kreis, in den man sich stellte - eine
+        /// Faehigkeit, die nichts tut, sondern etwas hinlegt. Hier ist der Schlag die Faehigkeit:
+        /// Ausholen, treffen, und die Welle nimmt alles mit, was in der Bahn steht.
         /// </summary>
-        private IEnumerator HallowGround(Vector3 direction)
+        private IEnumerator AshStrike(Vector3 direction)
         {
             var accent = HeroCatalog.Accent(heroClass);
-            var center = ThrowTarget(direction, 5.5f);
-            motion?.PlayMotion(AttackMotion.Cast, 1.2f);
-            Sfx.Play(Sound.CoreActivated, transform.position, 0.8f);
-            var radius = build.Has(PerkId.PaladinWideGround) ? 5.4f : 4.2f;
-            HallowedGround.Spawn(center, radius, 7f, accent);
-            PrototypeVfx.SpawnShockwave(center, radius, accent);
-            Debug.Log($"SHATTERSPIRE Geweihter Boden: Radius {radius:0.0}, 7 s.");
-            yield return new WaitForSeconds(0.25f);
+            var type = ResolveDamageType(DamageType.Fire);
+            // Der schwere Zweihand-Hieb, nicht die Zauberbewegung: die Faehigkeit ist ein Schlag.
+            motion?.PlayMotion(AttackMotion.Smash, 1.45f);
+            Sfx.Play(Sound.Draw, transform.position, 0.7f);
+            // Ausholen. Kurz genug, dass es sich nicht nach Warten anfuehlt, lang genug, dass der
+            // Schlag Gewicht bekommt.
+            yield return new WaitForSeconds(0.28f);
+            if (!health.IsAlive) yield break;
+
+            var reach = build.Has(PerkId.PaladinWideGround) ? 16f : 11f;
+            var waveDamage = BaseDamage * 2.6f * build.DamageMultiplier;
+            // Der Hieb selbst trifft, was direkt vor ihm steht - die Welle den Rest der Bahn.
+            Strike(transform.position + direction * 1.6f, 2.2f, waveDamage * 0.8f, type, flash: true);
+            AshWave.Launch(transform.position + direction * 1.2f + Vector3.up * 0.1f, direction,
+                reach, waveDamage, type, gameObject, accent);
+            controller?.CombatStep(direction, 0.45f);
+            CameraController.Impulse(0.16f);
+            Sfx.Play(Sound.Shockwave, transform.position, 0.9f);
+            Debug.Log($"SHATTERSPIRE Aschewelle: {reach:0} Einheiten Reichweite, {waveDamage:0} Schaden.");
+            yield return new WaitForSeconds(0.2f);
         }
 
         /// <summary>
-        /// LYRAs Ultimate: AEGIS. Eine Kuppel, die den Schaden der Gruppe schluckt und ihn am Ende
+        /// XIROs Ultimate: AEGIS. Eine Kuppel, die den Schaden der Gruppe schluckt und ihn am Ende
         /// zurueckgibt.
         /// </summary>
         private IEnumerator RaiseAegis()
@@ -754,7 +770,7 @@ namespace Shatterspire
 
             if (heroClass == HeroClassId.Paladin)
             {
-                yield return HallowGround(direction);
+                yield return AshStrike(direction);
                 yield break;
             }
 
@@ -964,11 +980,16 @@ namespace Shatterspire
 
         public void OnDashEnded(Vector3 origin, Vector3 end, Vector3 direction)
         {
-            if (heroClass == HeroClassId.Paladin && build.Has(PerkId.PaladinWardStep))
+            if (heroClass == HeroClassId.Paladin && build.Has(PerkId.PaladinAshStep))
             {
-                // Schutzschritt: der Dash laesst ein Stueck geweihten Boden zurueck. Damit wird aus
-                // ihrem Ausweichen ein Ort, an den die Gruppe nachruecken kann.
-                HallowedGround.Spawn(origin, 2.6f, 4f, HeroCatalog.Accent(heroClass));
+                // Aschespur: der Dash zieht eine kleine Welle hinter sich her. Aus dem Ausweichen
+                // wird damit ein Angriff, ohne dass es eine zweite Taste braucht.
+                var back = origin - end;
+                back.y = 0f;
+                if (back.sqrMagnitude > 0.04f)
+                    AshWave.Launch(end, -back.normalized, 5.5f,
+                        BaseDamage * 0.9f * build.DamageMultiplier,
+                        ResolveDamageType(DamageType.Fire), gameObject, HeroCatalog.Accent(heroClass));
                 return;
             }
             if (heroClass != HeroClassId.Guardian || !build.Has(PerkId.GuardianShoulderCharge)) return;

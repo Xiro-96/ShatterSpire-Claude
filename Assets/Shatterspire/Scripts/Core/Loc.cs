@@ -79,7 +79,7 @@ namespace Shatterspire
         /// </summary>
         private static readonly HashSet<string> ProperNames = new()
         {
-            "AEGIS", "HAMMER", "ELITE", "BOSS", "ULTIMATE", "BRAX", "REX", "ORION", "KORR", "LYRA"
+            "AEGIS", "HAMMER", "ELITE", "BOSS", "ULTIMATE", "BRAX", "REX", "ORION", "KORR", "XIRO"
         };
 
         public static bool IsProperName(string text) => text != null && ProperNames.Contains(text);
@@ -505,22 +505,14 @@ namespace Shatterspire
             { "BLUNTED", "STUMPF" },
             { "DEBT", "SCHULD" },
 
-            // ── LYRA, die Paladin ───────────────────────────────────────
-            { "OATH WARDEN", "EIDWÄCHTERIN" },
-            { "OATHBLADE  ·  SHIELD BRACE  ·  HALLOWED GROUND", "EIDKLINGE  ·  SCHILDSTAND  ·  GEWEIHTER BODEN" },
+            // ── XIRO, der Paladin ───────────────────────────────────────
+            { "OATH WARDEN", "EIDWÄCHTER" },
             { "OATHBLADE", "EIDKLINGE" },
-            { "SHIELD BRACE", "SCHILDSTAND" },
-            { "HALLOWED GROUND", "GEWEIHTER BODEN" },
-            // ── LYRAs Verbesserungen ────────────────────────────────────
-            { "WARD STEP", "SCHUTZSCHRITT" },
+            // ── XIROs Verbesserungen ────────────────────────────────────
             { "TWIN WAVE", "ZWILLINGSWELLE" },
             { "IRON BRACE", "EISERNER STAND" },
-            { "WIDE GROUND", "WEITER KREIS" },
             { "LONG VIGIL", "LANGE WACHE" },
-            { "Dashing leaves a small patch of Hallowed Ground behind.", "Der Dash lässt ein Stück geweihten Boden zurück." },
             { "The Oathblade finisher sends a second wave and heals twice as much.", "Der Abschluss der Eidklinge schickt eine zweite Welle und heilt doppelt." },
-            { "Shield Brace holds everything from the front, and gives all of it back.", "Der Schildstand hält alles von vorn — und gibt alles zurück." },
-            { "Hallowed Ground covers a wider circle.", "Der geweihte Boden deckt einen weiteren Kreis." },
             { "Aegis stands for 9 instead of 7 seconds.", "Aegis steht 9 statt 7 Sekunden." },
 
             // ── Die drei Waechter ───────────────────────────────────────
@@ -533,6 +525,16 @@ namespace Shatterspire
             { "DEFEAT RIFT TWIN", "BESIEGE DEN SPLITTERZWILLING" },
             { "DEFEAT CHOIR WARDEN", "BESIEGE DEN CHORWÄCHTER" },
             { "DEFEAT SPIRE WARDEN", "BESIEGE DEN TURMWÄCHTER" },
+
+            // ── XIRO, die Eidwaechterin ─────────────────────────────────
+            { "OATHBLADE  ·  BLADE GUARD  ·  ASH WAVE", "EIDKLINGE  ·  KLINGENWEHR  ·  ASCHEWELLE" },
+            { "BLADE GUARD", "KLINGENWEHR" },
+            { "ASH WAVE", "ASCHEWELLE" },
+            { "ASH STEP", "ASCHESPUR" },
+            { "LONG REACH", "WEITE BAHN" },
+            { "Dashing drags a small ash wave behind you.", "Der Dash zieht eine kleine Aschewelle hinter sich her." },
+            { "Blade Guard holds everything from the front, and gives all of it back.", "Die Klingenwehr hält alles von vorn — und gibt alles zurück." },
+            { "The Ash Wave runs half again as far.", "Die Aschewelle läuft um die Hälfte weiter." },
 
             // ── Verbesserungen: Beschreibungen ──────────────────────────
             { "Heavy attacks deal 40% more damage.", "Schwere Angriffe machen 40 % mehr Schaden." },

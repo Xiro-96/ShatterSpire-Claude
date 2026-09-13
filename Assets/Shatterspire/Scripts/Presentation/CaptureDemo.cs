@@ -165,7 +165,7 @@ namespace Shatterspire
             yield return new WaitForSecondsRealtime(0.6f);
 
             if (Hero == HeroClassId.Bomber) yield return ShowBomberHeavy();
-            if (Hero == HeroClassId.Paladin) yield return ShowPaladinBrace();
+            if (Hero == HeroClassId.Paladin) yield return ShowPaladinGuard();
             yield return ShowFloorPace();
             yield return ShowStreakAndOrbs();
             yield return ShowThreatMarker();
@@ -572,13 +572,13 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// LYRAs Schildstand: einstecken und zurueckgeben.
+        /// XIROs Klingenwehr: einstecken und zurueckgeben.
         ///
         /// Ihr ganzes Versprechen steht in zwei Zahlen - wie viel der Schild gehalten hat und wie
         /// viel davon zurueckgeht. Beides ist nur zu pruefen, wenn waehrend des Ladens wirklich
         /// jemand auf sie einschlaegt, also stellt diese Folge ihr Gegner vor die Nase.
         /// </summary>
-        private IEnumerator ShowPaladinBrace()
+        private IEnumerator ShowPaladinGuard()
         {
             var weapon = player.GetComponent<WeaponSystem>();
             if (!weapon) yield break;
@@ -599,7 +599,7 @@ namespace Shatterspire
                 yield return null;
             }
             input.ScriptedAttack = false;
-            Debug.Log($"SHATTERSPIRE LYRA: Balken nach {waited:0.0} s, bereit {weapon.HeavyReady}.");
+            Debug.Log($"SHATTERSPIRE XIRO: Balken nach {waited:0.0} s, bereit {weapon.HeavyReady}.");
             if (!weapon.HeavyReady) yield break;
 
             // Zwei Angreifer von vorn, damit der Schild etwas zu halten hat. Sie bekommen Zeit,
@@ -618,7 +618,7 @@ namespace Shatterspire
                 yield return Shot($"p{i:00}");
             }
             var held = before - player.GetComponent<Health>().Current;
-            Debug.Log($"SHATTERSPIRE LYRA: waehrend des Schildstands {held:0} Leben verloren.");
+            Debug.Log($"SHATTERSPIRE XIRO: waehrend des Schildstands {held:0} Leben verloren.");
             input.ScriptedHeavy = false;
             for (var i = 7; i < 13; i++)
             {
@@ -630,14 +630,16 @@ namespace Shatterspire
             input.ScriptedSkill = true;
             yield return new WaitForSecondsRealtime(0.2f);
             input.ScriptedSkill = false;
+            // Erst ausholen, dann laeuft die Welle - und sie ist nach gut einer halben Sekunde
+            // durch. Frueher stand die Zaehlung am Ende der Folge und meldete deshalb immer null.
+            yield return new WaitForSecondsRealtime(0.45f);
+            Debug.Log($"SHATTERSPIRE XIRO: {FindObjectsByType<AshWave>(FindObjectsSortMode.None).Length} "
+                      + "Aschewelle(n) unterwegs.");
             for (var i = 13; i < 18; i++)
             {
                 while (Time.unscaledTime - start < i * 0.3f) yield return null;
                 yield return Shot($"p{i:00}");
             }
-            Debug.Log($"SHATTERSPIRE LYRA: {FindObjectsByType<HallowedGround>(FindObjectsSortMode.None).Length} "
-                      + "geweihte Flaeche(n) im Raum.");
-
             if (first) Destroy(first.gameObject);
             if (second) Destroy(second.gameObject);
             if (victim) Destroy(victim.gameObject);
