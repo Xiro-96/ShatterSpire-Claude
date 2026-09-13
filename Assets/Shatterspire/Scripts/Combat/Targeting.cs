@@ -136,9 +136,14 @@ namespace Shatterspire
 
     public static class CombatUtility
     {
-        public static void Explode(Vector3 point, float radius, float damage, TeamId targetTeam, DamageType type, GameObject source)
+        /// <summary>
+        /// Flaechenschaden. Gibt zurueck, wie viele getroffen wurden - eine Ladung, die ins Leere
+        /// geht, soll nichts ausloesen, was ein Treffer ausloest.
+        /// </summary>
+        public static int Explode(Vector3 point, float radius, float damage, TeamId targetTeam, DamageType type, GameObject source)
         {
             PrototypeVfx.SpawnExplosion(point, radius, PrototypeVfx.ElementColor(type));
+            var hits = 0;
             var active = Health.Active;
             for (var i = active.Count - 1; i >= 0; i--)
             {
@@ -149,6 +154,7 @@ namespace Shatterspire
                 if (offset.sqrMagnitude > radius * radius) continue;
                 var force = offset.sqrMagnitude > 0.001f ? offset.normalized * 4f : Vector3.zero;
                 health.TakeDamage(new DamageInfo(damage, type, source, point, force));
+                hits++;
                 var status = health.GetComponent<StatusReceiver>();
                 if (!status) continue;
                 switch (type)
@@ -158,6 +164,7 @@ namespace Shatterspire
                     case DamageType.Poison: status.ApplyPoison(damage * 0.2f, 3.2f, source); break;
                 }
             }
+            return hits;
         }
     }
 }

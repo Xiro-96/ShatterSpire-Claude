@@ -26,11 +26,6 @@ namespace Shatterspire
         public static bool Requested => Array.IndexOf(Environment.GetCommandLineArgs(), Flag) >= 0;
 
         /// <summary>
-        /// Fester Lauf-Seed aus -shatterspire-seed. Ohne ihn waere jede Bildfolge eine andere Etage
-        /// mit anderen Anomalien, und zwei Aufnahmen liessen sich nicht vergleichen.
-        /// Gibt 0 zurueck, wenn keiner angegeben ist.
-        /// </summary>
-        /// <summary>
         /// Welche Route die Vorfuehrung am Aufzug nimmt, aus -shatterspire-route. Ohne Angabe die
         /// erste. Anders kaeme nie ein Bild aus Schatzkammer oder Raetselraum zustande.
         /// </summary>
@@ -46,6 +41,11 @@ namespace Shatterspire
             }
         }
 
+        /// <summary>
+        /// Fester Lauf-Seed aus -shatterspire-seed. Ohne ihn waere jede Bildfolge eine andere Etage
+        /// mit anderen Anomalien, und zwei Aufnahmen liessen sich nicht vergleichen.
+        /// Gibt 0 zurueck, wenn keiner angegeben ist.
+        /// </summary>
         public static int FixedSeed
         {
             get
@@ -143,6 +143,7 @@ namespace Shatterspire
             input.ScriptedMove = null;
             yield return new WaitForSecondsRealtime(0.6f);
 
+            if (Hero == HeroClassId.Bomber) yield return ShowBomberHeavy();
             yield return ShowStreakAndOrbs();
             yield return ShowThreatMarker();
             yield return ShowForgePlunge();
@@ -427,6 +428,64 @@ namespace Shatterspire
                 best = cache.transform;
             }
             return best;
+        }
+
+        /// <summary>
+        /// KORRs schwerer Angriff von Anfang bis Ende: werfen, bis der Balken voll ist, halten,
+        /// loslassen.
+        ///
+        /// Der Grund fuer diese Bildfolge: der Balken fuellt sich aus leichten Treffern, und KORRs
+        /// Wurfladungen haben ihren Treffer nie gemeldet. Sein Balken blieb damit auf null, die
+        /// rechte Maustaste tat gar nichts, und kein Test hat es bemerkt - die Kette laeuft ueber
+        /// Zuendschnur, Explosion und Trefferzahl und ist nur im laufenden Spiel zu pruefen.
+        /// </summary>
+        private IEnumerator ShowBomberHeavy()
+        {
+            var weapon = player.GetComponent<WeaponSystem>();
+            if (!weapon) yield break;
+            var victim = SpawnDemoEnemy(EnemyKind.Crawler, 6f);
+            frameOn = null;
+            overviewPoint = null;
+            frameSize = 6.5f;
+            input.ScriptedAim = victim ? (victim.transform.position - player.position).normalized : Vector3.forward;
+            yield return new WaitForSecondsRealtime(0.4f);
+
+            // Werfen, bis der Balken voll ist. Hoechstens zehn Sekunden - bleibt er leer, ist der
+            // Fehler wieder da, und das soll im Log stehen statt die Aufnahme haengen zu lassen.
+            input.ScriptedAttack = true;
+            var waited = 0f;
+            while (!weapon.HeavyReady && waited < 10f)
+            {
+                waited += Time.unscaledDeltaTime;
+                if (victim && !victim.GetComponent<Health>().IsAlive) victim = SpawnDemoEnemy(EnemyKind.Crawler, 6f);
+                yield return null;
+            }
+            input.ScriptedAttack = false;
+            Debug.Log($"SHATTERSPIRE KORR schwer: Balken nach {waited:0.0} s bei "
+                      + $"{weapon.HeavyMeterNormalized:P0}, bereit {weapon.HeavyReady}.");
+            if (!weapon.HeavyReady) yield break;
+
+            yield return Shot("h00");
+            input.ScriptedHeavy = true;
+            var start = Time.unscaledTime;
+            for (var i = 1; i < 6; i++)
+            {
+                while (Time.unscaledTime - start < i * 0.22f) yield return null;
+                yield return Shot($"h{i:00}");
+            }
+            Debug.Log($"SHATTERSPIRE KORR schwer: laedt bei {weapon.HeavyChargeNormalized:P0}, "
+                      + $"perfekt {weapon.HeavyPerfect}.");
+            input.ScriptedHeavy = false;
+            for (var i = 6; i < 12; i++)
+            {
+                while (Time.unscaledTime - start < i * 0.22f) yield return null;
+                yield return Shot($"h{i:00}");
+            }
+            Debug.Log($"SHATTERSPIRE KORR schwer: nach dem Loslassen Balken {weapon.HeavyMeterNormalized:P0}, "
+                      + $"{TimedBomb.Active.Count} Ladung(en) scharf.");
+            if (victim) Destroy(victim.gameObject);
+            input.ScriptedAim = new Vector3(0.75f, 0f, -1f);
+            yield return new WaitForSecondsRealtime(0.4f);
         }
 
         /// <summary>

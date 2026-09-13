@@ -45,6 +45,34 @@ namespace Shatterspire
         }
 
         private int scriptedUltimateFrames;
+
+        /// <summary>
+        /// Nur fuer automatische Vorfuehrungen: haelt den schweren Angriff gedrueckt und loest beim
+        /// Loslassen aus. Druck und Loslassen halten zwei Bilder, aus demselben Grund wie bei
+        /// <see cref="ScriptedUltimate"/> - die Reihenfolge der Update-Aufrufe steht nicht fest.
+        /// </summary>
+        public bool ScriptedHeavy
+        {
+            get => scriptedHeavy;
+            set
+            {
+                if (value == scriptedHeavy) return;
+                scriptedHeavy = value;
+                if (value) scriptedHeavyPressFrames = 2;
+                else scriptedHeavyReleaseFrames = 2;
+            }
+        }
+
+        private bool scriptedHeavy;
+        private int scriptedHeavyPressFrames;
+        private int scriptedHeavyReleaseFrames;
+
+        private static bool Consume(ref int frames)
+        {
+            if (frames <= 0) return false;
+            frames--;
+            return true;
+        }
         /// <summary>Nur fuer automatische Vorfuehrungen: feste Blickrichtung statt Maus.</summary>
         public Vector3? ScriptedAim { get; set; }
         /// <summary>Nur fuer automatische Vorfuehrungen: feste Laufrichtung statt Tastatur.</summary>
@@ -74,9 +102,11 @@ namespace Shatterspire
             // hielt, griff dadurch dauernd an. Mit Touch zaehlen nur noch die Aktionsknoepfe.
             var mouse = !Application.isMobilePlatform && Input.touchCount == 0;
             AttackHeld = (mouse && Input.GetMouseButton(0)) || MobileInput.Attack || MobileInput.AimFire || ScriptedAttack;
-            HeavyPressed = (mouse && Input.GetMouseButtonDown(1)) || MobileInput.ConsumeHeavyPressed();
-            HeavyReleased = (mouse && Input.GetMouseButtonUp(1)) || MobileInput.ConsumeHeavyReleased();
-            HeavyHeld = (mouse && Input.GetMouseButton(1)) || MobileInput.Heavy;
+            HeavyPressed = (mouse && Input.GetMouseButtonDown(1)) || MobileInput.ConsumeHeavyPressed()
+                           || Consume(ref scriptedHeavyPressFrames);
+            HeavyReleased = (mouse && Input.GetMouseButtonUp(1)) || MobileInput.ConsumeHeavyReleased()
+                            || Consume(ref scriptedHeavyReleaseFrames);
+            HeavyHeld = (mouse && Input.GetMouseButton(1)) || MobileInput.Heavy || scriptedHeavy;
             SkillPressed = Input.GetKeyDown(KeyCode.Q) || MobileInput.ConsumeSkill();
             DashPressed = Input.GetKeyDown(KeyCode.Space) || MobileInput.ConsumeDash();
             UltimatePressed = Input.GetKeyDown(KeyCode.R) || MobileInput.ConsumeUltimate() ||

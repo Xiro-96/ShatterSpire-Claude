@@ -332,9 +332,12 @@ namespace Shatterspire
                 var spread = charges == 1 ? Vector3.zero
                     : Quaternion.Euler(0f, Mathf.Lerp(-16f, 16f, i / (float)(charges - 1)), 0f) * direction * 1.4f;
                 var fuse = (finisher ? 0.75f : 0.9f) * (build.Has(PerkId.BomberShortFuse) ? 0.5f : 1f);
+                // Nur der leichte Wurf laedt den schweren Balken - wie bei den anderen drei Helden
+                // die leichten Treffer. Ohne das blieb KORRs Balken leer und RMB ohne Wirkung.
                 TimedBomb.Throw(MuzzlePosition(), landing + spread, 0.34f, fuse,
                     2.1f + build.Pierces * 0.25f,
-                    BaseDamage * (finisher ? 1.5f : 1.1f) * build.DamageMultiplier, type, gameObject, accent);
+                    BaseDamage * (finisher ? 1.5f : 1.1f) * build.DamageMultiplier, type, gameObject, accent,
+                    chargesHeavyMeter: true);
                 if (!build.Has(PerkId.BomberClusterCharge)) continue;
                 // Splitterladung: zwei kleinere kurz danach, leicht versetzt.
                 for (var shard = -1; shard <= 1; shard += 2)

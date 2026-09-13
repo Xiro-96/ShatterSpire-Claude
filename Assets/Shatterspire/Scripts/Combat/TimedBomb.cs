@@ -37,11 +37,21 @@ namespace Shatterspire
         private GameObject marker;
 
         /// <summary>
+        /// Laedt ein Treffer dieser Ladung den schweren Balken?
+        ///
+        /// Nur die leichten Wuerfe tun das - genau wie bei den anderen drei Helden, wo der Balken
+        /// aus leichten Treffern kommt und nicht aus der Faehigkeit. Ohne diese Meldung blieb KORRs
+        /// Balken auf null, und die rechte Maustaste war ohne jede Wirkung.
+        /// </summary>
+        private bool chargesHeavy;
+
+        /// <summary>
         /// Legt eine Ladung. <paramref name="flight"/> ist die Wurfzeit bis zur Landung,
         /// <paramref name="fuse"/> die Zeit danach bis zur Zuendung.
         /// </summary>
         public static TimedBomb Throw(Vector3 from, Vector3 to, float flight, float fuse, float blastRadius,
-            float blastDamage, DamageType damageType, GameObject source, Color accent)
+            float blastDamage, DamageType damageType, GameObject source, Color accent,
+            bool chargesHeavyMeter = false)
         {
             var go = PrototypeFactory.Primitive(PrimitiveType.Sphere, "Timed Bomb",
                 from, Vector3.one * 0.42f, accent, true);
@@ -56,6 +66,7 @@ namespace Shatterspire
             bomb.landing = to;
             bomb.flightSeconds = Mathf.Max(0.01f, flight);
             bomb.shell = go.GetComponent<Renderer>();
+            bomb.chargesHeavy = chargesHeavyMeter;
             // Die Flaeche liegt von Anfang an am Boden: man muss vor der Zuendung wissen, wo es knallt.
             bomb.marker = PrototypeVfx.SpawnZone(to, blastRadius, accent, flight + bomb.fuseSeconds);
             return bomb;
@@ -120,7 +131,9 @@ namespace Shatterspire
             if (spent) return;
             spent = true;
             if (marker) Destroy(marker);
-            CombatUtility.Explode(transform.position, radius, damage, TeamId.Enemy, type, owner);
+            var hits = CombatUtility.Explode(transform.position, radius, damage, TeamId.Enemy, type, owner);
+            if (hits > 0 && chargesHeavy && owner)
+                owner.GetComponent<WeaponSystem>()?.NotifyLightHit();
             PrototypeVfx.SpawnExplosion(transform.position, radius, PrototypeVfx.ElementColor(type));
             PrototypeVfx.SpawnShockwave(transform.position, radius + 0.4f, PrototypeVfx.ElementColor(type));
             Sfx.Play(Sound.Explosion, transform.position);
