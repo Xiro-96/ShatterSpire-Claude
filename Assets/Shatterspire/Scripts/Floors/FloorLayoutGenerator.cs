@@ -13,7 +13,16 @@ namespace Shatterspire
     /// </summary>
     public static class FloorLayoutGenerator
     {
-        public const float CellSize = 30f;
+        /// <summary>
+        /// Abstand der Raummitten. Raeume sind bis zu 22 breit, es bleiben also rund drei bis
+        /// sieben Einheiten Gang dazwischen.
+        ///
+        /// Vorher 30. Gemessen an 480 erzeugten Etagen waren das im Mittel 120 Einheiten Weg je
+        /// Etage - beim langsamsten Helden 29 Sekunden reines Laufen, ohne einen einzigen Kampf,
+        /// und auf dem Heroic-Pfad ueber sieben Minuten Weg je Aufstieg. Der Kampf findet im Raum
+        /// statt; der Gang dazwischen ist nur Weg und gehoert kurz.
+        /// </summary>
+        public const float CellSize = 25f;
         public const int CoresPerFloor = 2;
         private const int GridLimit = 3;
         private const float CorridorOverlap = 0.6f;
@@ -33,8 +42,13 @@ namespace Shatterspire
         public static int RoomCountFor(int floor, RoomKind kind)
         {
             if (kind == RoomKind.Boss) return 2;
-            var count = 4 + (floor >= 3 ? 1 : 0) + (kind == RoomKind.Elite ? 1 : 0);
-            return Math.Min(6, count);
+            // Vier ist die Untergrenze und nicht Geschmackssache: Start, zwei Core-Raeume und der
+            // Aufzugsraum. Mit dreien bliebe fuer den zweiten Core kein Platz.
+            //
+            // Vorher wuchs die Zahl mit der Tiefe auf fuenf und sechs. Tiefe Etagen sind jetzt ueber
+            // die Gegner haerter, nicht ueber die Laenge - ein laengerer Weg macht eine Etage nicht
+            // schwerer, nur zaeher.
+            return kind == RoomKind.Elite ? 5 : 4;
         }
 
         public static FloorLayout Generate(int seed, int floor, RoomKind kind)
