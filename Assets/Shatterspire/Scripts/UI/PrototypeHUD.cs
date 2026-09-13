@@ -54,6 +54,8 @@ namespace Shatterspire
         private Text goldText;
         private Text scoreText;
         private FloorModifierId floorAnomaly;
+        private Image vaultPanel;
+        private Text vaultText;
         private Image anomalyPanel;
         private Text anomalyText;
         private Text streakText;
@@ -110,6 +112,8 @@ namespace Shatterspire
             GameEvents.PerkSelected -= OnPerkSelected;
             GameEvents.RoomStarted -= OnRoomStarted;
             GameEvents.AnomalyChanged -= RefreshAnomaly;
+            GameEvents.Notice -= ShowAnnouncement;
+            GameEvents.VaultChanged -= RefreshVault;
             GameEvents.ObjectiveChanged -= RefreshObjective;
             GameEvents.ObjectiveTargetChanged -= RefreshObjectiveTarget;
             GameEvents.EncounterChanged -= RefreshEncounter;
@@ -127,6 +131,8 @@ namespace Shatterspire
             GameEvents.PerkSelected += OnPerkSelected;
             GameEvents.RoomStarted += OnRoomStarted;
             GameEvents.AnomalyChanged += RefreshAnomaly;
+            GameEvents.Notice += ShowAnnouncement;
+            GameEvents.VaultChanged += RefreshVault;
             GameEvents.ObjectiveChanged += RefreshObjective;
             GameEvents.ObjectiveTargetChanged += RefreshObjectiveTarget;
             GameEvents.EncounterChanged += RefreshEncounter;
@@ -213,6 +219,15 @@ namespace Shatterspire
                 Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
             anomalyText.fontStyle = FontStyle.Bold;
             anomalyPanel.gameObject.SetActive(false);
+            // Die Uhr der Schatzkammer sitzt unter der Ansage und ist nur in der Kammer da.
+            vaultPanel = CreateImage(root.transform, "Vault Timer", new Color(0.1f, 0.07f, 0.02f, 0.92f),
+                new Vector2(0, -272), new Vector2(390, 38), new Vector2(0.5f, 1));
+            ApplyRounded(vaultPanel);
+            vaultPanel.raycastTarget = false;
+            vaultText = CreateText(vaultPanel.transform, string.Empty, 19, TextAnchor.MiddleCenter,
+                Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
+            vaultText.fontStyle = FontStyle.Bold;
+            vaultPanel.gameObject.SetActive(false);
             buildText = CreateText(root.transform, Loc.T("NO UPGRADES YET"), 12, TextAnchor.UpperLeft, new Vector2(112, -91), new Vector2(258, 22), new Vector2(0, 1));
             CreateExperienceBar(root.transform);
             CreateTeamFrames(root.transform);
@@ -895,6 +910,25 @@ namespace Shatterspire
             var outline = anomalyPanel.GetComponent<Outline>() ?? anomalyPanel.gameObject.AddComponent<Outline>();
             outline.effectColor = new Color(anomaly.Accent.r, anomaly.Accent.g, anomaly.Accent.b, 0.9f);
             outline.effectDistance = new Vector2(2f, -2f);
+        }
+
+        /// <summary>
+        /// Die Uhr der Schatzkammer. Vor dem ersten Hort steht nur, wie viele es sind - die Zeit
+        /// laeuft erst, wenn man sie selbst gestartet hat, und das soll man am Bild sehen.
+        /// </summary>
+        private void RefreshVault(int opened, int total, float secondsLeft, bool active)
+        {
+            if (!vaultPanel || !vaultText) return;
+            vaultPanel.gameObject.SetActive(active && total > 0);
+            if (!active || total <= 0) return;
+            var running = opened > 0;
+            vaultText.text = running
+                ? $"{Loc.T("VAULT")}  {opened}/{total}  ·  {Mathf.CeilToInt(secondsLeft)} s"
+                : $"{Loc.T("VAULT")}  {opened}/{total}";
+            // Die letzten fuenf Sekunden rot: bis dahin ist die Uhr Information, danach Druck.
+            vaultText.color = running && secondsLeft <= 5f
+                ? new Color(1f, 0.34f, 0.24f)
+                : new Color(1f, 0.8f, 0.22f);
         }
 
         private void OnPerkSelected(PerkDefinition _) => RefreshBuild();

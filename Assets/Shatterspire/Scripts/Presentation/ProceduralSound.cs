@@ -14,7 +14,9 @@ namespace Shatterspire
         UiClick, UiConfirm, PlayerHurt, Ambience,
         // Die drei Ultimates vom 12.09.
         PlungeRise, PlungeImpact, RiftOpen, FocusEnter, FocusExtend, FocusEnd,
-        LiftRise, LiftArrive, Heartbeat, StreakStep, Pickup, BombThrow, BombLand, ChainDetonate
+        LiftRise, LiftArrive, Heartbeat, StreakStep, Pickup, BombThrow, BombLand, ChainDetonate,
+        // Die zwei Raeume vom 13.09.
+        VaultOpen, AltarToll
     }
 
     /// <summary>
@@ -86,6 +88,8 @@ namespace Shatterspire
             Sound.PlungeRise => 0.5f,
             Sound.FocusExtend => 0.3f,
             Sound.FocusEnd => 0.4f,
+            Sound.VaultOpen => 0.7f,
+            Sound.AltarToll => 0.85f,
             _ => 0.65f
         };
 
@@ -136,6 +140,8 @@ namespace Shatterspire
             Sound.LiftRise or Sound.LiftArrive => 0.34f,
             Sound.Heartbeat => 0.1f,
             Sound.StreakStep or Sound.Pickup => 0.24f,
+            Sound.VaultOpen => 0.3f,
+            Sound.AltarToll => 0.45f,
             Sound.BombLand => 0.3f,
             Sound.ChainDetonate => 0.5f,
             Sound.Block or Sound.Shockwave or Sound.HitHeavy or Sound.Death => 0.32f,
@@ -177,6 +183,8 @@ namespace Shatterspire
             Sound.Heartbeat => 0.45f,
             Sound.StreakStep => 0.55f,
             Sound.Pickup => 0.3f,
+            Sound.VaultOpen => 0.7f,
+            Sound.AltarToll => 1.9f,
             Sound.LiftRise => 1.6f,
             Sound.LiftArrive => 0.9f,
             _ => 0.4f
@@ -427,6 +435,30 @@ namespace Shatterspire
                     // Zwei Glocken, die zweite hoeher: eine steigende Geste liest sich als Fortschritt.
                     AddBell(buffer, ref noise, 0f, 880f, 0.22f, 0.7f);
                     AddBell(buffer, ref noise, 0.08f, 1320f, 0.3f, 1f);
+                    break;
+                case Sound.VaultOpen:
+                    // Eine Truhe geht auf: erst der hoelzerne Deckel, der sich loest, dann Muenzen.
+                    // Das Holz sitzt tief und kurz, die Muenzen sind viele kleine Metallpartiale mit
+                    // gestreuter Zeit - regelmaessige Abstaende klaengen nach Maschine, nicht nach Gold.
+                    Knock(buffer, ref noise, 0f, 196f, 0.09f, 0.9f);
+                    AddSweptNoise(buffer, ref noise, 0.01f, 0.12f, 0.35f, 0.004f, 14f, 1800f, 520f, 340f);
+                    AddResonator(buffer, ref noise, 0f, 88f, 0.22f, 0.5f, 0.005f);
+                    for (var i = 0; i < 16; i++)
+                    {
+                        var at = 0.07f + i * 0.021f + noise.Next() * 0.012f;
+                        var hz = 1450f + Mathf.Abs(noise.Next()) * 1700f;
+                        AddBell(buffer, ref noise, at, hz, 0.1f + Mathf.Abs(noise.Next()) * 0.12f,
+                            0.13f + Mathf.Abs(noise.Next()) * 0.1f);
+                    }
+                    break;
+                case Sound.AltarToll:
+                    // Ein Schlag auf Stein, der lange nachhaengt. Er kuendigt nichts Gutes und nichts
+                    // Schlechtes an - er sagt nur, dass die Wette angenommen ist. Was daraus wird,
+                    // sagt der Klang danach.
+                    Strike(buffer, ref noise, 0f, 0.005f, 2600f, 0.6f);
+                    AddBell(buffer, ref noise, 0f, 146f, 1.5f, 1f);
+                    AddBell(buffer, ref noise, 0.012f, 219f, 1.1f, 0.45f);
+                    AddResonator(buffer, ref noise, 0f, 73f, 1.7f, 0.6f, 0.006f);
                     break;
                 case Sound.Pickup:
                     // Kurz und hell: eine Aufnahme soll bestaetigen, nicht feiern.

@@ -30,6 +30,22 @@ namespace Shatterspire
         /// mit anderen Anomalien, und zwei Aufnahmen liessen sich nicht vergleichen.
         /// Gibt 0 zurueck, wenn keiner angegeben ist.
         /// </summary>
+        /// <summary>
+        /// Welche Route die Vorfuehrung am Aufzug nimmt, aus -shatterspire-route. Ohne Angabe die
+        /// erste. Anders kaeme nie ein Bild aus Schatzkammer oder Raetselraum zustande.
+        /// </summary>
+        public static int RouteChoice
+        {
+            get
+            {
+                var args = Environment.GetCommandLineArgs();
+                var index = Array.IndexOf(args, "-shatterspire-route");
+                return index >= 0 && index + 1 < args.Length && int.TryParse(args[index + 1], out var route)
+                    ? Mathf.Max(0, route)
+                    : 0;
+            }
+        }
+
         public static int FixedSeed
         {
             get
@@ -292,8 +308,7 @@ namespace Shatterspire
                 if (kind == ModalKind.Routes)
                 {
                     Debug.Log($"SHATTERSPIRE Routenwahl aufgenommen: {hud.OpenModalButtons} Knopf/Knoepfe.");
-                    // Die erste Route: Kampf. Damit ist auf dem naechsten Bild ihre Anomalie zu sehen.
-                    hud.PressModalForCapture(0);
+                    hud.PressModalForCapture(Mathf.Min(RouteChoice, hud.OpenModalButtons - 1));
                     break;
                 }
                 // Beim Haendler ist der letzte Knopf "weiter", bei der Verbesserung der erste.
@@ -308,6 +323,110 @@ namespace Shatterspire
                 yield return Shot($"r{step++:00}");
                 yield return new WaitForSecondsRealtime(0.4f);
             }
+            yield return ShowNewRoom();
+        }
+
+        /// <summary>
+        /// Was die gewaehlte Route aus dem Raum macht: in der Schatzkammer zum naechsten Hort
+        /// laufen, im Raetselraum auf den Altar mit dem hohen Einsatz zugehen. Ohne das zeigt die
+        /// Bildfolge nur einen Raum mit Einrichtung, nicht das, was darin passiert.
+        /// </summary>
+        private IEnumerator ShowNewRoom()
+        {
+            var playerController = player.GetComponent<PlayerController>();
+            var caches = FindObjectsByType<TreasureCache>(FindObjectsSortMode.None);
+            var altars = FindObjectsByType<MysteryAltar>(FindObjectsSortMode.None);
+            Transform goal = Nearest(caches);
+            if (!goal && altars.Length > 0)
+            {
+                // Der grosse Einsatz steht rechts; ihn zu waehlen zeigt beide Seiten der Wette.
+                foreach (var altar in altars)
+                    if (altar.Offer.Stake == WagerStake.Large) goal = altar.transform;
+                if (!goal) goal = altars[0].transform;
+            }
+            if (!goal && caches.Length > 0)
+            {
+                // Kein Hort ist geradeaus erreichbar: sie liegen in den Folgeraeumen, und dorthin
+                // fuehrt ein Weg durch Tueren, den die Vorfuehrung nicht laufen kann. Fuer das Bild
+                // wird der Held deshalb in die Naehe des ersten Hortes gesetzt. Das ist ein Griff
+                // der Aufnahme, kein Weg des Spiels - im Spiel laeuft man hin.
+                var target = caches[0];
+                var navigation = FindFirstObjectByType<RunDirector>()?.Navigation;
+                var approach = target.transform.position + new Vector3(-5.5f, 0f, -2.5f);
+                if (navigation != null) approach = navigation.ClampToWalkable(approach, 0.6f);
+                if (playerController) playerController.Teleport(approach);
+                else player.position = approach;
+                yield return new WaitForSecondsRealtime(0.3f);
+                goal = Nearest(caches) ?? target.transform;
+                Debug.Log($"SHATTERSPIRE Aufnahme: Held an den Hort gesetzt, "
+                          + $"Abstand {Vector3.Distance(player.position, goal.position):0.0}.");
+            }
+            if (!goal) yield break;
+
+            frameOn = null;
+            overviewPoint = null;
+            frameSize = 7f;
+            var step = 0;
+            var start = Time.unscaledTime;
+            // Hinlaufen und dabei alle 0,45 s ein Bild: Annaeherung, Ausloesen, Folge.
+            while (Time.unscaledTime - start < 16f && step < 20)
+            {
+                // Ist der Hort geholt, zum naechsten weiterlaufen: erst dann zeigt die Bildfolge
+                // die Uhr, die laeuft, und den Zaehler, der steigt.
+                if (!goal || (goal.TryGetComponent<TreasureCache>(out var reached) && reached.Opened))
+                    goal = Nearest(caches) ?? goal;
+                if (goal)
+                {
+                    var to = goal.position - player.position;
+                    to.y = 0f;
+                    input.ScriptedMove = new Vector2(to.x, to.z).normalized;
+                }
+                else
+                {
+                    input.ScriptedMove = null;
+                }
+                if (Time.unscaledTime - start >= step * 0.45f)
+                {
+                    var gap = goal ? Vector3.Distance(
+                        new Vector3(player.position.x, 0f, player.position.z),
+                        new Vector3(goal.position.x, 0f, goal.position.z)) : -1f;
+                    Debug.Log($"SHATTERSPIRE Sonde n{step:00}: Abstand {gap:0.00}, Held "
+                              + $"{player.position.x:0.0}/{player.position.z:0.0}");
+                    yield return Shot($"n{step++:00}");
+                }
+                yield return null;
+            }
+            input.ScriptedMove = null;
+        }
+
+        /// <summary>
+        /// Der naechste noch verschlossene Hort, zu dem eine freie Bahn fuehrt.
+        ///
+        /// Die Luftlinie genuegt nicht: der erste Aufnahmelauf schickte den Helden auf einen Hort
+        /// zu, der 2,3 Einheiten entfernt im Nachbarraum lag - er lief in die Wand und blieb sieben
+        /// Sekunden davor stehen. Ein Mensch geht um die Wand herum; die Vorfuehrung kann das nicht,
+        /// also nimmt sie nur Ziele, die geradeaus erreichbar sind.
+        /// </summary>
+        private Transform Nearest(TreasureCache[] caches)
+        {
+            var navigation = FindFirstObjectByType<RunDirector>()?.Navigation;
+            Transform best = null;
+            var bestDistance = float.MaxValue;
+            foreach (var cache in caches)
+            {
+                if (!cache || cache.Opened) continue;
+                var offset = cache.transform.position - player.position;
+                offset.y = 0f;
+                if (offset.sqrMagnitude >= bestDistance) continue;
+                if (navigation != null)
+                {
+                    var reached = navigation.FurthestWalkableAlong(player.position, cache.transform.position, 0.5f);
+                    if ((reached - cache.transform.position).sqrMagnitude > 2.25f) continue;
+                }
+                bestDistance = offset.sqrMagnitude;
+                best = cache.transform;
+            }
+            return best;
         }
 
         /// <summary>

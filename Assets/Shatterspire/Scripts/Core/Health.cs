@@ -113,6 +113,22 @@ namespace Shatterspire
             GameEvents.RaiseHealthChanged(this);
         }
 
+        /// <summary>
+        /// Nimmt Leben weg, ohne den Schadensweg zu gehen: kein Filter, keine Unverwundbarkeit,
+        /// kein Gegner als Quelle. Fuer Fluechte, die aus einer Entscheidung kommen und nicht aus
+        /// einem Treffer - sonst wuerden Vergeltungs-Relikte auf einen Altar reagieren.
+        ///
+        /// Laesst immer mindestens ein Leben stehen. Ein Fluch, der den Aufstieg auf der Stelle
+        /// beendet, ist keine Wette mehr, sondern eine Falle.
+        /// </summary>
+        public void Drain(float amount)
+        {
+            if (amount <= 0f || current <= 0f) return;
+            current = Mathf.Max(1f, current - amount);
+            GameEvents.RaiseHealthChanged(this);
+            if (gameObject.activeInHierarchy) StartCoroutine(Flash());
+        }
+
         public void IncreaseMaximum(float amount, bool healDifference)
         {
             maximum = Mathf.Max(1f, maximum + amount);

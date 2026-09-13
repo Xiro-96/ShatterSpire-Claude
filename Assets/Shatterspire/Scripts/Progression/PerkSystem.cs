@@ -335,6 +335,29 @@ namespace Shatterspire
             Changed?.Invoke();
         }
 
+        /// <summary>
+        /// Wirkung einer Wette aus dem Raetselraum. Laeuft ueber Wirkung und Betrag, nicht ueber die
+        /// Kennung: der angezeigte Text wird aus denselben zwei Feldern gebaut, deshalb kann die
+        /// Anzeige nicht von der Wirkung abweichen.
+        ///
+        /// Gold und Lebensanteile gehoeren nicht hierher - die haelt der Altar selbst, weil sie an
+        /// Geldbeutel und Lebensbalken haengen und nicht am Aufbau.
+        /// </summary>
+        public void ApplyWager(in Wager wager)
+        {
+            switch (wager.Effect)
+            {
+                case WagerEffect.Damage: storedDamageMultiplier *= wager.Amount; break;
+                case WagerEffect.AttackSpeed: AttackSpeedMultiplier *= wager.Amount; break;
+                case WagerEffect.MoveSpeed: storedMoveSpeedMultiplier *= wager.Amount; break;
+                case WagerEffect.UltimateCharge: UltimateChargeMultiplier *= wager.Amount; break;
+                case WagerEffect.MaxHealth:
+                    GetComponent<Health>()?.IncreaseMaximum(wager.Amount, wager.Amount > 0f);
+                    break;
+            }
+            Changed?.Invoke();
+        }
+
         public void Apply(PerkDefinition perk)
         {
             if (!perks.Add(perk.Id)) return;

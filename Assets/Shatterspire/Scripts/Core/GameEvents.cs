@@ -15,6 +15,15 @@ namespace Shatterspire
         public static event Action<int, int, string> ObjectiveChanged;
         /// <summary>Anomalie der begonnenen Etage.</summary>
         public static event Action<FloorModifierId> AnomalyChanged;
+
+        /// <summary>
+        /// Kurze Meldung fuer das Bild in der Mitte. Der Text kommt fertig uebersetzt herein - die
+        /// Stelle, die ihn ausloest, kennt ihre eigene Sprache besser als das HUD.
+        /// </summary>
+        public static event Action<string, float> Notice;
+
+        /// <summary>Stand der Schatzkammer: geoeffnet, gesamt, Restzeit, laeuft noch.</summary>
+        public static event Action<int, int, float, bool> VaultChanged;
         public static event Action<Vector3, string, bool> ObjectiveTargetChanged;
         public static event Action<int, int, bool> EncounterChanged;
         public static event Action<int, int> WaveChanged;
@@ -31,6 +40,9 @@ namespace Shatterspire
         public static void RaiseRoomCompleted(int index, RoomKind kind) => RoomCompleted?.Invoke(index, kind);
         public static void RaiseObjectiveChanged(int current, int required, string instruction) => ObjectiveChanged?.Invoke(current, required, instruction);
         public static void RaiseAnomalyChanged(FloorModifierId anomaly) => AnomalyChanged?.Invoke(anomaly);
+        public static void RaiseNotice(string text, float seconds) => Notice?.Invoke(text, seconds);
+        public static void RaiseVaultChanged(int opened, int total, float secondsLeft, bool active)
+            => VaultChanged?.Invoke(opened, total, secondsLeft, active);
         public static void RaiseObjectiveTargetChanged(Vector3 position, string label, bool visible)
             => ObjectiveTargetChanged?.Invoke(position, label, visible);
         public static void RaiseEncounterChanged(int remaining, int total, bool boss)
@@ -54,6 +66,8 @@ namespace Shatterspire
             RoomCompleted = null;
             ObjectiveChanged = null;
             AnomalyChanged = null;
+            Notice = null;
+            VaultChanged = null;
             ObjectiveTargetChanged = null;
             EncounterChanged = null;
             WaveChanged = null;

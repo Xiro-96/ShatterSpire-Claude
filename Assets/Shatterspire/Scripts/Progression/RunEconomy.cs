@@ -107,6 +107,17 @@ namespace Shatterspire
             Changed?.Invoke();
         }
 
+        /// <summary>
+        /// Nimmt Gold weg, ohne etwas dafuer zu geben - fuer Fluechte aus dem Raetselraum. Klemmt
+        /// bei null: eine Schuld, die man mit sich herumtraegt, waere eine zweite Waehrung.
+        /// </summary>
+        public void Spend(int amount)
+        {
+            if (amount <= 0) return;
+            Gold = Mathf.Max(0, Gold - amount);
+            Changed?.Invoke();
+        }
+
         public int TimesBought(ShopOfferId id) => bought.TryGetValue(id, out var count) ? count : 0;
 
         public int PriceOf(ShopOffer offer) => ShopCatalog.PriceOf(offer, TimesBought(offer.Id));

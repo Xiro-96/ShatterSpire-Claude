@@ -59,6 +59,8 @@ namespace Shatterspire
             gate = gateObject.AddComponent<AscensionGate>();
             gate.Configure(player, CompleteFloor);
 
+            BuildRoomCharacter(layout);
+
             if (nodes.Count == 0)
             {
                 gate.Unlock();
@@ -74,6 +76,58 @@ namespace Shatterspire
         private void OnDestroy()
         {
             if (spawner) spawner.EnemiesCleared -= OnDefendersCleared;
+        }
+
+        /// <summary>
+        /// Was diesen Raum von einem Kampfraum unterscheidet.
+        ///
+        /// Vorher unterschieden sich Schatzkammer und Raetselraum nur in Gold und Heilung: die Wahl
+        /// am Aufzug war eine Beschriftung. Der Kern jeder Etage - Power Cores finden, Aufzug nehmen -
+        /// bleibt gleich, damit jede Route loesbar ist; darueber legt jede Route ihr eigenes Verb.
+        /// </summary>
+        private void BuildRoomCharacter(FloorLayout layout)
+        {
+            switch (roomKind)
+            {
+                case RoomKind.Treasure:
+                    var vault = new GameObject("Treasure Vault");
+                    vault.transform.SetParent(transform, false);
+                    vault.AddComponent<TreasureVault>().Configure(player, layout, floor);
+                    break;
+                case RoomKind.Mystery:
+                    BuildAltars(layout);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Zwei Altaere im Startraum, links und rechts des Weges.
+        ///
+        /// Bewusst am Anfang und nicht am Aufzug: ein Fluch muss die Etage noch praegen koennen,
+        /// sonst ist die Wette folgenlos. Und im Startraum kann man sie nicht verpassen.
+        /// </summary>
+        private void BuildAltars(FloorLayout layout)
+        {
+            if (layout == null) return;
+            var altars = new List<MysteryAltar>(2);
+            var stakes = new[] { WagerStake.Small, WagerStake.Large };
+            for (var i = 0; i < stakes.Length; i++)
+            {
+                var side = i == 0 ? -1f : 1f;
+                var spot = layout.SpawnPoint + new Vector3(side * 3.6f, 0f, 4.2f);
+                var startRoom = layout.Rooms.Count > 0 ? layout.Rooms[0] : null;
+                if (startRoom != null) spot = startRoom.Bounds.Clamp(spot, 2f);
+                var holder = new GameObject("Mystery Altar " + (i + 1));
+                holder.transform.SetParent(transform, false);
+                holder.transform.position = spot;
+                var altar = holder.AddComponent<MysteryAltar>();
+                altar.Configure(player, stakes[i],
+                    WagerCatalog.Draw(layout.Seed, floor, stakes[i], i + 1), altars);
+                altars.Add(altar);
+            }
+            GameEvents.RaiseNotice($"{Loc.T("TWO ALTARS")}\n{Loc.T("YOU MAY TOUCH ONE")}", 2.8f);
+            Debug.Log($"SHATTERSPIRE Raetselraum: {altars.Count} Altaere, "
+                      + string.Join(", ", altars.ConvertAll(a => $"{a.Offer.Stake}={a.Offer.Id}")));
         }
 
         private int ActivatedCount
@@ -113,8 +167,10 @@ namespace Shatterspire
             chargingSince = Time.time;
             retryUsed = false;
             var index = nodes.IndexOf(node);
-            GameEvents.RaiseObjectiveChanged(ActivatedCount, nodes.Count,
-                $"{Loc.T("DEFEND POWER CORE")} {index + 1}");
+            // Nur der Schluessel: das HUD uebersetzt ihn und haengt den Stand selbst an. Vorher
+            // stand hier eine fertig zusammengesetzte Zeichenkette, die dann ein zweites Mal durch
+            // die Tabelle lief - "VERTEIDIGE KERN 1 · 0/2", die Zahl also doppelt.
+            GameEvents.RaiseObjectiveChanged(ActivatedCount, nodes.Count, "DEFEND POWER CORE");
             spawner.SpawnObjectiveEncounter(node.transform.position, floor, index, roomKind);
         }
 
