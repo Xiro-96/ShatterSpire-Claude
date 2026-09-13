@@ -73,7 +73,10 @@ namespace Shatterspire.Editor
             if (report.summary.result != BuildResult.Succeeded)
                 throw new BuildFailedException($"Android build failed: {report.summary.result} ({report.summary.totalErrors} errors)." );
 
-            Debug.Log($"SHATTERSPIRE APK created: {Path.GetFullPath(OutputPath)} ({report.summary.totalSize / 1048576f:0.0} MB)" );
+            // Die Groesse der fertigen Datei, nicht report.summary.totalSize - das meldet die Summe
+            // aller unkomprimierten Bestandteile und stand mit 610 MB neben einer 35-MB-Datei.
+            var size = new FileInfo(OutputPath).Length / 1048576f;
+            Debug.Log($"SHATTERSPIRE APK created: {Path.GetFullPath(OutputPath)} ({size:0.0} MB)");
             EditorUtility.RevealInFinder(OutputPath);
         }
 
