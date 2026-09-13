@@ -168,13 +168,27 @@ namespace Shatterspire
         public static bool TryBuildHero(Transform root, HeroClassId hero, out Transform muzzle)
         {
             if (hero == HeroClassId.Ranger) return TryBuildRex(root, out muzzle);
-            var role = hero == HeroClassId.Guardian ? CompanionRole.Guardian : CompanionRole.Support;
-            // KORR bekommt die Schleicherfigur: klein, beweglich, mit Beutel - und dadurch auf einen
-            // Blick von Brax, Rex und Orion zu unterscheiden.
-            var model3D = hero == HeroClassId.Bomber ? "Rogue_Hooded" : null;
-            var texture = hero == HeroClassId.Bomber ? "rogue_texture" : null;
+            var role = hero == HeroClassId.Guardian || hero == HeroClassId.Paladin
+                ? CompanionRole.Guardian
+                : CompanionRole.Support;
+            // KORR bekommt die Schleicherfigur: klein, beweglich, mit Beutel. LYRA den Ritter mit
+            // Schild - sie ist die einzige mit einem Schild in der Hand, und genau darum geht es
+            // bei ihr. Beide sind dadurch auf einen Blick von Brax, Rex und Orion zu unterscheiden.
+            var model3D = hero switch
+            {
+                HeroClassId.Bomber => "Rogue_Hooded",
+                HeroClassId.Paladin => "Knight",
+                _ => null
+            };
+            var texture = hero switch
+            {
+                HeroClassId.Bomber => "rogue_texture",
+                HeroClassId.Paladin => "knight_texture",
+                _ => null
+            };
             if (!TryBuildCompanion(root, role, HeroCatalog.Accent(hero), out muzzle,
-                    HeroCatalog.BaseSpeed(hero), model3D, texture)) return false;
+                    HeroCatalog.BaseSpeed(hero), model3D, texture,
+                    oathGear: hero == HeroClassId.Paladin)) return false;
             var model = root.childCount > 0 ? root.GetChild(0) : null;
             if (model) model.name = HeroCatalog.Name(hero) + " · " + HeroCatalog.Role(hero);
             return true;
@@ -221,8 +235,14 @@ namespace Shatterspire
             if (Camera.main) Camera.main.backgroundColor = RenderSettings.fogColor;
         }
 
+        /// <summary>
+        /// <paramref name="oathGear"/> tauscht den Kriegshammer der Waechter-Rolle gegen Schwert
+        /// und Schild. LYRA hat die Rolle des Waechters, aber nicht seine Waffe - ein Paladin mit
+        /// Kriegshammer waere ein Barbar in Ruestung.
+        /// </summary>
         public static bool TryBuildCompanion(Transform root, CompanionRole role, Color accent,
-            out Transform muzzle, float topSpeed = 6.5f, string modelName = null, string textureName = null)
+            out Transform muzzle, float topSpeed = 6.5f, string modelName = null, string textureName = null,
+            bool oathGear = false)
         {
             muzzle = null;
             // Mit modelName laesst sich eine andere Figur aufsetzen, ohne eine neue Bot-Rolle zu
@@ -260,7 +280,8 @@ namespace Shatterspire
             CreateGroundShadow(root, role == CompanionRole.Guardian ? 1.72f : 1.34f);
             CreateSelectionRing(root, role == CompanionRole.Guardian ? 1.76f : 1.38f, accent);
 
-            if (role == CompanionRole.Guardian) AttachGuardianHammer(animator, model.transform, accent);
+            if (oathGear) AttachOathGear(animator, model.transform, accent);
+            else if (role == CompanionRole.Guardian) AttachGuardianHammer(animator, model.transform, accent);
             else if (role == CompanionRole.Ranger) AttachKayKitCrossbows(animator);
             else
             {
@@ -845,6 +866,54 @@ namespace Shatterspire
         /// Vorher hing der Hammer am Handknochen, steckte in Ruhe im Koerper und ragte beim Schlag als Klotz
         /// zur Seite - die Kampfclips sahen dadurch aus wie "nur so tun".
         /// </summary>
+        /// <summary>
+        /// LYRAs Ausruestung: eine schmale Klinge in der rechten Hand, ein Rundschild in der linken.
+        ///
+        /// Der Schild ist nicht Schmuck - er ist die Aktion, um die ihr ganzes Kit gebaut ist. Er
+        /// muss also zu sehen sein, auch wenn sie ihn gerade nicht hebt.
+        /// </summary>
+        private static void AttachOathGear(Animator animator, Transform fallback, Color accent)
+        {
+            var steel = new Color(0.78f, 0.8f, 0.86f);
+            var gold = new Color(0.86f, 0.72f, 0.32f);
+
+            var right = FindNamedBone(animator ? animator.transform : fallback, "handslot.r");
+            if (!right) right = animator && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.RightHand) : fallback;
+            if (right)
+            {
+                var blade = new GameObject("Lyra Oathblade").transform;
+                blade.SetParent(right, false);
+                blade.localPosition = Vector3.zero;
+                blade.localRotation = Quaternion.identity;
+                blade.localScale = Vector3.one / Mathf.Max(0.0001f, right.lossyScale.x);
+                GearPart(blade, PrimitiveType.Cube, "Lyra Grip", new Vector3(0f, -0.1f, 0f),
+                    new Vector3(0.07f, 0.24f, 0.07f), Vector3.zero, new Color(0.26f, 0.17f, 0.12f), false, 0.2f, 0f);
+                GearPart(blade, PrimitiveType.Sphere, "Lyra Pommel", new Vector3(0f, -0.24f, 0f),
+                    new Vector3(0.11f, 0.1f, 0.11f), Vector3.zero, gold, false, 0.4f, 0.6f);
+                GearPart(blade, PrimitiveType.Cube, "Lyra Crossguard", new Vector3(0f, 0.04f, 0f),
+                    new Vector3(0.34f, 0.06f, 0.09f), Vector3.zero, gold, false, 0.42f, 0.6f);
+                GearPart(blade, PrimitiveType.Cube, "Lyra Blade", new Vector3(0f, 0.62f, 0f),
+                    new Vector3(0.1f, 1.12f, 0.035f), Vector3.zero, steel, false, 0.62f, 0.75f);
+                GearPart(blade, PrimitiveType.Cube, "Lyra Blade Light", new Vector3(0f, 0.62f, 0f),
+                    new Vector3(0.035f, 1.06f, 0.05f), Vector3.zero, accent, true, 0.5f, 0.1f);
+            }
+
+            var left = FindNamedBone(animator ? animator.transform : fallback, "handslot.l");
+            if (!left) left = animator && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.LeftHand) : null;
+            if (!left) return;
+            var shield = new GameObject("Lyra Aegis Shield").transform;
+            shield.SetParent(left, false);
+            shield.localPosition = Vector3.zero;
+            shield.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            shield.localScale = Vector3.one / Mathf.Max(0.0001f, left.lossyScale.x);
+            GearPart(shield, PrimitiveType.Cylinder, "Lyra Shield Face", new Vector3(0f, 0.16f, 0f),
+                new Vector3(0.62f, 0.05f, 0.62f), Vector3.zero, steel, false, 0.5f, 0.6f);
+            GearPart(shield, PrimitiveType.Cylinder, "Lyra Shield Rim", new Vector3(0f, 0.14f, 0f),
+                new Vector3(0.7f, 0.035f, 0.7f), Vector3.zero, gold, false, 0.45f, 0.7f);
+            GearPart(shield, PrimitiveType.Sphere, "Lyra Shield Boss", new Vector3(0f, 0.22f, 0f),
+                new Vector3(0.2f, 0.14f, 0.2f), Vector3.zero, accent, true, 0.5f, 0.2f);
+        }
+
         private static void AttachGuardianHammer(Animator animator, Transform fallback, Color accent)
         {
             var slot = FindNamedBone(animator ? animator.transform : fallback, "handslot.r");

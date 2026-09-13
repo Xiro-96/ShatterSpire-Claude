@@ -166,10 +166,8 @@ namespace Shatterspire.Tests
         private static void Check(List<string> missing, string text, string where)
         {
             // Eigennamen bleiben absichtlich gleich: HAMMER heisst auf Deutsch auch Hammer.
-            if (Loc.T(text) != text) return;
-            var identical = new[] { "HAMMER", "ELITE", "BOSS", "ULTIMATE", "BRAX", "REX", "ORION" };
-            foreach (var allowed in identical)
-                if (text == allowed) return;
+            // Die Liste steht in Loc, damit der Laufzeit-Melder und dieser Test dieselbe benutzen.
+            if (Loc.T(text) != text || Loc.IsProperName(text)) return;
             missing.Add($"{where}: '{text}'");
         }
     }

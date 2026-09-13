@@ -70,8 +70,23 @@ namespace Shatterspire
         /// Jeder Aufnahmelauf ist damit auch eine Sprachpruefung: nach "SHATTERSPIRE Sprache" im
         /// Log suchen.
         /// </summary>
+        /// <summary>
+        /// Eigennamen, die im Deutschen genauso heissen. Sie haben keinen Tabelleneintrag - einer
+        /// mit identischem Wert waere nur Ballast - und duerfen deshalb nicht als Luecke gelten.
+        ///
+        /// Eine Liste fuer beide Melder: der Laufzeit-Melder hier und der Katalogtest in den
+        /// Sprachtests. Zwei Listen waeren nach dem zweiten Helden auseinandergelaufen.
+        /// </summary>
+        private static readonly HashSet<string> ProperNames = new()
+        {
+            "AEGIS", "HAMMER", "ELITE", "BOSS", "ULTIMATE", "BRAX", "REX", "ORION", "KORR", "LYRA"
+        };
+
+        public static bool IsProperName(string text) => text != null && ProperNames.Contains(text);
+
         private static void ReportMissing(string english)
         {
+            if (IsProperName(english)) return;
             if (!Missing.Add(english)) return;
             Debug.LogWarning($"SHATTERSPIRE Sprache: kein deutscher Eintrag fuer \"{english}\".");
         }
@@ -489,6 +504,24 @@ namespace Shatterspire
             { "BLOODLETTING", "ADERLASS" },
             { "BLUNTED", "STUMPF" },
             { "DEBT", "SCHULD" },
+
+            // ── LYRA, die Paladin ───────────────────────────────────────
+            { "OATH WARDEN", "EIDWÄCHTERIN" },
+            { "OATHBLADE  ·  SHIELD BRACE  ·  HALLOWED GROUND", "EIDKLINGE  ·  SCHILDSTAND  ·  GEWEIHTER BODEN" },
+            { "OATHBLADE", "EIDKLINGE" },
+            { "SHIELD BRACE", "SCHILDSTAND" },
+            { "HALLOWED GROUND", "GEWEIHTER BODEN" },
+            // ── LYRAs Verbesserungen ────────────────────────────────────
+            { "WARD STEP", "SCHUTZSCHRITT" },
+            { "TWIN WAVE", "ZWILLINGSWELLE" },
+            { "IRON BRACE", "EISERNER STAND" },
+            { "WIDE GROUND", "WEITER KREIS" },
+            { "LONG VIGIL", "LANGE WACHE" },
+            { "Dashing leaves a small patch of Hallowed Ground behind.", "Der Dash lässt ein Stück geweihten Boden zurück." },
+            { "The Oathblade finisher sends a second wave and heals twice as much.", "Der Abschluss der Eidklinge schickt eine zweite Welle und heilt doppelt." },
+            { "Shield Brace holds everything from the front, and gives all of it back.", "Der Schildstand hält alles von vorn — und gibt alles zurück." },
+            { "Hallowed Ground covers a wider circle.", "Der geweihte Boden deckt einen weiteren Kreis." },
+            { "Aegis stands for 9 instead of 7 seconds.", "Aegis steht 9 statt 7 Sekunden." },
 
             // ── Verbesserungen: Beschreibungen ──────────────────────────
             { "Heavy attacks deal 40% more damage.", "Schwere Angriffe machen 40 % mehr Schaden." },

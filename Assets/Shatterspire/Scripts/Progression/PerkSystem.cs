@@ -19,7 +19,9 @@ namespace Shatterspire
         UltimateSurge, UltimateAfterglow, RangerHomingBarrage, GuardianMoltenQuake, ArcanistEventHorizon,
         // KORR, der Bomber.
         BomberShortFuse, BomberClusterCharge, BomberLongCord, BomberStickyCluster, BomberChainFeed,
-        BomberSmokeStep
+        BomberSmokeStep,
+        // LYRA, die Paladin.
+        PaladinWideGround, PaladinLongVigil, PaladinWardStep, PaladinTwinWave, PaladinIronBrace
     }
 
     public enum PerkRarity { Common, Rare, Epic, Legendary }
@@ -68,6 +70,7 @@ namespace Shatterspire
         private static readonly HeroClassId[] GuardianOnly = { HeroClassId.Guardian };
         private static readonly HeroClassId[] ArcanistOnly = { HeroClassId.Arcanist };
         private static readonly HeroClassId[] BomberOnly = { HeroClassId.Bomber };
+        private static readonly HeroClassId[] PaladinOnly = { HeroClassId.Paladin };
 
         public static readonly IReadOnlyList<PerkDefinition> All = new List<PerkDefinition>
         {
@@ -104,6 +107,7 @@ namespace Shatterspire
             P(PerkId.GuardianShoulderCharge, "SHOULDER CHARGE", "Dashing slams every enemy in your path.", PerkRarity.Rare, ActionSlot.Dash, GuardianOnly),
             P(PerkId.ArcanistPhaseRift, "PHASE RIFT", "Dashing leaves a rift behind that detonates.", PerkRarity.Rare, ActionSlot.Dash, ArcanistOnly),
             P(PerkId.BomberSmokeStep, "DROP STEP", "Dashing drops a live charge where you were standing.", PerkRarity.Rare, ActionSlot.Dash, BomberOnly),
+            P(PerkId.PaladinWardStep, "WARD STEP", "Dashing leaves a small patch of Hallowed Ground behind.", PerkRarity.Rare, ActionSlot.Dash, PaladinOnly),
 
             // ULTIMATE
             P(PerkId.UltimateSurge, "SURGE CELL", "Your Ultimate charges 30% faster.", PerkRarity.Rare, ActionSlot.Ultimate),
@@ -116,6 +120,10 @@ namespace Shatterspire
             P(PerkId.BomberStickyCluster, "SHAPED CHARGE", "The Sticky Mine hits 40% harder.", PerkRarity.Rare, ActionSlot.Heavy, BomberOnly),
             P(PerkId.BomberLongCord, "LONG CORD", "The Blast Cord lays five charges instead of three.", PerkRarity.Epic, ActionSlot.Skill, BomberOnly),
             P(PerkId.BomberChainFeed, "CHAIN FEED", "The Chain Detonator keeps feeding for 10 instead of 6 seconds.", PerkRarity.Epic, ActionSlot.Ultimate, BomberOnly),
+            P(PerkId.PaladinTwinWave, "TWIN WAVE", "The Oathblade finisher sends a second wave and heals twice as much.", PerkRarity.Rare, ActionSlot.Light, PaladinOnly),
+            P(PerkId.PaladinIronBrace, "IRON BRACE", "Shield Brace holds everything from the front, and gives all of it back.", PerkRarity.Epic, ActionSlot.Heavy, PaladinOnly),
+            P(PerkId.PaladinWideGround, "WIDE GROUND", "Hallowed Ground covers a wider circle.", PerkRarity.Rare, ActionSlot.Skill, PaladinOnly),
+            P(PerkId.PaladinLongVigil, "LONG VIGIL", "Aegis stands for 9 instead of 7 seconds.", PerkRarity.Epic, ActionSlot.Ultimate, PaladinOnly),
 
             // PASSIVE
             P(PerkId.DamageUp, "TEMPERED POWER", "+25% damage for every action.", PerkRarity.Common, ActionSlot.Passive),
@@ -306,7 +314,7 @@ namespace Shatterspire
                 // Schutzplatte laeuft ueber denselben Haken, mit dem der Schildtraeger Treffer
                 // abfaengt - eine Stelle fuer alles, was Schaden vor dem Abzug veraendert.
                 var own = GetComponent<Health>();
-                if (own) own.DamageFilter = damage => damage.Amount * 0.9f;
+                if (own) own.AddDamageFilter((_, amount) => amount * 0.9f);
             }
             HasEmberLens = config.HasRelic(RelicId.EmberLens);
             HasDawnSeed = config.HasRelic(RelicId.DawnSeed);

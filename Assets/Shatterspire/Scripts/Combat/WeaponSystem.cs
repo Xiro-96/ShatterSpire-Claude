@@ -43,6 +43,9 @@ namespace Shatterspire
         private KillStreak killStreak;
         /// <summary>Bis hierhin laesst jeder Abschuss eine neue Ladung fallen (Kettenzuender).</summary>
         private float chainUntil;
+
+        /// <summary>Was LYRAs Schild im laufenden Schildstand gehalten hat.</summary>
+        private float bracedDamage;
         /// <summary>Rex' Jaegerblick laeuft bis zu diesem Zeitpunkt. Jeder Abschuss verlaengert ihn.</summary>
         private float focusUntil;
         private const float FocusBaseSeconds = 5f;
@@ -190,6 +193,7 @@ namespace Shatterspire
             if (input.HeavyPressed && HeavyReady && !chargingHeavy && !ultimateActive)
             {
                 chargingHeavy = true;
+                if (heroClass == HeroClassId.Paladin) BeginShieldBrace();
                 heavyCharge = 0f;
                 PublishHeavyState();
             }
@@ -219,6 +223,12 @@ namespace Shatterspire
             if (heroClass == HeroClassId.Bomber)
             {
                 ThrowCharge(direction, finisher);
+                return;
+            }
+
+            if (heroClass == HeroClassId.Paladin)
+            {
+                OathbladeCombo(direction, finisher);
                 return;
             }
 
@@ -439,6 +449,181 @@ namespace Shatterspire
             yield return new WaitForSeconds(0.3f);
         }
 
+        /// <summary>
+        /// LYRAs Licht-Angriff: drei Schwerthiebe, und der dritte schickt eine Weihewelle nach
+        /// vorn, die Gegner trifft und die Gruppe heilt.
+        ///
+        /// Das ist ihre Handschrift schon im einfachsten Angriff: jeder Abschluss gibt der Gruppe
+        /// etwas zurueck. Die drei anderen Helden machen im Moment des Tastendrucks Schaden - sie
+        /// macht Schaden und Boden gut.
+        /// </summary>
+        private void OathbladeCombo(Vector3 direction, bool finisher)
+        {
+            var type = ResolveDamageType(DamageType.Physical);
+            var accent = HeroCatalog.Accent(heroClass);
+            var reach = 1.35f + build.Pierces * 0.3f;
+            var hit = BaseDamage * build.DamageMultiplier * (finisher ? 1.4f : lightComboStep == 2 ? 1.12f : 1f);
+            comboExpiresAt = Time.time + 1.05f;
+            nextShot = Time.time + (finisher ? 0.42f : 0.3f) / build.AttackSpeedMultiplier;
+            motion?.PlayMotion(finisher ? AttackMotion.Smash : AttackMotion.Swing, finisher ? 1.15f : 0.85f);
+            StartCoroutine(MeleeImpact(finisher ? 0.18f : 0.13f, () =>
+            {
+                var point = transform.position + direction * 1.25f;
+                Strike(point, reach, hit, type, flash: false);
+                if (!finisher)
+                {
+                    PrototypeVfx.SpawnShockwave(point, reach + 0.3f, accent);
+                    return;
+                }
+                ConsecrationWave(direction, accent, type);
+            }));
+            if (finisher) controller?.CombatStep(direction, 0.18f);
+        }
+
+        /// <summary>
+        /// Die Weihewelle des dritten Hiebs: drei Stoesse nach vorn, die Gegner treffen und jedem
+        /// Verbuendeten in der Naehe etwas Leben geben.
+        /// </summary>
+        private void ConsecrationWave(Vector3 direction, Color accent, DamageType type)
+        {
+            var damage = BaseDamage * build.DamageMultiplier * 0.55f;
+            for (var step = 1; step <= 3; step++)
+            {
+                var point = transform.position + direction * (1.6f + step * 1.25f);
+                Strike(point, 1.5f, damage, type, flash: false);
+                PrototypeVfx.SpawnShockwave(point, 1.7f, accent);
+            }
+            if (build.Has(PerkId.PaladinTwinWave))
+            {
+                // Die zweite Welle laeuft weiter hinaus als die erste.
+                for (var step = 4; step <= 6; step++)
+                {
+                    var far = transform.position + direction * (1.6f + step * 1.25f);
+                    Strike(far, 1.5f, damage * 0.8f, type, flash: false);
+                    PrototypeVfx.SpawnShockwave(far, 1.7f, accent);
+                }
+            }
+            HealParty(BaseDamage * (build.Has(PerkId.PaladinTwinWave) ? 0.6f : 0.3f));
+            Sfx.Play(Sound.CoreActivated, transform.position, 0.45f);
+            CameraController.Impulse(0.05f);
+        }
+
+        /// <summary>
+        /// Heilt LYRA und jeden Verbuendeten im Umkreis. Laeuft ueber die Lebensregister und nicht
+        /// ueber eine feste Liste: im Co-op sind die Mitspieler keine Bots dieser Instanz.
+        /// </summary>
+        private void HealParty(float amount)
+        {
+            if (amount <= 0f) return;
+            var active = Health.Active;
+            for (var i = active.Count - 1; i >= 0; i--)
+            {
+                var health = active[i];
+                if (!health || !health.IsAlive || health.Team != TeamId.Player) continue;
+                var offset = health.transform.position - transform.position;
+                offset.y = 0f;
+                if (offset.sqrMagnitude > 64f) continue;
+                health.Heal(amount);
+            }
+        }
+
+        /// <summary>
+        /// LYRAs schwerer Angriff: SCHILDSTAND. Waehrend des Ladens haelt der Schild von vorn fast
+        /// alles ab; beim Loslassen geht das Gehaltene als Stoss nach vorn zurueck.
+        ///
+        /// Beim perfekten Moment kommt kein hoeherer Multiplikator, sondern ein Betaeuben - bei ihr
+        /// ist der Lohn fuers Timing Kontrolle, nicht eine groessere Zahl.
+        /// </summary>
+        private void BeginShieldBrace()
+        {
+            bracedDamage = 0f;
+            if (!health) return;
+            health.AddDamageFilter(FilterBraced);
+        }
+
+        private float FilterBraced(DamageInfo damage, float amount)
+        {
+            var from = damage.Source ? damage.Source.transform.position : damage.HitPoint;
+            var toSource = from - transform.position;
+            toSource.y = 0f;
+            // Nur von vorn: wer sie umlaeuft, trifft sie voll. Derselbe Winkel wie beim
+            // Schildtraeger unter den Gegnern, damit die Regel im Spiel nur einmal gelernt wird.
+            if (toSource.sqrMagnitude > 0.001f &&
+                Vector3.Angle(transform.forward, toSource.normalized) > 55f) return amount;
+            // Eiserner Stand: der Schild haelt alles von vorn - dafuer steht sie waehrenddessen still.
+            var held = amount * (build.Has(PerkId.PaladinIronBrace) ? 1f : 0.8f);
+            bracedDamage += held;
+            PrototypeVfx.SpawnShockwave(transform.position + transform.forward * 0.9f, 1.2f,
+                HeroCatalog.Accent(heroClass));
+            Sfx.Play(Sound.Block, transform.position, 0.7f);
+            return amount - held;
+        }
+
+        private void ReleaseShieldBash(bool perfect, float normalized)
+        {
+            if (health) health.RemoveDamageFilter(FilterBraced);
+            var type = ResolveDamageType(DamageType.Physical);
+            var accent = HeroCatalog.Accent(heroClass);
+            var direction = AcquireAttackDirection();
+            var point = transform.position + direction * 2f;
+            // Was der Schild gehalten hat, geht zurueck - das ist ihr ganzes Versprechen in einer Zahl.
+            var damage = (BaseDamage * Mathf.Lerp(1.8f, 3f, normalized) * build.HeavyDamageMultiplier
+                          + bracedDamage * (build.Has(PerkId.PaladinIronBrace) ? 2.2f : 1.6f))
+                         * build.DamageMultiplier;
+            Strike(point, 2.6f, damage, type, flash: true);
+            PrototypeVfx.SpawnShockwave(point, 3.2f, accent);
+            if (perfect)
+            {
+                // Kein hoeherer Schaden, sondern Zeit: alles in Reichweite steht still.
+                foreach (var enemy in EnemyAgent.Active)
+                {
+                    if (!enemy) continue;
+                    var offset = enemy.transform.position - point;
+                    offset.y = 0f;
+                    if (offset.sqrMagnitude <= 12.25f) enemy.Stun(1.4f);
+                }
+                PrototypeVfx.SpawnExplosion(point, 3.5f, accent);
+            }
+            Debug.Log($"SHATTERSPIRE Schildstand: {bracedDamage:0} gehalten, {damage:0} zurueckgegeben, "
+                      + $"perfekt {perfect}.");
+            bracedDamage = 0f;
+            motion?.PlayMotion(AttackMotion.Smash, perfect ? 1.4f : 1.1f);
+            Sfx.Play(perfect ? Sound.GuardBreak : Sound.HitHeavy, transform.position);
+            controller?.CombatStep(direction, 0.5f);
+        }
+
+        /// <summary>
+        /// LYRAs Faehigkeit: GEWEIHTER BODEN. Ein Kreis, in dem die Gruppe weniger einsteckt und
+        /// sich erholt und Gegner langsamer werden.
+        /// </summary>
+        private IEnumerator HallowGround(Vector3 direction)
+        {
+            var accent = HeroCatalog.Accent(heroClass);
+            var center = ThrowTarget(direction, 5.5f);
+            motion?.PlayMotion(AttackMotion.Cast, 1.2f);
+            Sfx.Play(Sound.CoreActivated, transform.position, 0.8f);
+            var radius = build.Has(PerkId.PaladinWideGround) ? 5.4f : 4.2f;
+            HallowedGround.Spawn(center, radius, 7f, accent);
+            PrototypeVfx.SpawnShockwave(center, radius, accent);
+            Debug.Log($"SHATTERSPIRE Geweihter Boden: Radius {radius:0.0}, 7 s.");
+            yield return new WaitForSeconds(0.25f);
+        }
+
+        /// <summary>
+        /// LYRAs Ultimate: AEGIS. Eine Kuppel, die den Schaden der Gruppe schluckt und ihn am Ende
+        /// zurueckgibt.
+        /// </summary>
+        private IEnumerator RaiseAegis()
+        {
+            var accent = HeroCatalog.Accent(heroClass);
+            Sfx.Play2D(Sound.UltimateRise);
+            PrototypeVfx.SpawnExplosion(transform.position + Vector3.up * 0.8f, 3.4f, accent);
+            CameraController.Impulse(0.18f);
+            var seconds = build.Has(PerkId.PaladinLongVigil) ? 9f : 7f;
+            AegisDome.Spawn(transform.position, 6.2f, seconds, accent, gameObject);
+            yield return new WaitForSeconds(0.3f);
+        }
+
         private IEnumerator MeleeImpact(float delay, System.Action impact)
         {
             yield return new WaitForSeconds(delay);
@@ -453,6 +638,17 @@ namespace Shatterspire
         {
             var normalized = HeavyChargeNormalized;
             var perfect = normalized >= PerfectStart && normalized <= PerfectEnd;
+            if (heroClass == HeroClassId.Paladin)
+            {
+                ReleaseShieldBash(perfect, normalized);
+                heavyMeter = 0f;
+                chargingHeavy = false;
+                heavyCharge = 0f;
+                nextShot = Time.time + 0.32f;
+                PublishHeavyState();
+                CameraController.Impulse(perfect ? 0.2f : 0.1f);
+                return;
+            }
             if (heroClass == HeroClassId.Bomber)
             {
                 ReleaseStickyMine(perfect, normalized);
@@ -556,6 +752,12 @@ namespace Shatterspire
                 yield break;
             }
 
+            if (heroClass == HeroClassId.Paladin)
+            {
+                yield return HallowGround(direction);
+                yield break;
+            }
+
             if (heroClass == HeroClassId.Arcanist)
             {
                 motion?.PlayMotion(AttackMotion.Channel, 1.2f);
@@ -613,6 +815,7 @@ namespace Shatterspire
             if (heroClass == HeroClassId.Guardian) yield return ForgePlunge(direction);
             else if (heroClass == HeroClassId.Arcanist) yield return OpenTimeRift(direction);
             else if (heroClass == HeroClassId.Bomber) yield return ChainDetonator();
+            else if (heroClass == HeroClassId.Paladin) yield return RaiseAegis();
             else yield return HuntersFocus();
 
             ultimateActive = false;
@@ -761,6 +964,13 @@ namespace Shatterspire
 
         public void OnDashEnded(Vector3 origin, Vector3 end, Vector3 direction)
         {
+            if (heroClass == HeroClassId.Paladin && build.Has(PerkId.PaladinWardStep))
+            {
+                // Schutzschritt: der Dash laesst ein Stueck geweihten Boden zurueck. Damit wird aus
+                // ihrem Ausweichen ein Ort, an den die Gruppe nachruecken kann.
+                HallowedGround.Spawn(origin, 2.6f, 4f, HeroCatalog.Accent(heroClass));
+                return;
+            }
             if (heroClass != HeroClassId.Guardian || !build.Has(PerkId.GuardianShoulderCharge)) return;
             // Ein Treffer ueber die ganze Strecke: Mittelpunkt des Wegs, Radius bis zu beiden Enden.
             var middle = Vector3.Lerp(origin, end, 0.5f);

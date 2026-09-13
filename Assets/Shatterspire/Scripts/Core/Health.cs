@@ -18,11 +18,28 @@ namespace Shatterspire
         private Color[] baseColors;
 
         /// <summary>
-        /// Abwehr, die den Schaden vor dem Abzug veraendern darf, und den tatsaechlich wirksamen Betrag
-        /// zurueckgibt - etwa ein Schildtraeger, der Treffer von vorn abfaengt. Bewusst ein Feld der
-        /// Instanz und nichts Statisches: im Co-op hat jede Figur ihre eigene Abwehr.
+        /// Abwehr, die den Schaden vor dem Abzug veraendern darf. Der erste Wert ist der Treffer,
+        /// der zweite der bis hierhin verbliebene Betrag; zurueck kommt der neue Betrag.
+        ///
+        /// Bewusst eine Kette und kein einzelnes Feld: Schutzplatte, Schildstand und die Deckung des
+        /// Schildtraegers wollen dieselbe Stelle, und mit einem Feld haette der letzte Schreiber
+        /// stillschweigend gewonnen. Bewusst an der Instanz und nichts Statisches: im Co-op hat
+        /// jede Figur ihre eigene Abwehr.
         /// </summary>
-        public Func<DamageInfo, float> DamageFilter { get; set; }
+        private readonly List<Func<DamageInfo, float, float>> filters = new();
+
+        /// <summary>Haengt eine Abwehr an. Doppelt angehaengt wird sie nur einmal gefuehrt.</summary>
+        public void AddDamageFilter(Func<DamageInfo, float, float> filter)
+        {
+            if (filter != null && !filters.Contains(filter)) filters.Add(filter);
+        }
+
+        public void RemoveDamageFilter(Func<DamageInfo, float, float> filter)
+        {
+            if (filter != null) filters.Remove(filter);
+        }
+
+        public void ClearDamageFilters() => filters.Clear();
 
         public event Action<DamageInfo> Damaged;
         public event Action Died;
@@ -72,8 +89,11 @@ namespace Shatterspire
         {
             if (!IsAlive || Time.time < invulnerableUntil || damage.Amount <= 0f) return;
             // Die Abwehr laeuft vor allem anderen: sie darf den Betrag senken und meldet ihre eigene
-            // Rueckmeldung selbst. Bleibt nichts uebrig, endet der Treffer hier.
-            var effective = DamageFilter != null ? Mathf.Max(0f, DamageFilter(damage)) : damage.Amount;
+            // Rueckmeldung selbst. Bleibt nichts uebrig, endet der Treffer hier. Der Reihe nach,
+            // damit zwei Abwehren sich multiplizieren statt einander zu ueberschreiben.
+            var effective = damage.Amount;
+            for (var i = 0; i < filters.Count && effective > 0f; i++)
+                effective = Mathf.Max(0f, filters[i](damage, effective));
             if (effective <= 0f) return;
             var applied = Mathf.Approximately(effective, damage.Amount)
                 ? damage

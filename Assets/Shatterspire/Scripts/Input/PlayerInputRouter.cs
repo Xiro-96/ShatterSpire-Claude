@@ -67,6 +67,18 @@ namespace Shatterspire
         private int scriptedHeavyPressFrames;
         private int scriptedHeavyReleaseFrames;
 
+        /// <summary>
+        /// Nur fuer automatische Vorfuehrungen: loest die Faehigkeit einmal aus. Zwei Bilder lang,
+        /// aus demselben Grund wie bei <see cref="ScriptedUltimate"/>.
+        /// </summary>
+        public bool ScriptedSkill
+        {
+            get => scriptedSkillFrames > 0;
+            set => scriptedSkillFrames = value ? 2 : 0;
+        }
+
+        private int scriptedSkillFrames;
+
         private static bool Consume(ref int frames)
         {
             if (frames <= 0) return false;
@@ -107,7 +119,7 @@ namespace Shatterspire
             HeavyReleased = (mouse && Input.GetMouseButtonUp(1)) || MobileInput.ConsumeHeavyReleased()
                             || Consume(ref scriptedHeavyReleaseFrames);
             HeavyHeld = (mouse && Input.GetMouseButton(1)) || MobileInput.Heavy || scriptedHeavy;
-            SkillPressed = Input.GetKeyDown(KeyCode.Q) || MobileInput.ConsumeSkill();
+            SkillPressed = Input.GetKeyDown(KeyCode.Q) || MobileInput.ConsumeSkill() || Consume(ref scriptedSkillFrames);
             DashPressed = Input.GetKeyDown(KeyCode.Space) || MobileInput.ConsumeDash();
             UltimatePressed = Input.GetKeyDown(KeyCode.R) || MobileInput.ConsumeUltimate() ||
                               scriptedUltimateFrames > 0;

@@ -127,7 +127,7 @@ namespace Shatterspire
                 // Nach der Anomalie gerechnet: bei halbem Leben muss auch die Schwelle halb sein,
                 // sonst bricht die Deckung des Schildtraegers im Glasbruch nie.
                 guardBreakDamage = health.Maximum * 0.42f;
-                health.DamageFilter = FilterGuardedDamage;
+                health.AddDamageFilter(FilterGuardedDamage);
             }
             strafeDirection = GetInstanceID() % 2 == 0 ? 1f : -1f;
             spawnedAt = Time.time;
@@ -196,7 +196,7 @@ namespace Shatterspire
         private void OnDestroy()
         {
             if (!health) return;
-            health.DamageFilter = null;
+            health.RemoveDamageFilter(FilterGuardedDamage);
             health.Died -= Die;
             health.Damaged -= OnDamaged;
         }
@@ -617,9 +617,9 @@ namespace Shatterspire
         /// oder von hinten trifft es voll und etwas darueber. Ein harter Treffer von vorn bricht die
         /// Deckung auf. Der Rueckgabewert ist der Schaden, der wirklich zaehlt.
         /// </summary>
-        private float FilterGuardedDamage(DamageInfo damage)
+        private float FilterGuardedDamage(DamageInfo damage, float amount)
         {
-            if (state == State.Dead) return damage.Amount;
+            if (state == State.Dead) return amount;
             var from = damage.Source ? damage.Source.transform.position : damage.HitPoint;
             var toAttacker = from - transform.position;
             toAttacker.y = 0f;
@@ -793,7 +793,7 @@ namespace Shatterspire
             if (state == State.Dead) return;
             state = State.Dead;
             guarding = false;
-            if (health) health.DamageFilter = null;
+            if (health) health.RemoveDamageFilter(FilterGuardedDamage);
             StopAllCoroutines();
             if (eliteExplosive) CombatUtility.Explode(transform.position, 3.5f, 16f, TeamId.Player, DamageType.Fire, gameObject);
             var bodyRenderer = GetComponentInChildren<Renderer>();

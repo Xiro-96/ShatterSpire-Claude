@@ -5,7 +5,9 @@ using UnityEngine;
 namespace Shatterspire
 {
     // Bomber kommt ans Ende: gespeicherte Werte (lastHero) behalten damit ihre Bedeutung.
-    public enum HeroClassId { Ranger, Guardian, Arcanist, Bomber }
+    // Neue Helden kommen ans Ende, damit gespeicherte Zahlen ihre Bedeutung behalten -
+    // die Heldenstufen liegen nach diesem Index im Spielstand.
+    public enum HeroClassId { Ranger, Guardian, Arcanist, Bomber, Paladin }
     /// <summary>Schwierigkeitspfad wie in R.I.S.E.: Brave 5 Etagen, Heroic 15, Legendary ohne Ende.</summary>
     public enum RunMode { Brave, Heroic, Legendary }
     public enum FloorTheme { ForgottenCourt, EmberFoundry, AstralArchive }
@@ -57,6 +59,7 @@ namespace Shatterspire
     {
         public static string Name(HeroClassId hero) => hero switch
         {
+            HeroClassId.Paladin => "LYRA",
             HeroClassId.Bomber => "KORR",
             HeroClassId.Guardian => "BRAX",
             HeroClassId.Arcanist => "ORION",
@@ -65,6 +68,7 @@ namespace Shatterspire
 
         public static string Role(HeroClassId hero) => hero switch
         {
+            HeroClassId.Paladin => "OATH WARDEN",
             HeroClassId.Bomber => "BLAST ENGINEER",
             HeroClassId.Guardian => "FORGE GUARDIAN",
             HeroClassId.Arcanist => "RIFT ARCANIST",
@@ -73,6 +77,7 @@ namespace Shatterspire
 
         public static string Kit(HeroClassId hero) => hero switch
         {
+            HeroClassId.Paladin => "OATHBLADE  ·  SHIELD BRACE  ·  HALLOWED GROUND",
             HeroClassId.Bomber => "THROWN CHARGES  ·  STICKY MINE  ·  BLAST CORD",
             HeroClassId.Guardian => "HAMMER COMBO  ·  PERFECT SLAM  ·  BULL RUSH",
             HeroClassId.Arcanist => "ARC BOLTS  ·  GRAVITY BURST  ·  BLACK STAR",
@@ -83,6 +88,9 @@ namespace Shatterspire
         {
             // Saeuregruen: unterscheidet sich klar von Orange, Violett und Tuerkis der anderen drei.
             HeroClassId.Bomber => new Color(0.72f, 0.93f, 0.12f),
+            // Warmes Weissgold. Das einzige helle Akzentlicht im Turm - es soll wie Schutz
+            // aussehen und nicht wie noch eine Schadensfarbe.
+            HeroClassId.Paladin => new Color(1f, 0.93f, 0.66f),
             HeroClassId.Guardian => new Color(1f, 0.52f, 0.08f),
             HeroClassId.Arcanist => new Color(0.66f, 0.28f, 1f),
             _ => new Color(0.04f, 0.88f, 0.92f)
@@ -91,6 +99,8 @@ namespace Shatterspire
         public static float BaseHealth(HeroClassId hero) => hero switch
         {
             HeroClassId.Bomber => 98f,
+            // Mehr als Brax: sie haelt nicht nur sich, sondern stellt sich vor die Gruppe.
+            HeroClassId.Paladin => 160f,
             HeroClassId.Guardian => 145f,
             HeroClassId.Arcanist => 92f,
             _ => 105f
@@ -99,6 +109,8 @@ namespace Shatterspire
         public static float BaseSpeed(HeroClassId hero) => hero switch
         {
             HeroClassId.Bomber => 6f,
+            // Die langsamste im Spiel. Wer Raeume sichert, kommt nicht ueberall hin.
+            HeroClassId.Paladin => 4.9f,
             HeroClassId.Guardian => 5.25f,
             HeroClassId.Arcanist => 5.8f,
             _ => 6.25f
@@ -109,6 +121,8 @@ namespace Shatterspire
             // Niedriger als bei den anderen: seine Bomben treffen mehrere und zuenden verzoegert,
             // also zaehlt nicht der einzelne Schlag.
             HeroClassId.Bomber => 10f,
+            // Weniger als Brax: ihr Wert liegt darin, was sie der Gruppe abnimmt, nicht im Schlag.
+            HeroClassId.Paladin => 14f,
             HeroClassId.Guardian => 17f,
             HeroClassId.Arcanist => 12.5f,
             _ => 11.5f
@@ -117,6 +131,7 @@ namespace Shatterspire
         public static float SkillCooldown(HeroClassId hero) => hero switch
         {
             HeroClassId.Bomber => 7.5f,
+            HeroClassId.Paladin => 9f,
             HeroClassId.Guardian => 6.5f,
             HeroClassId.Arcanist => 8f,
             _ => 7f
@@ -124,6 +139,7 @@ namespace Shatterspire
 
         public static string LightAttackName(HeroClassId hero) => hero switch
         {
+            HeroClassId.Paladin => "OATHBLADE",
             HeroClassId.Bomber => "THROWN CHARGE",
             HeroClassId.Guardian => "HAMMER",
             HeroClassId.Arcanist => "ARC BOLT",
@@ -132,6 +148,7 @@ namespace Shatterspire
 
         public static string HeavyAttackName(HeroClassId hero) => hero switch
         {
+            HeroClassId.Paladin => "SHIELD BRACE",
             HeroClassId.Bomber => "STICKY MINE",
             HeroClassId.Guardian => "GROUND BREAKER",
             HeroClassId.Arcanist => "GRAVITY BURST",
@@ -140,6 +157,7 @@ namespace Shatterspire
 
         public static string SkillName(HeroClassId hero) => hero switch
         {
+            HeroClassId.Paladin => "HALLOWED GROUND",
             HeroClassId.Bomber => "BLAST CORD",
             HeroClassId.Guardian => "BULL RUSH",
             HeroClassId.Arcanist => "BLACK STAR",
@@ -148,6 +166,7 @@ namespace Shatterspire
 
         public static string UltimateName(HeroClassId hero) => hero switch
         {
+            HeroClassId.Paladin => "AEGIS",
             HeroClassId.Bomber => "CHAIN DETONATOR",
             HeroClassId.Guardian => "FORGE PLUNGE",
             HeroClassId.Arcanist => "TIME RIFT",

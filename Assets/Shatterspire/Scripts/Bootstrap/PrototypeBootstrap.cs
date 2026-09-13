@@ -87,6 +87,9 @@ namespace Shatterspire
             // Stufe und Relikte sind sonst auf keinem Bild zu pruefen.
             if (CaptureDemo.Requested && CaptureDemo.MenuOnly)
             {
+                // Die Lobby zeigt den zuletzt gewaehlten Helden. Damit -shatterspire-hero auch hier
+                // wirkt, wird die Wahl vor dem Aufbau hinterlegt.
+                MetaSaveSystem.SaveLobbySelection(CaptureDemo.Hero, RunMode.Heroic);
                 BuildFrontEnd();
                 new GameObject("Menu Capture").AddComponent<MenuCapture>();
                 return;
