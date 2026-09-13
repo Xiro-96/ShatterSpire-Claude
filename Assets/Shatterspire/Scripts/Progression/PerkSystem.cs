@@ -49,6 +49,18 @@ namespace Shatterspire
             Heroes = heroes ?? Array.Empty<HeroClassId>();
         }
 
+        /// <summary>
+        /// Hoechster Rang dieses Upgrades. 1 heisst: gibt es je Aufstieg genau einmal.
+        ///
+        /// Vertiefbar sind nur die, deren Wirkung eine Zahl ist - ein zweiter Rang auf "Angriffe
+        /// entzuenden" waere kein Fortschritt, sondern dieselbe Wirkung noch einmal. Bei Schaden,
+        /// Tempo, Durchschlag oder Geschosszahl ist der zweite Rang dagegen genau das, was einen
+        /// Aufbau ausmacht: eine Aktion zuspitzen statt breit zu sammeln.
+        /// </summary>
+        public int MaximumRank = 1;
+
+        public bool Stackable => MaximumRank > 1;
+
         public bool IsHeroSpecific => Heroes.Length > 0;
         public bool AvailableFor(HeroClassId hero) => Heroes.Length == 0 || Array.IndexOf(Heroes, hero) >= 0;
     }
@@ -75,10 +87,10 @@ namespace Shatterspire
         public static readonly IReadOnlyList<PerkDefinition> All = new List<PerkDefinition>
         {
             // LIGHT
-            P(PerkId.AttackSpeed, "BATTLE RHYTHM", "Light attacks are 22% faster.", PerkRarity.Common, ActionSlot.Light),
-            P(PerkId.Piercing, "SUNDER", "Shots pierce one more enemy. Hammer swings reach further.", PerkRarity.Rare, ActionSlot.Light),
-            P(PerkId.Ricochet, "SEEKING ECHO", "Shots bounce to a second enemy. Hammer finishers echo.", PerkRarity.Rare, ActionSlot.Light),
-            P(PerkId.Multishot, "TWIN FANG", "Fires a second projectile. Hammer swings leave an aftershock.", PerkRarity.Epic, ActionSlot.Light),
+            Deep(PerkId.AttackSpeed, "BATTLE RHYTHM", "Light attacks are 22% faster.", PerkRarity.Common, ActionSlot.Light, 3),
+            Deep(PerkId.Piercing, "SUNDER", "Shots pierce one more enemy. Hammer swings reach further.", PerkRarity.Rare, ActionSlot.Light, 3),
+            Deep(PerkId.Ricochet, "SEEKING ECHO", "Shots bounce to a second enemy. Hammer finishers echo.", PerkRarity.Rare, ActionSlot.Light, 3),
+            Deep(PerkId.Multishot, "TWIN FANG", "Fires a second projectile. Hammer swings leave an aftershock.", PerkRarity.Epic, ActionSlot.Light, 3),
             P(PerkId.HomingShot, "SEEKER LINK", "Shots curve toward nearby enemies.", PerkRarity.Rare, ActionSlot.Light, Shooters),
             P(PerkId.RangerSplitFinisher, "SPLIT FINISHER", "Every third Rift Arrow splits into a fan of three.", PerkRarity.Rare, ActionSlot.Light, RangerOnly),
             P(PerkId.GuardianCleaveWave, "CLEAVING WAVE", "The Hammer finisher sends a ground wave forward.", PerkRarity.Rare, ActionSlot.Light, GuardianOnly),
@@ -100,9 +112,9 @@ namespace Shatterspire
             P(PerkId.ArcanistLingeringStar, "LINGERING STAR", "Black Star pulses seven times and drifts toward your aim.", PerkRarity.Rare, ActionSlot.Skill, ArcanistOnly),
 
             // DASH
-            P(PerkId.ExtraDash, "SECOND WIND", "+1 Dash charge.", PerkRarity.Rare, ActionSlot.Dash),
+            Deep(PerkId.ExtraDash, "SECOND WIND", "+1 Dash charge.", PerkRarity.Rare, ActionSlot.Dash, 2),
             P(PerkId.DashExplosion, "STORM STEP", "Every Dash ends in a lightning burst.", PerkRarity.Rare, ActionSlot.Dash),
-            P(PerkId.MovementSpeed, "KINETIC BOOTS", "+15% movement speed. Dash recharges 25% faster.", PerkRarity.Common, ActionSlot.Dash),
+            Deep(PerkId.MovementSpeed, "KINETIC BOOTS", "+15% movement speed. Dash recharges 25% faster.", PerkRarity.Common, ActionSlot.Dash, 2),
             P(PerkId.RangerPartingShot, "PARTING SHOT", "Dashing fires a fan of five arrows toward your aim.", PerkRarity.Rare, ActionSlot.Dash, RangerOnly),
             P(PerkId.GuardianShoulderCharge, "SHOULDER CHARGE", "Dashing slams every enemy in your path.", PerkRarity.Rare, ActionSlot.Dash, GuardianOnly),
             P(PerkId.ArcanistPhaseRift, "PHASE RIFT", "Dashing leaves a rift behind that detonates.", PerkRarity.Rare, ActionSlot.Dash, ArcanistOnly),
@@ -126,9 +138,9 @@ namespace Shatterspire
             P(PerkId.PaladinLongVigil, "LONG VIGIL", "Aegis stands for 9 instead of 7 seconds.", PerkRarity.Epic, ActionSlot.Ultimate, PaladinOnly),
 
             // PASSIVE
-            P(PerkId.DamageUp, "TEMPERED POWER", "+25% damage for every action.", PerkRarity.Common, ActionSlot.Passive),
-            P(PerkId.CritChance, "DEADEYE", "+12% critical chance.", PerkRarity.Rare, ActionSlot.Passive),
-            P(PerkId.CritDamage, "HOLLOW POINT", "+50% critical damage.", PerkRarity.Common, ActionSlot.Passive),
+            Deep(PerkId.DamageUp, "TEMPERED POWER", "+25% damage for every action.", PerkRarity.Common, ActionSlot.Passive, 3),
+            Deep(PerkId.CritChance, "DEADEYE", "+12% critical chance.", PerkRarity.Rare, ActionSlot.Passive, 3),
+            Deep(PerkId.CritDamage, "HOLLOW POINT", "+50% critical damage.", PerkRarity.Common, ActionSlot.Passive, 3),
             P(PerkId.ExplosiveShot, "VOLATILE IMPACT", "Shots erupt for area damage on impact.", PerkRarity.Epic, ActionSlot.Passive, Shooters),
             P(PerkId.FireBullet, "EMBER CORE", "Attacks ignite. Combines with Volatile Impact.", PerkRarity.Rare, ActionSlot.Passive),
             P(PerkId.IceBullet, "CRYO CORE", "Attacks slow enemies. Critical hits shatter with Deadeye.", PerkRarity.Rare, ActionSlot.Passive),
@@ -139,12 +151,56 @@ namespace Shatterspire
             P(PerkId.Execution, "FINISHER", "Deal double damage to enemies below 20% health.", PerkRarity.Epic, ActionSlot.Passive)
         };
 
+        /// <summary>Wie P, aber mit mehreren Raengen - das Upgrade darf erneut angeboten werden.</summary>
+        private static PerkDefinition Deep(PerkId id, string name, string text, PerkRarity rarity,
+            ActionSlot slot, int maximumRank, HeroClassId[] heroes = null)
+        {
+            var perk = P(id, name, text, rarity, slot, heroes);
+            perk.MaximumRank = maximumRank;
+            return perk;
+        }
+
         private static PerkDefinition P(PerkId id, string name, string text, PerkRarity rarity, ActionSlot slot,
             HeroClassId[] heroes = null)
         {
             var color = rarity switch { PerkRarity.Rare => Rare, PerkRarity.Epic => Epic, PerkRarity.Legendary => Legendary, _ => Common };
             return new PerkDefinition(id, name, text, rarity, color, slot, heroes);
         }
+
+        /// <summary>
+        /// Was dieses Upgrade fuer den jetzigen Aufbau bedeutet - leer, wenn nichts Besonderes.
+        ///
+        /// Ohne das ist die Wahl drei Namen nebeneinander. Mit ihr sieht man, dass die eine Karte
+        /// die dritte Stufe einer Aktion ist, die man schon zugespitzt hat, und die andere eine
+        /// Fusion vollendet.
+        /// </summary>
+        public static string MeaningFor(PerkDefinition perk, PlayerBuild build)
+        {
+            if (perk == null || build == null) return string.Empty;
+            var rank = build.Rank(perk.Id);
+            if (rank > 0) return Loc.T("RANK") + " " + Roman(rank + 1);
+            var fusion = FusionCompletedBy(perk.Id, build);
+            return fusion == null ? string.Empty : $"{Loc.T("FUSION")}: {Loc.T(fusion)}";
+        }
+
+        /// <summary>Welche Fusion dieses Upgrade vollenden wuerde, sonst null.</summary>
+        public static string FusionCompletedBy(PerkId id, PlayerBuild build)
+        {
+            if (build == null || build.Has(id)) return null;
+            if (id == PerkId.FireBullet && build.Has(PerkId.ExplosiveShot)) return "INFERNO";
+            if (id == PerkId.ExplosiveShot && build.Has(PerkId.FireBullet)) return "INFERNO";
+            if (id == PerkId.IceBullet && build.Has(PerkId.CritChance)) return "SHATTER";
+            if (id == PerkId.CritChance && build.Has(PerkId.IceBullet)) return "SHATTER";
+            if (id == PerkId.LightningBullet && build.Has(PerkId.Ricochet)) return "CHAIN STORM";
+            if (id == PerkId.Ricochet && build.Has(PerkId.LightningBullet)) return "CHAIN STORM";
+            return null;
+        }
+
+        /// <summary>Roemisch bis V - darueber hinaus gibt es keinen Rang.</summary>
+        public static string Roman(int value) => value switch
+        {
+            2 => "II", 3 => "III", 4 => "IV", 5 => "V", _ => value.ToString()
+        };
 
         public static PerkDefinition Find(PerkId id)
         {
@@ -184,10 +240,31 @@ namespace Shatterspire
         /// seltene etwas seltener. Bereits gewaehlte erscheinen erst, wenn keine neuen mehr uebrig sind.
         /// </summary>
         public static List<PerkDefinition> RollThree(HeroClassId hero, ICollection<PerkId> owned, System.Random random)
+            => RollThree(hero, owned, random, 1, null);
+
+        /// <summary>
+        /// Drei Vorschlaege fuer die Wahl zwischen zwei Etagen.
+        ///
+        /// Zwei Dinge sind neu gegenueber der ersten Fassung. Erstens die Kurve: frueh faellt
+        /// Gewoehnliches, spaet das Seltene. Vorher wurde die Auswahl auf Etage 14 aus demselben
+        /// Topf mit denselben Chancen gezogen wie die auf Etage 1 - der Lauf sammelte, statt sich
+        /// zu steigern. Zweitens die Vertiefung: ein Upgrade, das man schon hat und das mehrere
+        /// Raenge kennt, darf erneut kommen. Damit entsteht die Entscheidung, die vorher fehlte -
+        /// breit sammeln oder eine Aktion zuspitzen.
+        /// </summary>
+        public static List<PerkDefinition> RollThree(HeroClassId hero, ICollection<PerkId> owned,
+            System.Random random, int floor, PlayerBuild build)
         {
             random ??= new System.Random();
             var available = All.Where(perk => perk.AvailableFor(hero)).ToList();
-            var fresh = Shuffle(available.Where(perk => owned == null || !owned.Contains(perk.Id)).ToList(), random);
+            // Vertiefbar ist, was man hat und was noch einen Rang frei hat.
+            bool Exhausted(PerkDefinition perk)
+            {
+                if (owned == null || !owned.Contains(perk.Id)) return false;
+                if (!perk.Stackable || build == null) return true;
+                return build.Rank(perk.Id) >= perk.MaximumRank;
+            }
+            var fresh = Shuffle(available.Where(perk => !Exhausted(perk)).ToList(), random, floor, build);
             var result = new List<PerkDefinition>(3);
 
             foreach (var perk in fresh)
@@ -201,7 +278,7 @@ namespace Shatterspire
                 if (result.Count >= 3) break;
                 if (!result.Contains(perk)) result.Add(perk);
             }
-            foreach (var perk in Shuffle(available, random))
+            foreach (var perk in Shuffle(available, random, floor, build))
             {
                 if (result.Count >= 3) break;
                 if (!result.Contains(perk)) result.Add(perk);
@@ -209,18 +286,41 @@ namespace Shatterspire
             return result;
         }
 
-        private static List<PerkDefinition> Shuffle(List<PerkDefinition> perks, System.Random random)
+        /// <summary>
+        /// Mischt die Liste. Ein hoeheres Gewicht heisst seltener, nicht haeufiger: der Schluessel
+        /// ist Zufall mal Gewicht, und aufsteigend sortiert landet ein grosses Gewicht hinten.
+        /// </summary>
+        private static List<PerkDefinition> Shuffle(List<PerkDefinition> perks, System.Random random,
+            int floor = 1, PlayerBuild deepen = null)
         {
+            // Die Kurve. Der Schluessel ist Zufall mal Gewicht und wird aufsteigend sortiert, ein
+            // grosses Gewicht landet also hinten und faellt seltener. Das Gewicht waechst mit der
+            // Stufe der Seltenheit, und wie stark, haengt an der Etage:
+            //
+            //   Etage 1    Faktor 2,4 je Stufe - ein Legendaeres ist rund vierzehnmal
+            //              unwahrscheinlicher als ein Gewoehnliches
+            //   ab Etage 12 Faktor 0,72 je Stufe - jetzt faellt das Seltene haeufiger
+            //
+            // Ein Legendaeres auf der ersten Etage entwertet die vierzehn danach; eine Gewoehnliche
+            // auf Etage 14 ist eine verschenkte Wahl.
+            var depth = Mathf.Clamp01((floor - 1) / 11f);
+            var perTier = Mathf.Lerp(2.4f, 0.72f, depth);
             var keys = new Dictionary<PerkDefinition, double>(perks.Count);
             foreach (var perk in perks)
             {
-                var weight = perk.Rarity switch
+                var tier = perk.Rarity switch
                 {
-                    PerkRarity.Legendary => 1.8,
-                    PerkRarity.Epic => 1.35,
-                    PerkRarity.Rare => 1.1,
-                    _ => 1.0
+                    PerkRarity.Legendary => 3,
+                    PerkRarity.Epic => 2,
+                    PerkRarity.Rare => 1,
+                    _ => 0
                 };
+                var weight = Math.Pow(perTier, tier);
+                // Vertiefung lockt spaet: gegen Ende eines Laufs ist Zuspitzen die interessantere
+                // Wahl, weil breites Sammeln nichts mehr freischaltet. Frueh soll man dagegen erst
+                // einmal etwas in der Hand haben, das sich zuspitzen laesst.
+                if (deepen != null && perk.Stackable && deepen.Rank(perk.Id) > 0)
+                    weight *= Mathf.Lerp(1.6f, 0.45f, depth);
                 if (perk.Heroes.Length == 1) weight *= 0.7;
                 if (perk.Slot == ActionSlot.Passive) weight *= 1.25;
                 keys[perk] = random.NextDouble() * weight;
@@ -232,8 +332,30 @@ namespace Shatterspire
     [DisallowMultipleComponent]
     public sealed class PlayerBuild : MonoBehaviour
     {
-        private readonly HashSet<PerkId> perks = new();
-        public IReadOnlyCollection<PerkId> Perks => perks;
+        /// <summary>
+        /// Wie oft jedes Upgrade genommen wurde.
+        ///
+        /// Vorher eine Menge ohne Doppelte: jedes Upgrade gab es je Aufstieg genau einmal, und nach
+        /// fuenfzehn Etagen hatte man fuenfzehn flache, unverbundene Verbesserungen. Ein Aufbau
+        /// entsteht aber erst dort, wo man eine Aktion zuspitzen kann, statt nur zu sammeln.
+        /// </summary>
+        private readonly Dictionary<PerkId, int> ranks = new();
+
+        public IReadOnlyCollection<PerkId> Perks => ranks.Keys;
+
+        /// <summary>Wie oft dieses Upgrade genommen wurde. 0 heisst: gar nicht.</summary>
+        public int Rank(PerkId id) => ranks.TryGetValue(id, out var rank) ? rank : 0;
+
+        /// <summary>Summe aller Raenge - so viele Verbesserungen stecken im Aufbau.</summary>
+        public int TotalRanks
+        {
+            get
+            {
+                var total = 0;
+                foreach (var rank in ranks.Values) total += rank;
+                return total;
+            }
+        }
         /// <summary>
         /// Schadensfaktor einschliesslich der Wirkungen, die vom Zustand abhaengen. Berechnet statt
         /// gespeichert: so wirkt die Zornspule ueberall, wo Schaden entsteht, ohne dass jede
@@ -272,9 +394,11 @@ namespace Shatterspire
         public float DashRechargeMultiplier { get; private set; } = 1f;
         public float UltimateChargeMultiplier { get; private set; } = 1f;
         public int ExtraDashCharges { get; private set; }
-        public int ProjectileCount => Has(PerkId.Multishot) ? 2 : 1;
-        public int Pierces => Has(PerkId.Piercing) ? 1 : 0;
-        public int Ricochets => Has(PerkId.Ricochet) ? 1 : 0;
+        // Die drei Form-Upgrades lesen den Rang: der zweite Zwillingszahn gibt ein drittes
+        // Geschoss, nicht noch einmal dasselbe zweite.
+        public int ProjectileCount => 1 + Rank(PerkId.Multishot);
+        public int Pierces => Rank(PerkId.Piercing);
+        public int Ricochets => Rank(PerkId.Ricochet);
         public bool IsInferno => Has(PerkId.FireBullet) && Has(PerkId.ExplosiveShot);
         public bool IsShatter => Has(PerkId.IceBullet) && Has(PerkId.CritChance);
         public bool IsChainStorm => Has(PerkId.LightningBullet) && Has(PerkId.Ricochet);
@@ -289,7 +413,7 @@ namespace Shatterspire
         public HeroClassId HeroClass { get; private set; } = HeroClassId.Ranger;
         public event Action Changed;
 
-        public bool Has(PerkId id) => perks.Contains(id);
+        public bool Has(PerkId id) => ranks.ContainsKey(id);
 
         public void ConfigureRun(HeroClassId hero, RunConfig config, MetaSaveData meta)
         {
@@ -369,14 +493,23 @@ namespace Shatterspire
             Changed?.Invoke();
         }
 
+        /// <summary>
+        /// Nimmt ein Upgrade an. Ist es schon vorhanden und vertiefbar, steigt sein Rang und die
+        /// Wirkung wird ein zweites Mal angewendet - deshalb muessen die vertiefbaren Upgrades
+        /// solche mit einer Zahl als Wirkung sein.
+        /// </summary>
         public void Apply(PerkDefinition perk)
         {
-            if (!perks.Add(perk.Id)) return;
+            var rank = Rank(perk.Id);
+            if (rank >= Mathf.Max(1, perk.MaximumRank)) return;
+            ranks[perk.Id] = rank + 1;
             switch (perk.Id)
             {
                 case PerkId.DamageUp: storedDamageMultiplier *= 1.25f; break;
                 case PerkId.AttackSpeed: AttackSpeedMultiplier *= 1.22f; break;
-                case PerkId.CritChance: CritChance += 0.12f; break;
+                // Geklemmt wie beim Haendler: eine kritische Chance ueber 85 Prozent nimmt dem
+                // kritischen Treffer seine Bedeutung.
+                case PerkId.CritChance: CritChance = Mathf.Min(0.85f, CritChance + 0.12f); break;
                 case PerkId.CritDamage: CritMultiplier += 0.5f; break;
                 case PerkId.MovementSpeed:
                     storedMoveSpeedMultiplier *= 1.15f;

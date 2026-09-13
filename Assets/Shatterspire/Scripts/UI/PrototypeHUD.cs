@@ -54,6 +54,9 @@ namespace Shatterspire
         private Text goldText;
         private Text scoreText;
         private FloorModifierId floorAnomaly;
+
+        /// <summary>Laufende Etage. Die Auswahl der Verbesserungen haengt daran.</summary>
+        private int currentFloor = 1;
         private Image vaultPanel;
         private Text vaultText;
         private Image anomalyPanel;
@@ -881,6 +884,7 @@ namespace Shatterspire
 
         private void OnRoomStarted(int index, RoomKind kind)
         {
+            currentFloor = index;
             var counter = PathCatalog.FloorCounter(runConfig.Mode, index);
             roomText.text = $"{counter}  ·  {Loc.Of(kind)}";
             var anomaly = FloorModifierCatalog.For(floorAnomaly);
@@ -1098,7 +1102,8 @@ namespace Shatterspire
                 $"{Loc.T(selectingLevelPerk ? "LEVEL UP" : "FLOOR CLEARED")} · {Loc.T("CHOOSE AN UPGRADE")}",
                 Loc.T("EVERY UPGRADE CHANGES ONE OF YOUR ACTIONS"));
             var hero = runConfig.Hero;
-            var choices = PerkCatalog.RollThree(hero, new HashSet<PerkId>(build.Perks), perkRandom);
+            var choices = PerkCatalog.RollThree(hero, new HashSet<PerkId>(build.Perks), perkRandom,
+                currentFloor, build);
             for (var i = 0; i < choices.Count; i++)
             {
                 var perk = choices[i];
@@ -1106,8 +1111,14 @@ namespace Shatterspire
                              (perk.Heroes.Length == 1
                                  ? $"  ·  {Loc.T("ONLY FOR")} {HeroCatalog.Name(hero)}"
                                  : string.Empty);
+                // Was die Karte fuer den jetzigen Aufbau bedeutet: der naechste Rang einer Aktion,
+                // die man schon zugespitzt hat, oder eine Fusion, die sie vollendet. Ohne das sind
+                // drei Karten nur drei Namen nebeneinander.
+                var meaning = PerkCatalog.MeaningFor(perk, build);
+                var title = Loc.T(perk.Name)
+                            + (string.IsNullOrEmpty(meaning) ? string.Empty : "  " + meaning);
                 var button = CreateButton(modal.transform,
-                    $"[{i + 1}]  {PerkCatalog.SlotLabel(perk.Slot, hero)}\n{Loc.T(perk.Name)}\n\n{Loc.T(perk.Description)}\n\n{rarity}",
+                    $"[{i + 1}]  {PerkCatalog.SlotLabel(perk.Slot, hero)}\n{title}\n\n{Loc.T(perk.Description)}\n\n{rarity}",
                     new Vector2(-390f + i * 390f, -20f), new Vector2(340f, 420f), perk.Color);
                 button.onClick.AddListener(() =>
                 {
