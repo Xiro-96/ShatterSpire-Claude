@@ -50,6 +50,18 @@ namespace Shatterspire
         private int encounterTotal;
         private int encounterDefeated;
         private bool encounterClearReported = true;
+
+        /// <summary>
+        /// Wie lange waehrend einer laufenden Verteidigung kein Gegner am Leben war.
+        ///
+        /// Genau das ist der Stillstand, den man als "zaeh" empfindet: die Welle ist tot, die
+        /// naechste kommt noch nicht, und man steht im Raum herum. Gemessen statt geschaetzt, damit
+        /// eine Aenderung am Takt nachweisbar ist.
+        /// </summary>
+        private float lullSeconds;
+
+        /// <summary>Nummer des Raums, dessen Lager zuletzt geweckt wurde. -1 = keiner.</summary>
+        private int wokenRoom = -1;
         private bool bossClearReported = true;
 
         /// <summary>Der Warden der Boss-Etage ist besiegt.</summary>
@@ -75,6 +87,7 @@ namespace Shatterspire
             activeFloor = Mathf.Max(1, floor);
             modifier = FloorModifierCatalog.For(anomaly);
             runSeed = seed;
+            wokenRoom = -1;
         }
 
         /// <summary>
@@ -151,6 +164,7 @@ namespace Shatterspire
             spawningEncounter = true;
             encounterClearReported = false;
             encounterDefeated = 0;
+            lullSeconds = 0f;
 
             var noDefenders = !EncounterHasDefenders(kind, runSeed, activeFloor, encounterIndex);
             if (noDefenders)
@@ -222,10 +236,23 @@ namespace Shatterspire
                 spawned += inWave;
 
                 if (wave >= waveCount - 1) continue;
-                while (encounter.Count > 0) yield return null;
-                yield return new WaitForSeconds(0.9f);
+                // Die naechste Welle kommt, wenn die erste fast gefallen ist - nicht, wenn der
+                // letzte tot ist. Vorher stand hier "warte, bis leer" plus 0,9 Sekunden Pause plus
+                // 0,72 Sekunden Ankuendigung: ein garantierter Stillstand von rund zwei Sekunden,
+                // zweimal je Core und zweimal je Etage. Die Gesamtzahl der Gegner aendert sich
+                // nicht, nur wann sie eintreffen.
+                var remainingBeforeNext = Mathf.Max(1, Mathf.CeilToInt(inWave * 0.35f));
+                var waitedForWave = 0f;
+                while (encounter.Count > remainingBeforeNext && waitedForWave < 8f)
+                {
+                    waitedForWave += Time.deltaTime;
+                    yield return null;
+                }
+                yield return new WaitForSeconds(0.3f);
             }
             spawningEncounter = false;
+            Debug.Log($"SHATTERSPIRE Takt: Core {encounterIndex + 1} auf Etage {floorIndex}, "
+                      + $"{lullSeconds:0.0} s ohne lebenden Gegner waehrend der Verteidigung.");
             GameEvents.RaiseWaveChanged(0, 0);
             PublishEncounter();
             ReportEncounterClearIfReady();
@@ -284,6 +311,8 @@ namespace Shatterspire
 
         private void LateUpdate()
         {
+            WakeRoomOfPlayer();
+            if (spawningEncounter && encounter.Count == 0) lullSeconds += Time.deltaTime;
             camps.RemoveAll(agent => !agent);
             var removed = encounter.RemoveAll(agent => !agent);
             if (removed > 0)
@@ -293,6 +322,37 @@ namespace Shatterspire
                 ReportEncounterClearIfReady();
             }
             if (bosses.RemoveAll(agent => !agent) > 0) ReportBossClearIfReady();
+        }
+
+        /// <summary>
+        /// Weckt das Lager des Raums, in dem der Spieler steht.
+        ///
+        /// Vorher wachte ein Lager erst auf, wenn jemand auf acht Einheiten herankam. Ein Raum ist
+        /// aber achtzehn mal fuenfzehn gross - man lief also ein gutes Stueck durch eine stille
+        /// Halle, bevor sich etwas ruehrte, und der Takt einer Etage wurde zu laufen, kaempfen,
+        /// laufen. Jetzt merken sie den Raum, nicht den Meter: wer eintritt, wird gesehen.
+        ///
+        /// Der Raum wird nur einmal geweckt. Danach uebernimmt der gewoehnliche Aggro-Radius wieder,
+        /// damit Nachzuegler nicht quer ueber die Etage gerufen werden.
+        /// </summary>
+        private void WakeRoomOfPlayer()
+        {
+            if (!player || navigation == null || camps.Count == 0) return;
+            // RoomAt liefert den Index, -1 ausserhalb jedes Raums (also im Gang).
+            var room = navigation.RoomAt(player.position);
+            if (room < 0 || room == wokenRoom) return;
+            var woken = 0;
+            for (var i = camps.Count - 1; i >= 0; i--)
+            {
+                var agent = camps[i];
+                if (!agent || !agent.IsIdle) continue;
+                if (!campOf.TryGetValue(agent, out var index) || index != room) continue;
+                agent.Engage(false);
+                woken++;
+            }
+            if (woken == 0) return;
+            wokenRoom = room;
+            Debug.Log($"SHATTERSPIRE Takt: Raum {room} betreten, {woken} Gegner geweckt.");
         }
 
         private void ReportEncounterClearIfReady()

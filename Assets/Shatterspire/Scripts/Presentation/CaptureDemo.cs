@@ -166,6 +166,7 @@ namespace Shatterspire
 
             if (Hero == HeroClassId.Bomber) yield return ShowBomberHeavy();
             if (Hero == HeroClassId.Paladin) yield return ShowPaladinBrace();
+            yield return ShowFloorPace();
             yield return ShowStreakAndOrbs();
             yield return ShowThreatMarker();
             yield return ShowForgePlunge();
@@ -523,6 +524,49 @@ namespace Shatterspire
             Debug.Log($"SHATTERSPIRE KORR schwer: nach dem Loslassen Balken {weapon.HeavyMeterNormalized:P0}, "
                       + $"{TimedBomb.Active.Count} Ladung(en) scharf.");
             if (victim) Destroy(victim.gameObject);
+            input.ScriptedAim = new Vector3(0.75f, 0f, -1f);
+            yield return new WaitForSecondsRealtime(0.4f);
+        }
+
+        /// <summary>
+        /// Eine echte Core-Verteidigung, um den Takt zu messen.
+        ///
+        /// Die Zahl, um die es geht, steht im Log: wie lange waehrend einer laufenden Verteidigung
+        /// kein Gegner am Leben war. Das ist der Stillstand, den man als "zaeh" empfindet, und er
+        /// laesst sich nur im laufenden Spiel messen - im Grundriss steht er nicht.
+        ///
+        /// Der Held bleibt dafuer unverwundbar: gemessen wird, wann die Wellen eintreffen, nicht ob
+        /// eine automatische Vorfuehrung einen Kampf gewinnt.
+        /// </summary>
+        private IEnumerator ShowFloorPace()
+        {
+            var spawner = FindFirstObjectByType<EnemySpawner>();
+            var heroHealth = player.GetComponent<Health>();
+            if (!spawner || !heroHealth) yield break;
+
+            frameOn = null;
+            overviewPoint = null;
+            frameSize = 9f;
+            var forward = new Vector3(0.75f, 0f, -1f).normalized;
+            input.ScriptedAim = forward;
+            spawner.SpawnObjectiveEncounter(player.position + forward * 6f, 1, 0, RoomKind.Combat);
+            yield return new WaitForSecondsRealtime(0.3f);
+
+            var start = Time.unscaledTime;
+            var step = 0;
+            input.ScriptedAttack = true;
+            // Grosszuegig: die Schleife endet ohnehin, sobald die Verteidigung vorbei ist. Die
+            // Obergrenze ist nur die Reissleine. Sie zaehlt Wanduhr-Zeit und ist deshalb ungenau,
+            // wenn das Fenster den Fokus verliert - gemessen wird die Leerlaufzeit im Spawner, die
+            // aus Bildzeit kommt.
+            while (Time.unscaledTime - start < 150f && (spawner.IsSpawning || spawner.EncounterCount > 0))
+            {
+                heroHealth.SetInvulnerable(2f);
+                if (Time.unscaledTime - start >= step * 2.5f && step < 8) yield return Shot($"t{step++:00}");
+                yield return null;
+            }
+            input.ScriptedAttack = false;
+            Debug.Log($"SHATTERSPIRE Takt: Verteidigung nach {Time.unscaledTime - start:0.0} s vorbei.");
             input.ScriptedAim = new Vector3(0.75f, 0f, -1f);
             yield return new WaitForSecondsRealtime(0.4f);
         }
