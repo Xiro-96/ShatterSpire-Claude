@@ -307,6 +307,10 @@ namespace Shatterspire
                 EnemyKind.Brute => "Skeleton_Warrior",
                 EnemyKind.Elite => "Skeleton_Warrior",
                 EnemyKind.IronWarden => "Skeleton_Warrior",
+                // Der Zwilling ist der schnelle Waechter: die schlanke Schleicherfigur statt des
+                // Kriegers. Der Chorwaechter ruft, also traegt er den Stab des Magiers.
+                EnemyKind.RiftTwin => "Skeleton_Rogue",
+                EnemyKind.ChoirWarden => "Skeleton_Mage",
                 EnemyKind.Shieldbearer => "Skeleton_Warrior",
                 EnemyKind.Marksman => "Skeleton_Rogue",
                 _ => "Skeleton_Minion"
@@ -324,12 +328,14 @@ namespace Shatterspire
                 EnemyKind.Brute => 2.22f,
                 EnemyKind.Elite => 2.58f,
                 EnemyKind.IronWarden => 4.05f,
+                EnemyKind.RiftTwin => 3.3f,
+                EnemyKind.ChoirWarden => 3.8f,
                 EnemyKind.Shieldbearer => 2.02f,
                 EnemyKind.Marksman => 1.72f,
                 _ => 1.65f
             };
             FitAndPlace(model, root.position, height, FitAxis.Height);
-            var widthScale = kind == EnemyKind.IronWarden ? 1.22f
+            var widthScale = EnemyKinds.IsBoss(kind) ? 1.22f
                 : kind is EnemyKind.Brute or EnemyKind.Elite ? 1.14f
                 : kind == EnemyKind.Shieldbearer ? 1.1f : 1f;
             model.transform.localScale = Vector3.Scale(model.transform.localScale, new Vector3(widthScale, 1f, widthScale));
@@ -342,14 +348,18 @@ namespace Shatterspire
                 EnemyKind.Brute => new Color(0.8f, 0.34f, 0.08f),
                 EnemyKind.Elite => new Color(0.82f, 0.08f, 0.55f),
                 EnemyKind.IronWarden => new Color(0.12f, 0.2f, 0.3f),
+                // Jeder Waechter hat seine eigene Farbe - auf einer Boss-Etage steht nur einer im
+                // Raum, und man soll auf dem ersten Bild wissen, welcher.
+                EnemyKind.RiftTwin => new Color(0.24f, 0.1f, 0.42f),
+                EnemyKind.ChoirWarden => new Color(0.08f, 0.3f, 0.26f),
                 // Stahlblau und Giftgruen: beide Rollen sollen sich im Getuemmel auf einen Blick
                 // von den roten Crawlern und den violetten Shootern unterscheiden.
                 EnemyKind.Shieldbearer => new Color(0.2f, 0.44f, 0.76f),
                 EnemyKind.Marksman => new Color(0.34f, 0.74f, 0.26f),
                 _ => Color.gray
             };
-            var accent = kind == EnemyKind.IronWarden ? new Color(1f, 0.45f, 0.08f) : Color.Lerp(primary, Color.white, 0.45f);
-            var corruptionTint = kind == EnemyKind.IronWarden
+            var accent = EnemyKinds.IsBoss(kind) ? new Color(1f, 0.45f, 0.08f) : Color.Lerp(primary, Color.white, 0.45f);
+            var corruptionTint = EnemyKinds.IsBoss(kind)
                 ? new Color(0.62f, 0.72f, 0.88f)
                 : Color.Lerp(Color.white, primary, kind switch
                 {
@@ -369,16 +379,16 @@ namespace Shatterspire
 
             var motion = root.gameObject.AddComponent<StylizedCharacterMotion>();
             var animator = model.GetComponentInChildren<Animator>();
-            StylizeHumanoidProportions(animator, kind == EnemyKind.IronWarden ? 1.13f : 1.09f,
+            StylizeHumanoidProportions(animator, EnemyKinds.IsBoss(kind) ? 1.13f : 1.09f,
                 kind is EnemyKind.Brute or EnemyKind.Elite ? 1.12f : 1.06f);
             AttachSkeletonLoadout(animator, kind);
-            var footprint = kind == EnemyKind.IronWarden ? 1.85f
+            var footprint = EnemyKinds.IsBoss(kind) ? 1.85f
                 : kind is EnemyKind.Brute or EnemyKind.Elite ? 1.18f
                 : kind == EnemyKind.Shieldbearer ? 0.95f : 0.78f;
             CreateGroundShadow(root, footprint);
             CreateSelectionRing(root, footprint * 1.08f, Color.Lerp(primary, new Color(0.3f, 0.02f, 0.04f), 0.24f));
             if (animator) motion.ConfigureAuthored(visualRig, animator, EnemyBalance.For(kind).Speed, true);
-            else motion.Configure(visualRig, kind == EnemyKind.IronWarden ? 4.2f : 7.5f);
+            else motion.Configure(visualRig, EnemyKinds.IsBoss(kind) ? 4.2f : 7.5f);
             return true;
         }
 
@@ -817,14 +827,24 @@ namespace Shatterspire
                     AttachKayKitWeapon(rightHand, SkeletonWeapons + "Skeleton_Crossbow", "Riftbone Crossbow",
                         new Vector3(0.03f, -0.02f, 0.07f), new Vector3(0f, 0f, 92f), 0.95f, SkeletonTexture);
                     break;
+                case EnemyKind.ChoirWarden:
+                    AttachKayKitWeapon(rightHand, SkeletonWeapons + "Skeleton_Staff", "Choir Staff",
+                        new Vector3(0.02f, -0.02f, 0.07f), new Vector3(0f, 0f, 92f), 1.7f, SkeletonTexture);
+                    break;
+                case EnemyKind.RiftTwin:
+                    AttachKayKitWeapon(rightHand, SkeletonWeapons + "Skeleton_Blade", "Twin Blade",
+                        new Vector3(0.02f, -0.02f, 0.07f), new Vector3(0f, 0f, 92f), 1.5f, SkeletonTexture);
+                    AttachKayKitWeapon(leftHand, SkeletonWeapons + "Skeleton_Blade", "Twin Offhand",
+                        new Vector3(0f, -0.02f, 0.07f), new Vector3(0f, 0f, 92f), 1.4f, SkeletonTexture);
+                    break;
                 case EnemyKind.Elite:
                 case EnemyKind.IronWarden:
                     AttachKayKitWeapon(rightHand, SkeletonWeapons + "Skeleton_Axe", "Warden Cleaver",
                         new Vector3(0.02f, -0.03f, 0.08f), new Vector3(4f, 0f, 92f),
-                        kind == EnemyKind.IronWarden ? 1.68f : 1.36f, SkeletonTexture);
+                        EnemyKinds.IsBoss(kind) ? 1.68f : 1.36f, SkeletonTexture);
                     AttachKayKitWeapon(leftHand, SkeletonWeapons + "Skeleton_Shield_Large_A", "Warden Shield",
                         new Vector3(0f, 0.02f, 0.08f), new Vector3(88f, 0f, 0f),
-                        kind == EnemyKind.IronWarden ? 1.48f : 1.16f, SkeletonTexture);
+                        EnemyKinds.IsBoss(kind) ? 1.48f : 1.16f, SkeletonTexture);
                     break;
             }
         }
@@ -1413,6 +1433,24 @@ namespace Shatterspire
                     {
                         CrystalPart(rig, "Marksman Quiver Shard", new Vector3(side * 0.26f, 1.05f, -0.36f),
                             new Vector3(0.08f, 0.3f, 0.08f), new Vector3(-28f, 0f, side * 14f), accent);
+                    }
+                    break;
+
+                case EnemyKind.RiftTwin:
+                    // Zwei Splitter ueber den Schultern - das Zeichen dafuer, dass er sich teilt.
+                    for (var side = -1; side <= 1; side += 2)
+                        CrystalPart(rig, "Twin Rift Shard", new Vector3(side * 0.62f, 2.6f, -0.1f),
+                            new Vector3(0.22f, 0.82f, 0.22f), new Vector3(0f, 0f, side * 34f), accent);
+                    break;
+
+                case EnemyKind.ChoirWarden:
+                    // Ein Ring aus Splittern: der Chor, den er ruft, haengt sichtbar ueber ihm.
+                    for (var i = 0; i < 5; i++)
+                    {
+                        var angle = i * Mathf.PI * 2f / 5f;
+                        CrystalPart(rig, "Choir Shard",
+                            new Vector3(Mathf.Cos(angle) * 0.78f, 2.72f, Mathf.Sin(angle) * 0.78f),
+                            new Vector3(0.16f, 0.5f, 0.16f), new Vector3(0f, i * 72f, 20f), accent);
                     }
                     break;
 

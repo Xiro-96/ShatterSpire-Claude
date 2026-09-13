@@ -7,7 +7,27 @@ namespace Shatterspire
     public enum TeamId { Player, Enemy }
     // Shieldbearer und Marksman kommen ans Ende, damit bestehende serialisierte
     // Werte ihre Zahl behalten.
-    public enum EnemyKind { Crawler, Shooter, Brute, Elite, IronWarden, Shieldbearer, Marksman }
+    // Neue Arten kommen ans Ende, damit gespeicherte Zahlen ihre Bedeutung behalten.
+    public enum EnemyKind
+    {
+        Crawler, Shooter, Brute, Elite, IronWarden, Shieldbearer, Marksman,
+        // Die zwei Waechter vom 13.09.
+        RiftTwin, ChoirWarden
+    }
+
+    public static class EnemyKinds
+    {
+        /// <summary>
+        /// Ist diese Art ein Waechter einer Boss-Etage?
+        ///
+        /// Frueher stand an rund zwanzig Stellen "kind == IronWarden", und gemeint war meistens
+        /// nicht dieser eine Gegner, sondern "ist ein Boss": Groesse, Kollider, keine Leine, eigene
+        /// Bewegung, eigene Lebensleiste. Beim zweiten Waechter waeren alle zwanzig einzeln
+        /// nachzutragen gewesen - und eine davon haette gefehlt.
+        /// </summary>
+        public static bool IsBoss(EnemyKind kind)
+            => kind is EnemyKind.IronWarden or EnemyKind.RiftTwin or EnemyKind.ChoirWarden;
+    }
     public enum RoomKind { Combat, Elite, Treasure, Mystery, Boss }
 
     [Serializable]

@@ -37,6 +37,8 @@ namespace Shatterspire
             EnemyKind.Brute => (0.42f, 14f),
             EnemyKind.Elite => (1f, 26f),
             EnemyKind.IronWarden => (1f, 60f),
+            EnemyKind.RiftTwin => (1f, 55f),
+            EnemyKind.ChoirWarden => (1f, 65f),
             _ => (0.16f, 6f)
         };
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Shatterspire
@@ -35,6 +36,12 @@ namespace Shatterspire
         private bool eliteVampiric;
         private int bossAttackIndex;
         private int announcedBossPhase;
+
+        /// <summary>Die Rufe des Chorwaechters. Solange einer lebt, ist er kaum verwundbar.</summary>
+        private readonly List<EnemyAgent> choir = new();
+
+        /// <summary>Ob der Schutz des Chorwaechters gerade angehaengt ist.</summary>
+        private bool choirWardActive;
         private float hitStaggerUntil;
         private float strafeDirection;
         /// <summary>
@@ -137,7 +144,7 @@ namespace Shatterspire
             {
                 // Der Boss bleibt von der Anomalie unberuehrt: seine Phasen sind auf feste Werte
                 // gebaut, und halbes Leben wuerde Phase 3 ueberspringen.
-                if (kind != EnemyKind.IronWarden)
+                if (!EnemyKinds.IsBoss(kind))
                 {
                     // Dieselbe Form wie die Etagenkurve darueber: der Gegner ist hier noch voll
                     // geheilt, deshalb zieht ein negativer Betrag Maximum und Stand gemeinsam nach.
@@ -177,7 +184,7 @@ namespace Shatterspire
             {
                 EnemyKind.Shooter => 10f,
                 EnemyKind.Marksman => 13f,
-                EnemyKind.IronWarden => 12f,
+                EnemyKind.IronWarden or EnemyKind.RiftTwin or EnemyKind.ChoirWarden => 12f,
                 _ => 8f
             };
             if (startIdle)
@@ -208,7 +215,7 @@ namespace Shatterspire
             if (state != State.Idle) return;
             state = State.Chase;
             attackReadyAt = Mathf.Max(attackReadyAt, Time.time + 0.4f);
-            if (motion && kind == EnemyKind.IronWarden)
+            if (motion && EnemyKinds.IsBoss(kind))
             {
                 // Der Warden provoziert lang, bevor der Kampf beginnt.
                 Busy(motion.PlayPresence(PresenceMotion.TauntLong, 1.1f, 1.6f));
@@ -239,6 +246,7 @@ namespace Shatterspire
             if (state == State.Dead || !target) return;
             ApplyKnockback();
             if (kind == EnemyKind.Shieldbearer) UpdateGuardPose();
+            if (kind == EnemyKind.ChoirWarden) UpdateChoirWard();
             if (Time.time < hitStaggerUntil || Time.time < busyUntil) return;
             var targetHealth = target.GetComponent<Health>();
             if (!targetHealth || !targetHealth.IsAlive) return;
@@ -315,7 +323,7 @@ namespace Shatterspire
 
         private bool ShouldReturnHome()
         {
-            if (navigation == null || kind == EnemyKind.IronWarden) return false;
+            if (navigation == null || EnemyKinds.IsBoss(kind)) return false;
             // Nur umkehren, wenn der Spieler das Lager weit hinter sich gelassen hat.
             return FlatDistance(target.position, home) > LeashRadius &&
                    FlatDistance(transform.position, home) > LeashRadius * 0.6f;
@@ -412,9 +420,14 @@ namespace Shatterspire
 
         private IEnumerator AttackRoutine()
         {
-            if (kind == EnemyKind.IronWarden)
+            if (EnemyKinds.IsBoss(kind))
             {
-                yield return BossAttackRoutine();
+                yield return kind switch
+                {
+                    EnemyKind.RiftTwin => TwinAttackRoutine(),
+                    EnemyKind.ChoirWarden => ChoirAttackRoutine(),
+                    _ => BossAttackRoutine()
+                };
                 yield break;
             }
 
@@ -708,6 +721,166 @@ namespace Shatterspire
             return direction.sqrMagnitude > 0.01f ? direction.normalized : transform.forward;
         }
 
+        /// <summary>
+        /// DER SPLITTERZWILLING. Er haelt nicht stand - er ist nie da, wo man hinschlaegt.
+        ///
+        /// Sein Muster: verschwinden, an anderer Stelle wieder auftauchen, und am alten Platz bleibt
+        /// ein Nachbild zurueck, das aufreisst. Wer ihm nachlaeuft, laeuft in das Nachbild. Der
+        /// Warden ist ein Gegner, den man umgeht; der Zwilling einer, den man vorausdenkt.
+        /// </summary>
+        private IEnumerator TwinAttackRoutine()
+        {
+            state = State.Telegraph;
+            var phase = health.Normalized > 0.66f ? 1 : health.Normalized > 0.33f ? 2 : 3;
+            yield return AnnouncePhase(phase, "RIFT TWIN  ·  PHASE", new Color(0.62f, 0.24f, 1f));
+            if (state == State.Dead) yield break;
+
+            var accent = new Color(0.62f, 0.24f, 1f);
+            var blinks = phase;
+            for (var i = 0; i < blinks; i++)
+            {
+                var from = transform.position;
+                // Das Nachbild steht, wo er stand, und reisst kurz darauf auf.
+                var mark = PrototypeVfx.SpawnTelegraph(from, 3.2f, false);
+                var landing = BlinkTarget();
+                PrototypeVfx.SpawnExplosion(from + Vector3.up * 0.6f, 1.8f, accent);
+                transform.position = landing;
+                if (motion) motion.PulseDash(Vector3.forward);
+                PrototypeVfx.SpawnTrail(landing, accent);
+                yield return new WaitForSeconds(phase == 3 ? 0.34f : 0.46f);
+                if (mark) Destroy(mark);
+                if (state == State.Dead) yield break;
+                CombatUtility.Explode(from, 3.2f, attackDamage * 0.9f, TeamId.Player,
+                    DamageType.Lightning, gameObject);
+                PrototypeVfx.SpawnShockwave(from, 3.4f, accent);
+                Sfx.Play(Sound.RiftOpen, from, 0.7f);
+            }
+
+            Debug.Log($"SHATTERSPIRE Splitterzwilling: {blinks} Sprung/Spruenge in Phase {phase}.");
+
+            // Nach den Spruengen ein Hieb auf die Stelle, an der der Spieler jetzt steht.
+            var point = target ? target.position : transform.position + transform.forward * 2f;
+            point.y = 0f;
+            var telegraph = PrototypeVfx.SpawnTelegraph(point, 2.8f, false);
+            yield return new WaitForSeconds(phase == 3 ? 0.42f : 0.58f);
+            if (telegraph) Destroy(telegraph);
+            if (state == State.Dead) yield break;
+            state = State.Attack;
+            motion?.PlayMotion(AttackMotion.Spin, 1.2f);
+            CombatUtility.Explode(point, 2.8f, attackDamage * 1.25f, TeamId.Player,
+                DamageType.Physical, gameObject);
+            PrototypeVfx.SpawnShockwave(point, 3f, accent);
+            Sfx.Play(Sound.HitHeavy, point, 0.8f);
+            attackReadyAt = Time.time + (phase == 3 ? 1.1f : 1.5f);
+            state = State.Chase;
+        }
+
+        /// <summary>Wohin der Zwilling springt: seitlich am Spieler vorbei, immer auf begehbarem Boden.</summary>
+        private Vector3 BlinkTarget()
+        {
+            var around = target ? target.position : transform.position;
+            var angle = RunRandom.Index(runSeed, floorIndex, bossAttackIndex++ * 13 + 7, 360);
+            var spot = around + Quaternion.Euler(0f, angle, 0f) * Vector3.forward * 6.5f;
+            return navigation != null ? navigation.ClampToWalkable(spot, 1f) : spot;
+        }
+
+        /// <summary>
+        /// DER CHORWAECHTER. Er kaempft nicht selbst - er ruft.
+        ///
+        /// Solange einer seiner Rufe lebt, faengt ein Bann fast allen Schaden ab. Der Kampf ist
+        /// damit nicht "schlag auf den Boss", sondern "raeum den Raum, dann hast du dein Fenster" -
+        /// und im Co-op fuer drei ist das die Etage, auf der man sich aufteilt.
+        /// </summary>
+        private IEnumerator ChoirAttackRoutine()
+        {
+            state = State.Telegraph;
+            var phase = health.Normalized > 0.66f ? 1 : health.Normalized > 0.33f ? 2 : 3;
+            yield return AnnouncePhase(phase, "CHOIR WARDEN  ·  PHASE", new Color(0.2f, 0.86f, 0.7f));
+            if (state == State.Dead) yield break;
+
+            choir.RemoveAll(agent => !agent);
+            UpdateChoirWard();
+            var accent = new Color(0.2f, 0.86f, 0.7f);
+
+            if (choir.Count == 0)
+            {
+                // Der Chor ist gefallen: rufen. Waehrend des Rufens steht er offen.
+                var calls = 1 + phase;
+                motion?.PlayMotion(AttackMotion.Channel, 1.3f);
+                Sfx.Play(Sound.UltimateRise, transform.position, 0.7f);
+                for (var i = 0; i < calls; i++)
+                {
+                    var angle = i * (360f / calls) + phase * 23f;
+                    var spot = transform.position + Quaternion.Euler(0f, angle, 0f) * Vector3.forward * 4.5f;
+                    if (navigation != null) spot = navigation.ClampToWalkable(spot, 0.6f);
+                    PrototypeVfx.SpawnEnemyArrival(spot, true);
+                    yield return new WaitForSeconds(0.18f);
+                    if (state == State.Dead) yield break;
+                    var called = EnemyFactory.Create(phase >= 3 ? EnemyKind.Shieldbearer : EnemyKind.Crawler,
+                        spot, target, floorIndex, FloorModifierCatalog.For(FloorModifierId.None),
+                        runSeed, bossAttackIndex++ * 31 + i);
+                    called.SetBehaviour(navigation, spot, false);
+                    choir.Add(called);
+                }
+                UpdateChoirWard();
+                Debug.Log($"SHATTERSPIRE Chorwaechter: {choir.Count} Ruf(e) in Phase {phase}.");
+                attackReadyAt = Time.time + 1.2f;
+                state = State.Chase;
+                yield break;
+            }
+
+            // Solange der Chor steht, drueckt er von der Ferne: ein Ring aus Stoessen.
+            var telegraph = PrototypeVfx.SpawnTelegraph(transform.position, phase >= 2 ? 6.5f : 5.5f, false);
+            yield return new WaitForSeconds(phase == 3 ? 0.7f : 0.95f);
+            if (telegraph) Destroy(telegraph);
+            if (state == State.Dead) yield break;
+            state = State.Attack;
+            motion?.PlayMotion(AttackMotion.Cast, 1.1f);
+            CombatUtility.Explode(transform.position, phase >= 2 ? 6.5f : 5.5f, attackDamage,
+                TeamId.Player, DamageType.Ice, gameObject);
+            PrototypeVfx.SpawnShockwave(transform.position, phase >= 2 ? 6.8f : 5.8f, accent);
+            Sfx.Play(Sound.Shockwave, transform.position, 0.8f);
+            attackReadyAt = Time.time + stats.AttackCooldown;
+            state = State.Chase;
+        }
+
+        /// <summary>
+        /// Haengt den Bann an oder nimmt ihn ab, je nachdem ob noch ein Ruf lebt. Laeuft ueber
+        /// dieselbe Kette wie Schildtraeger und Schutzplatte.
+        /// </summary>
+        private void UpdateChoirWard()
+        {
+            choir.RemoveAll(agent => !agent || !agent.health || !agent.health.IsAlive);
+            var shouldWard = choir.Count > 0;
+            if (shouldWard == choirWardActive || !health) return;
+            choirWardActive = shouldWard;
+            if (shouldWard) health.AddDamageFilter(FilterChoirWard);
+            else health.RemoveDamageFilter(FilterChoirWard);
+            GameEvents.RaiseObjectiveChanged(0, 1,
+                shouldWard ? "CHOIR WARDEN  ·  WARDED" : "CHOIR WARDEN  ·  EXPOSED");
+        }
+
+        private float FilterChoirWard(DamageInfo damage, float amount)
+        {
+            if (state == State.Dead) return amount;
+            PrototypeVfx.SpawnShockwave(transform.position + Vector3.up * 1.4f, 2.2f,
+                new Color(0.2f, 0.86f, 0.7f));
+            return amount * 0.12f;
+        }
+
+        /// <summary>Der Phasenwechsel, gemeinsam fuer alle Waechter.</summary>
+        private IEnumerator AnnouncePhase(int phase, string key, Color accent)
+        {
+            if (phase == announcedBossPhase) yield break;
+            announcedBossPhase = phase;
+            GameEvents.RaiseObjectiveChanged(0, 1, Loc.T(key) + " " + phase);
+            PrototypeVfx.SpawnExplosion(transform.position + Vector3.up * 0.7f, 2.2f + phase * 0.35f, accent);
+            CameraController.Impulse(phase == 3 ? 0.24f : 0.12f);
+            if (phase <= 1 || !motion) yield break;
+            var roar = motion.PlayPresence(PresenceMotion.TauntLong, 1.3f, 1.2f);
+            if (roar > 0f) yield return new WaitForSeconds(roar);
+        }
+
         private IEnumerator BossAttackRoutine()
         {
             state = State.Telegraph;
@@ -796,7 +969,7 @@ namespace Shatterspire
 
         private void MeleeAttack()
         {
-            motion?.PlayMotion(kind == EnemyKind.IronWarden ? AttackMotion.Smash : AttackMotion.Swing, kind == EnemyKind.IronWarden ? 1.4f : 0.85f);
+            motion?.PlayMotion(EnemyKinds.IsBoss(kind) ? AttackMotion.Smash : AttackMotion.Swing, EnemyKinds.IsBoss(kind) ? 1.4f : 0.85f);
             PrototypeVfx.SpawnExplosion(transform.position + transform.forward, attackRange, new Color(1f, 0.18f, 0.08f));
             if (Vector3.Distance(transform.position, target.position) <= attackRange + 0.7f)
             {

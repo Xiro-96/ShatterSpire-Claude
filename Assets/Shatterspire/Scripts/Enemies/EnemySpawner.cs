@@ -148,7 +148,8 @@ namespace Shatterspire
             activeFloor = Mathf.Max(1, floorIndex);
             bossClearReported = false;
             // Der Warden wartet in seinem Raum und greift an, sobald die Gruppe eintritt.
-            bosses.Add(Spawn(EnemyKind.IronWarden, position, position, true, EnemySalt(OriginBoss, 0, 0)));
+            bosses.Add(Spawn(PathCatalog.BossFor(activeFloor), position, position, true,
+                EnemySalt(OriginBoss, 0, 0)));
             GameEvents.RaiseEncounterChanged(1, 1, true);
         }
 

@@ -523,6 +523,17 @@ namespace Shatterspire
             { "Hallowed Ground covers a wider circle.", "Der geweihte Boden deckt einen weiteren Kreis." },
             { "Aegis stands for 9 instead of 7 seconds.", "Aegis steht 9 statt 7 Sekunden." },
 
+            // ── Die drei Waechter ───────────────────────────────────────
+            { "RIFT TWIN", "SPLITTERZWILLING" },
+            { "CHOIR WARDEN", "CHORWÄCHTER" },
+            { "RIFT TWIN  ·  PHASE", "SPLITTERZWILLING  ·  PHASE" },
+            { "CHOIR WARDEN  ·  PHASE", "CHORWÄCHTER  ·  PHASE" },
+            { "CHOIR WARDEN  ·  WARDED", "CHORWÄCHTER  ·  GEBANNT" },
+            { "CHOIR WARDEN  ·  EXPOSED", "CHORWÄCHTER  ·  OFFEN" },
+            { "DEFEAT RIFT TWIN", "BESIEGE DEN SPLITTERZWILLING" },
+            { "DEFEAT CHOIR WARDEN", "BESIEGE DEN CHORWÄCHTER" },
+            { "DEFEAT SPIRE WARDEN", "BESIEGE DEN TURMWÄCHTER" },
+
             // ── Verbesserungen: Beschreibungen ──────────────────────────
             { "Heavy attacks deal 40% more damage.", "Schwere Angriffe machen 40 % mehr Schaden." },
             { "Light attacks are 22% faster.", "Leichte Angriffe sind 22 % schneller." },

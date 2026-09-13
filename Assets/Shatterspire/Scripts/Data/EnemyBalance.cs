@@ -72,7 +72,13 @@ namespace Shatterspire
             new(EnemyKind.Shieldbearer, 130f, 1.75f, 1.9f,  16f,  0.14f, 0.05f,  1.5f,  0.62f, 1.9f,  2.0f,  0.62f),
             // Armbruster: wenig Leben, dafuer weite Reichweite und ein Schuss, der wehtut, wenn man
             // in der Linie stehen bleibt.
-            new(EnemyKind.Marksman,     46f, 2.35f, 12f,    26f,  0.6f,  0.1f,   1.05f, 0.9f,  2.5f,  1.35f, 0.42f)
+            new(EnemyKind.Marksman,     46f, 2.35f, 12f,    26f,  0.6f,  0.1f,   1.05f, 0.9f,  2.5f,  1.35f, 0.42f),
+            // Splitterzwilling: weniger Leben als der Warden und schneller. Er haelt nicht stand,
+            // er ist nie da, wo man hinschlaegt - die Haerte kommt aus dem Versetzen.
+            new(EnemyKind.RiftTwin,    1280f, 3.1f,  2.2f,  20f,  0.1f,  0.03f,  1.65f, 0.5f,  1.5f,  2.9f,  0.95f),
+            // Chorwaechter: steht fast still und laesst andere kaempfen. Das meiste Leben im Spiel,
+            // aber er ist nur angreifbar, wenn seine Rufe gefallen sind.
+            new(EnemyKind.ChoirWarden, 2200f, 1.1f,  3.2f,  22f,  0.05f, 0.02f,  1.8f,  1f,    2.6f,  3.4f,  1.15f)
         };
 
         public static IReadOnlyList<EnemyStats> All => Table;

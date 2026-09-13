@@ -99,8 +99,12 @@ namespace Shatterspire
             if (currentKind == RoomKind.Boss)
             {
                 spawner.SpawnBoss(layout.ExitPoint, roomIndex);
-                GameEvents.RaiseObjectiveChanged(0, 1, "DEFEAT THE SPIRE WARDEN");
-                GameEvents.RaiseObjectiveTargetChanged(layout.ExitPoint, Loc.T("SPIRE WARDEN"), true);
+                // Der Waechter dieser Etage steht namentlich im Ziel - auf Etage 10 wartet ein
+                // anderer als auf Etage 5, und das soll man lesen koennen, bevor man ihn sieht.
+                var bossName = PathCatalog.BossName(PathCatalog.BossFor(roomIndex));
+                GameEvents.RaiseObjectiveChanged(0, 1, "DEFEAT " + bossName);
+                GameEvents.RaiseObjectiveTargetChanged(layout.ExitPoint, Loc.T(bossName), true);
+                Debug.Log($"SHATTERSPIRE Waechter: Etage {roomIndex}, {PathCatalog.BossFor(roomIndex)}.");
                 return;
             }
 

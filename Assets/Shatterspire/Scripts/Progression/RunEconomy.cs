@@ -95,6 +95,8 @@ namespace Shatterspire
                 EnemyKind.Brute => 11,
                 EnemyKind.Elite => 28,
                 EnemyKind.IronWarden => 140,
+                EnemyKind.RiftTwin => 130,
+                EnemyKind.ChoirWarden => 150,
                 _ => 3
             };
             return Mathf.Max(1, Mathf.RoundToInt(basis * (1f + Mathf.Max(0, floor - 1) * 0.12f)));

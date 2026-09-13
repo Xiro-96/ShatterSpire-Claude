@@ -23,6 +23,31 @@ namespace Shatterspire
         public static bool IsBossFloor(int floor) => floor > 0 && floor % BossInterval == 0;
 
         /// <summary>
+        /// Die Waechter in der Reihenfolge, in der man ihnen begegnet. Ein Heroic-Aufstieg hat drei
+        /// Boss-Etagen und damit drei verschiedene Kaempfe - vorher dreimal denselben.
+        /// </summary>
+        private static readonly EnemyKind[] Bosses =
+            { EnemyKind.IronWarden, EnemyKind.RiftTwin, EnemyKind.ChoirWarden };
+
+        /// <summary>
+        /// Wer auf dieser Boss-Etage wartet. Bewusst an der Etage und nicht am Seed: dass Etage 10
+        /// der Zwilling ist, soll man lernen und sich darauf einstellen koennen. Ein Aufstieg ohne
+        /// Ende dreht die Folge weiter.
+        /// </summary>
+        public static EnemyKind BossFor(int floor)
+        {
+            var index = Mathf.Max(0, floor / BossInterval - 1);
+            return Bosses[index % Bosses.Length];
+        }
+
+        public static string BossName(EnemyKind boss) => boss switch
+        {
+            EnemyKind.RiftTwin => "RIFT TWIN",
+            EnemyKind.ChoirWarden => "CHOIR WARDEN",
+            _ => "SPIRE WARDEN"
+        };
+
+        /// <summary>
         /// Welche Routen am Aufzug angeboten werden. Immer Kampf und Elite, dazu als drittes
         /// abwechselnd Schatz oder Raetsel - eine sichere, eine harte und eine offene Wahl.
         ///
