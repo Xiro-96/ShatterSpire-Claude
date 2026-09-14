@@ -270,9 +270,6 @@ namespace Shatterspire
             var type = ResolveDamageType(DamageType.Physical);
             var reach = build.Pierces * 0.28f;
             var hit = BaseDamage * build.DamageMultiplier;
-            var accent = HeroCatalog.Accent(heroClass);
-            // Ring statt Explosionsscheibe: die tuerkise Scheibe wirkte beim Hammer wie eine Plattform aus dem Boden.
-            var ring = type == DamageType.Physical ? accent : PrototypeVfx.ElementColor(type);
             comboExpiresAt = Time.time + 1.1f;
 
             if (lightComboStep == 1)
@@ -283,9 +280,9 @@ namespace Shatterspire
                 StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Swing, 0.15f), () =>
                 {
                     var point = transform.position + direction * 1.25f;
-                    Strike(point, 1.35f + reach, hit, type, flash: false);
-                    PrototypeVfx.SpawnShockwave(point, 1.6f + reach, ring);
-                    if (build.ProjectileCount > 1) Strike(point + direction * 1.2f, 1.1f, hit * 0.6f, type, flash: false);
+                    Strike(point, 1.35f + reach, hit, type, flash: false, weaponImpact: true);
+                    if (build.ProjectileCount > 1)
+                        Strike(point + direction * 1.2f, 1.1f, hit * 0.6f, type, flash: false, weaponImpact: true);
                 }));
                 return;
             }
@@ -298,9 +295,9 @@ namespace Shatterspire
                 StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Smash, 0.2f), () =>
                 {
                     var point = transform.position + direction * 1.55f;
-                    Strike(point, 1.7f + reach, hit * 1.4f, type, 7f, flash: false);
-                    PrototypeVfx.SpawnShockwave(point, 2.1f, ring);
-                    if (build.ProjectileCount > 1) Strike(point + direction * 1.25f, 1.3f, hit * 0.8f, type, flash: false);
+                    Strike(point, 1.7f + reach, hit * 1.4f, type, 7f, flash: false, weaponImpact: true, heavyImpact: true);
+                    if (build.ProjectileCount > 1)
+                        Strike(point + direction * 1.25f, 1.3f, hit * 0.8f, type, flash: false, weaponImpact: true);
                     controller?.CombatStep(direction, 0.25f);
                     CameraController.Impulse(0.06f);
                 }));
@@ -313,10 +310,9 @@ namespace Shatterspire
             StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Spin, 0.17f), () =>
             {
                 var radius = 2.6f + reach;
-                Strike(transform.position, radius, hit * 1.75f, type, 8f, flash: false);
-                PrototypeVfx.SpawnShockwave(transform.position, radius + 0.4f, ring);
+                Strike(transform.position, radius, hit * 1.75f, type, 8f, flash: false,
+                    weaponImpact: true, heavyImpact: true);
                 CameraController.Impulse(0.09f);
-                Hitstop.Freeze(0.04f, 0.1f);
                 if (build.Ricochets > 0) StartCoroutine(DelayedBlast(transform.position, radius * 0.85f, hit * 0.6f, type, 0.22f));
                 if (build.Has(PerkId.GuardianCleaveWave))
                     StartCoroutine(Eruptions(transform.position, direction, 3, 3.4f, 2.4f, 1.2f, hit * 1.2f, 0.07f));
@@ -474,12 +470,8 @@ namespace Shatterspire
                 finisher ? 0.18f : 0.13f), () =>
             {
                 var point = transform.position + direction * 1.25f;
-                Strike(point, reach, hit, type, flash: false);
-                if (!finisher)
-                {
-                    PrototypeVfx.SpawnShockwave(point, reach + 0.3f, accent);
-                    return;
-                }
+                Strike(point, reach, hit, type, flash: false, weaponImpact: true, heavyImpact: finisher);
+                if (!finisher) return;
                 ConsecrationWave(direction, accent, type);
             }));
             if (finisher) controller?.CombatStep(direction, 0.18f);
@@ -655,7 +647,11 @@ namespace Shatterspire
         private void CommitMelee(AttackMotion kind, Vector3 direction)
         {
             var windup = StrikeDelay(kind, 0.15f);
-            controller?.BindDuringAttack(windup + MeleeApproach.HoldAfterStrike, MeleeApproach.BoundSpeed);
+            // Gedeckelt: XIRO schlaegt alle 0,3 s zu. Ohne Deckel waere er beim Nachschlagen
+            // dauerhaft gebunden und das Gewicht wuerde zur Fessel.
+            controller?.BindDuringAttack(
+                Mathf.Min(windup + MeleeApproach.HoldAfterStrike, MeleeApproach.MaxBoundSeconds),
+                MeleeApproach.BoundSpeed);
             if (!lockedTarget || !lockedTarget.IsAlive) return;
             var offset = lockedTarget.transform.position - transform.position;
             offset.y = 0f;
@@ -1041,8 +1037,13 @@ namespace Shatterspire
         /// Flaechentreffer des Spielers. Anders als CombatUtility.Explode wirken hier Krit, Finisher,
         /// Lebensraub und Elemente, und der Schaden laedt die Ultimate. pull zieht Gegner zur Mitte.
         /// </summary>
+        /// <summary>
+        /// Ein Schlag in einem Umkreis. Mit <paramref name="weaponImpact"/> entsteht an jedem
+        /// getroffenen Gegner ein Aufblitzen mit Funken in Schlagrichtung - und nur dann. Vorher lag
+        /// bei jedem Hieb eine Schockwelle auf dem Boden, auch beim Danebenhauen.
+        /// </summary>
         private void Strike(Vector3 point, float radius, float damage, DamageType type, float knockback = 4f, bool pull = false,
-            bool flash = true)
+            bool flash = true, bool weaponImpact = false, bool heavyImpact = false)
         {
             // Krit und Kettenblitz bleiben gewuerfelt, anders als alles am Raum und am Gegner:
             // sie haengen am einzelnen Schlag, und den gibt es nur bei dem Spieler, der ihn fuehrt.
@@ -1071,8 +1072,20 @@ namespace Shatterspire
                 ApplyStatus(target, type, dealt);
                 if (build.Has(PerkId.Vampirism)) health.Heal(dealt * 0.04f);
                 if (build.HasSiphonStone) health.Heal(dealt * 0.03f);
+                if (weaponImpact)
+                {
+                    // Auf Brusthoehe zwischen Klinge und Gegner, nicht in seinem Mittelpunkt: dort
+                    // beruehrt die Waffe ihn.
+                    var contact = Vector3.Lerp(point, target.transform.position, 0.7f) + Vector3.up * 1.05f;
+                    var along = target.transform.position - transform.position;
+                    PrototypeVfx.SpawnWeaponImpact(contact, along, PrototypeVfx.ElementColor(type), heavyImpact);
+                }
                 NotifyDamageDealt(dealt);
             }
+            // Ein Treffer muss kurz haengen bleiben, sonst laeuft der Schlag durch den Gegner
+            // hindurch. Nur einmal je Schlag, nicht je getroffenem Gegner.
+            if (weaponImpact && strikeTargets.Count > 0)
+                Hitstop.Freeze(heavyImpact ? 0.05f : 0.03f, heavyImpact ? 0.07f : 0.1f);
             if (critical && build.IsShatter && strikeTargets.Count > 0)
                 CombatUtility.Explode(point, 3f, amount * 0.8f, TeamId.Enemy, DamageType.Ice, gameObject);
         }
@@ -1273,6 +1286,9 @@ namespace Shatterspire
 
         /// <summary>Wie lange die Bindung ueber den Treffer hinaus haelt.</summary>
         public const float HoldAfterStrike = 0.08f;
+
+        /// <summary>Obergrenze der Bindung, damit zwischen zwei Hieben Platz bleibt.</summary>
+        public const float MaxBoundSeconds = 0.3f;
 
         public static float StepDistance(float distanceToTarget)
             => Mathf.Clamp(distanceToTarget - IdealGap, 0f, MaxStep);

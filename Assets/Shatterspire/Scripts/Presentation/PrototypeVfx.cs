@@ -29,6 +29,28 @@ namespace Shatterspire
             return material;
         }
 
+        /// <summary>
+        /// Unbeleuchtet und additiv - eine Klingenspur soll leuchten und nicht von der Raumbeleuchtung
+        /// abhaengen, und sie soll sich dort, wo sie sich selbst ueberlappt, nicht abdunkeln.
+        /// </summary>
+        public static Material CreateTrailMaterial(Color color)
+        {
+            var key = color.GetHashCode() * 397 ^ 0x7241;
+            if (Materials.TryGetValue(key, out var cached) && cached) return cached;
+            var shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
+            var material = new Material(shader) { name = "SS Blade Trail" };
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
+            material.color = color;
+            if (material.HasProperty("_Surface")) material.SetFloat("_Surface", 1f);
+            if (material.HasProperty("_SrcBlend")) material.SetFloat("_SrcBlend", 5f);   // SrcAlpha
+            if (material.HasProperty("_DstBlend")) material.SetFloat("_DstBlend", 1f);   // One
+            if (material.HasProperty("_ZWrite")) material.SetFloat("_ZWrite", 0f);
+            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            material.renderQueue = 3000;
+            Materials[key] = material;
+            return material;
+        }
+
         public static GameObject Primitive(PrimitiveType type, string name, Vector3 position, Vector3 scale,
             Color color, bool emissive = false, bool keepCollider = false)
         {
@@ -192,6 +214,40 @@ namespace Shatterspire
             var flare = PrototypeFactory.Primitive(PrimitiveType.Sphere, "Heavy Ready Flare",
                 position + Vector3.up * 1.05f, Vector3.one * 0.18f, Color.white, true);
             flare.AddComponent<VfxPulse>().Configure(0.28f, 3.2f, true);
+        }
+
+        /// <summary>
+        /// Der Treffer einer Waffe: ein kurzer Aufblitz genau dort, wo die Klinge ankommt, und
+        /// Funken, die in Schlagrichtung wegspritzen.
+        ///
+        /// Vorher lag bei jedem normalen Hieb eine Schockwelle auf dem Boden - drei Ringe, die einen
+        /// Meter vor der Figur aus dem Fussboden wuchsen, auch wenn der Schlag danebenging. Das las
+        /// sich als Zauberimpuls, nicht als Waffentreffer. Hier haengt der Effekt am getroffenen
+        /// Gegner und entsteht gar nicht erst, wenn nichts getroffen wurde.
+        /// </summary>
+        public static void SpawnWeaponImpact(Vector3 point, Vector3 direction, Color color, bool heavy)
+        {
+            Sfx.Play(heavy ? Sound.HitHeavy : Sound.HitLight, point, heavy ? 0.9f : 0.7f);
+            var core = PrototypeFactory.Primitive(PrimitiveType.Sphere, "Weapon Impact", point,
+                Vector3.one * (heavy ? 0.34f : 0.24f), Color.Lerp(Color.white, color, 0.35f), true);
+            Object.Destroy(core.GetComponent<Collider>());
+            core.AddComponent<VfxPulse>().Configure(heavy ? 0.16f : 0.12f, heavy ? 2.6f : 2.1f, true);
+
+            var flat = new Vector3(direction.x, 0f, direction.z);
+            if (flat.sqrMagnitude < 0.001f) flat = Vector3.forward;
+            flat.Normalize();
+            var sparks = heavy ? 6 : 4;
+            for (var i = 0; i < sparks; i++)
+            {
+                var spark = PrototypeFactory.Primitive(PrimitiveType.Cube, "Impact Spark", point,
+                    new Vector3(0.06f, 0.06f, 0.3f), color, true);
+                Object.Destroy(spark.GetComponent<Collider>());
+                // In Schlagrichtung weg, faecherfoermig - nicht ringsum: der Funke soll die
+                // Richtung des Hiebs zeigen.
+                var spread = Quaternion.Euler(Random.Range(-26f, 26f), Random.Range(-44f, 44f), 0f);
+                spark.AddComponent<VfxShard>().Configure(
+                    (spread * flat + Vector3.up * 0.45f) * Random.Range(3.4f, 5.6f));
+            }
         }
 
         public static void SpawnExplosion(Vector3 position, float radius, Color color)

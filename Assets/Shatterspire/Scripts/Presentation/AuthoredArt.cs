@@ -291,6 +291,15 @@ namespace Shatterspire
                 AttachSupportFocus(animator, model.transform, accent);
             }
 
+            // Klingenspur, aber nur fuer die beiden, die wirklich zuschlagen. Der Zweihaender zieht
+            // weiter aussen als der Hammer.
+            if (oathGear || role == CompanionRole.Guardian)
+            {
+                var grip = FindNamedBone(animator ? animator.transform : model.transform, "handslot.r");
+                if (!grip && animator && animator.isHuman) grip = animator.GetBoneTransform(HumanBodyBones.RightHand);
+                motion.AttachBladeTrail(grip, accent, oathGear ? 1.45f : 1.1f);
+            }
+
             muzzle = new GameObject(role == CompanionRole.Guardian ? "Hammer Impact" : "Dawn Focus").transform;
             muzzle.SetParent(root, false);
             muzzle.localPosition = role == CompanionRole.Guardian
@@ -1808,14 +1817,16 @@ namespace Shatterspire
         {
             return kind switch
             {
-                AttackMotion.Swing => combat ? 0.42f : 0.3f,
-                AttackMotion.Smash => combat ? 0.5f : 0.38f,
-                AttackMotion.Spin => combat ? 0.55f : 0.36f,
+                // Kurz und durchgehend in Bewegung. Vorher waren es 0,42 bis 0,55 s, von denen die
+                // Haelfte eine gehaltene Pose war: die Figur holte aus, stand, schlug, stand.
+                AttackMotion.Swing => combat ? 0.3f : 0.3f,
+                AttackMotion.Smash => combat ? 0.4f : 0.38f,
+                AttackMotion.Spin => combat ? 0.45f : 0.36f,
                 AttackMotion.Cast => combat ? 0.4f : 0.3f,
                 AttackMotion.Channel => combat ? 0.7f : 0.4f,
-                AttackMotion.Leap => combat ? 0.75f : 0.45f,
+                AttackMotion.Leap => combat ? 0.6f : 0.45f,
                 AttackMotion.Summon => combat ? 0.9f : 0.6f,
-                AttackMotion.Stab => combat ? 0.45f : 0.32f,
+                AttackMotion.Stab => combat ? 0.36f : 0.32f,
                 AttackMotion.Draw => combat ? 0.6f : 0.4f,
                 AttackMotion.Release => combat ? 0.35f : 0.24f,
                 _ => combat ? 0.3f : 0.2f
@@ -1827,9 +1838,13 @@ namespace Shatterspire
         /// Waffe trifft.
         ///
         /// Die Zahlen sind gemessen, nicht geschaetzt - SHATTERSPIRE > Kampfclips vermessen faehrt
-        /// jeden Clip auf dem Rig ab und meldet, wann die Waffenhand am schnellsten ist. Beispiel
-        /// Melee_2H_Attack_Chop: 1,63 s lang, der Hammer trifft bei 0,44 des Clips, und der eigentliche
+        /// jeden Clip auf dem Rig ab und meldet, wann die Klinge am schnellsten ist. Beispiel
+        /// Melee_2H_Attack_Chop: 1,63 s lang, der Hammer trifft bei 0,53 des Clips, und der eigentliche
         /// Schwung dauert von 0,39 bis 0,53. Alles davor ist Ausholen, alles danach Nachschwingen.
+        ///
+        /// Die erste Fassung hat die Hand verfolgt statt die Klinge. Das ging beim Hieb knapp auf,
+        /// aber beim Wirbel liegt die schnellste Hand bei 0,56 und die schnellste Klinge bei 0,29 -
+        /// das Fenster schnitt den eigentlichen Sweep weg. Gemessen wird, was man sieht.
         ///
         /// Vorher lief jeder Kampfclip von 0 bis 0,92 - also einschliesslich des langen Ausholens -
         /// und wurde in die kurze Aktionsdauer gequetscht: der Hieb mit 2,4-fachem, Schmettern und
@@ -1839,15 +1854,15 @@ namespace Shatterspire
         /// </summary>
         public static (float From, float To, float Strike) WindowFor(AttackMotion kind) => kind switch
         {
-            AttackMotion.Swing => (0.22f, 0.62f, 0.364f),
-            AttackMotion.Smash => (0.28f, 0.68f, 0.436f),
-            AttackMotion.Spin => (0.40f, 0.72f, 0.563f),
-            AttackMotion.Stab => (0.20f, 0.60f, 0.346f),
-            AttackMotion.Leap => (0.34f, 0.74f, 0.549f),
-            AttackMotion.Shot => (0f, 0.36f, 0.121f),
-            AttackMotion.Cast => (0f, 0.42f, 0.172f),
-            AttackMotion.Release => (0f, 0.30f, 0.053f),
-            AttackMotion.Draw => (0f, 0.55f, 0.060f),
+            AttackMotion.Swing => (0.26f, 0.54f, 0.391f),
+            AttackMotion.Smash => (0.38f, 0.64f, 0.528f),
+            AttackMotion.Spin => (0.20f, 0.44f, 0.288f),
+            AttackMotion.Stab => (0.42f, 0.70f, 0.523f),
+            AttackMotion.Leap => (0.40f, 0.78f, 0.564f),
+            AttackMotion.Shot => (0f, 0.34f, 0.075f),
+            AttackMotion.Cast => (0f, 0.40f, 0.086f),
+            AttackMotion.Release => (0f, 0.26f, 0.045f),
+            AttackMotion.Draw => (0f, 0.50f, 0.068f),
             _ => (0f, 0.92f, 0.4f)
         };
 

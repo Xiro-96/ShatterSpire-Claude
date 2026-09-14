@@ -377,6 +377,7 @@ namespace Shatterspire
         private Vector2 lean;
         private ChampionAnimationDriver authoredAnimation;
         private bool authored;
+        private BladeTrail bladeTrail;
 
         public void Configure(Transform visual, float frequency)
         {
@@ -405,6 +406,24 @@ namespace Shatterspire
             }
         }
 
+        /// <summary>
+        /// Haengt eine Spur an die Waffe. Nur fuer Figuren, die eine Klinge fuehren - ein Bogen
+        /// oder ein Stab zoege sonst denselben Bogen durch die Luft.
+        /// </summary>
+        public void AttachBladeTrail(Transform grip, Color accent, float reach)
+        {
+            if (!grip) return;
+            bladeTrail = BladeTrail.Attach(grip, accent, reach);
+        }
+
+        /// <summary>Bewegungen, bei denen die Waffe wirklich einen Bogen zieht.</summary>
+        private static bool IsWeaponSwing(AttackMotion kind) => kind switch
+        {
+            AttackMotion.Swing or AttackMotion.Smash or AttackMotion.Spin
+                or AttackMotion.Stab or AttackMotion.Leap => true,
+            _ => false
+        };
+
         public void PulseAttack(float strength = 1f)
         {
             recoil = Mathf.Max(recoil, strength);
@@ -431,6 +450,9 @@ namespace Shatterspire
             var swing = SoundFor(kind);
             if (swing.HasValue) Sfx.Play(swing.Value, transform.position);
             authoredAnimation?.PlayMotion(kind, motionDuration);
+            // Die Spur laeuft genau so lange wie die Bewegung und zeichnet nach, was der Clip
+            // tatsaechlich tut - sie erfindet keinen Bogen, den es nicht gibt.
+            if (bladeTrail && IsWeaponSwing(kind)) bladeTrail.Sweep(motionDuration);
         }
 
         private static Sound? SoundFor(AttackMotion kind) => kind switch
