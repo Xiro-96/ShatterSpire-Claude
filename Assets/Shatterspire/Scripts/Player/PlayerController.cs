@@ -26,6 +26,9 @@ namespace Shatterspire
         private Vector3 rollDirection;
         private Vector3 velocity;
         private Vector3 acceleration;
+        private float boundUntil = -1f;
+        private float boundFactor = 1f;
+        private Coroutine lunge;
         private FloorNavigation navigation;
         private HeroClassId heroClass;
         public int DashCharges => dashCharges;
@@ -101,6 +104,11 @@ namespace Shatterspire
         {
             var stick = Vector3.ClampMagnitude(new Vector3(input.Move.x, 0f, input.Move.y), 1f);
             var topSpeed = HeroCatalog.BaseSpeed(heroClass) * build.MoveSpeedMultiplier;
+            // Waehrend eines Nahkampfschlags bleibt der Held weitgehend stehen. Ohne das kostet ein
+            // Schlag nichts: man laeuft mit vollem Tempo weiter, waehrend der Oberkoerper schwingt,
+            // und der Treffer wirkt folgenlos. Die Bindung endet kurz nach dem Treffer, damit
+            // zwischen zwei Hieben noch Platz zum Nachsetzen bleibt.
+            if (Time.time < boundUntil) topSpeed *= boundFactor;
             var desired = stick * topSpeed;
             var smoothing = desired.sqrMagnitude > velocity.sqrMagnitude ? AccelerationSeconds : BrakingSeconds;
             velocity = Vector3.SmoothDamp(velocity, desired, ref acceleration, smoothing);
@@ -118,6 +126,50 @@ namespace Shatterspire
             // hinterherschwenken. 22 pro Sekunde war bei schnellen Richtungswechseln sichtbar traege.
             if (aim.sqrMagnitude > 0.1f)
                 transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(aim), 30f * Time.deltaTime);
+        }
+
+        /// <summary>
+        /// Bindet den Helden fuer die Dauer eines Schlags an seinen Platz. Der Faktor ist ein Anteil
+        /// des vollen Tempos, kein absoluter Wert - ein Relikt auf Lauftempo wirkt weiter.
+        /// </summary>
+        public void BindDuringAttack(float seconds, float factor)
+        {
+            if (seconds <= 0f) return;
+            boundUntil = Time.time + seconds;
+            boundFactor = Mathf.Clamp01(factor);
+        }
+
+        /// <summary>
+        /// Der Schritt in den Schlag: traegt den Helden waehrend des Ausholens auf sein Ziel zu, damit
+        /// der Hieb ankommt statt knapp davor ins Leere zu gehen.
+        ///
+        /// Anders als CombatStep versetzt er nicht auf einen Schlag, sondern ueber die ganze
+        /// Ausholzeit - ein Versatz von anderthalb Einheiten in einem Bild waere ein Blinzeln.
+        /// </summary>
+        public void Lunge(Vector3 direction, float distance, float seconds)
+        {
+            if (!motor || rolling || airborne || distance <= 0.02f || seconds <= 0f) return;
+            direction.y = 0f;
+            if (direction.sqrMagnitude < 0.01f) return;
+            if (lunge != null) StopCoroutine(lunge);
+            lunge = StartCoroutine(LungeRoutine(direction.normalized, distance, seconds));
+        }
+
+        private IEnumerator LungeRoutine(Vector3 direction, float distance, float seconds)
+        {
+            var elapsed = 0f;
+            var moved = 0f;
+            while (elapsed < seconds && !rolling && !airborne && motor.enabled)
+            {
+                elapsed += Time.deltaTime;
+                // Weich hinein und weich hinaus: der Schritt soll sich als Gewichtsverlagerung
+                // lesen, nicht als Ruck.
+                var wanted = distance * Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / seconds));
+                if (wanted > moved) motor.Move(direction * (wanted - moved));
+                moved = wanted;
+                yield return null;
+            }
+            lunge = null;
         }
 
         public void CombatStep(Vector3 direction, float distance)

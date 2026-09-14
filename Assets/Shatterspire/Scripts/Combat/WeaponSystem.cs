@@ -279,6 +279,7 @@ namespace Shatterspire
             {
                 nextShot = Time.time + 0.38f / build.AttackSpeedMultiplier;
                 motion?.PlayMotion(AttackMotion.Swing, 0.9f);
+                CommitMelee(AttackMotion.Swing, direction);
                 StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Swing, 0.15f), () =>
                 {
                     var point = transform.position + direction * 1.25f;
@@ -293,6 +294,7 @@ namespace Shatterspire
             {
                 nextShot = Time.time + 0.46f / build.AttackSpeedMultiplier;
                 motion?.PlayMotion(AttackMotion.Smash, 1.1f);
+                CommitMelee(AttackMotion.Smash, direction);
                 StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Smash, 0.2f), () =>
                 {
                     var point = transform.position + direction * 1.55f;
@@ -307,6 +309,7 @@ namespace Shatterspire
 
             nextShot = Time.time + 0.64f / build.AttackSpeedMultiplier;
             motion?.PlayMotion(AttackMotion.Spin, 1.3f);
+            CommitMelee(AttackMotion.Spin, direction);
             StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Spin, 0.17f), () =>
             {
                 var radius = 2.6f + reach;
@@ -466,6 +469,7 @@ namespace Shatterspire
             comboExpiresAt = Time.time + 1.05f;
             nextShot = Time.time + (finisher ? 0.42f : 0.3f) / build.AttackSpeedMultiplier;
             motion?.PlayMotion(finisher ? AttackMotion.Smash : AttackMotion.Swing, finisher ? 1.15f : 0.85f);
+            CommitMelee(finisher ? AttackMotion.Smash : AttackMotion.Swing, direction);
             StartCoroutine(MeleeImpact(StrikeDelay(finisher ? AttackMotion.Smash : AttackMotion.Swing,
                 finisher ? 0.18f : 0.13f), () =>
             {
@@ -638,6 +642,25 @@ namespace Shatterspire
             var seconds = build.Has(PerkId.PaladinLongVigil) ? 9f : 7f;
             AegisDome.Spawn(transform.position, 6.2f, seconds, accent, gameObject);
             yield return new WaitForSeconds(0.3f);
+        }
+
+        /// <summary>
+        /// Bindung und Schritt: der Held bleibt waehrend des Schlags weitgehend stehen und wird
+        /// dabei auf sein Ziel zugetragen.
+        ///
+        /// Die beiden gehoeren zusammen. Bindung allein macht den Kampf zaeh - man steht fest und
+        /// der Gegner ist trotzdem einen halben Meter zu weit weg. Erst der Schritt macht daraus
+        /// Wucht statt Bremse.
+        /// </summary>
+        private void CommitMelee(AttackMotion kind, Vector3 direction)
+        {
+            var windup = StrikeDelay(kind, 0.15f);
+            controller?.BindDuringAttack(windup + MeleeApproach.HoldAfterStrike, MeleeApproach.BoundSpeed);
+            if (!lockedTarget || !lockedTarget.IsAlive) return;
+            var offset = lockedTarget.transform.position - transform.position;
+            offset.y = 0f;
+            var step = MeleeApproach.StepDistance(offset.magnitude);
+            if (step > 0f) controller?.Lunge(direction, step, windup);
         }
 
         /// <summary>
@@ -1228,5 +1251,30 @@ namespace Shatterspire
         {
             if (ring) Destroy(ring.gameObject);
         }
+    }
+
+    /// <summary>
+    /// Wie weit ein Nahkampfschlag den Helden auf sein Ziel zutraegt.
+    ///
+    /// Der Schritt schliesst nur die Luecke bis auf Schlagweite - nie weiter. Zoege er den Helden
+    /// bis auf den Gegner, stuenden beide ineinander; liefe er unbegrenzt, waere er ein Sprung
+    /// quer durch den Raum. Beide Grenzen stehen hier und werden in SwingTimingTests nachgerechnet.
+    /// </summary>
+    public static class MeleeApproach
+    {
+        /// <summary>Abstand, auf den der Schritt heranfuehrt. Darunter wird nicht mehr nachgesetzt.</summary>
+        public const float IdealGap = 1.5f;
+
+        /// <summary>Obergrenze eines einzelnen Schritts.</summary>
+        public const float MaxStep = 1.7f;
+
+        /// <summary>Anteil des vollen Lauftempos, waehrend ein Schlag laeuft.</summary>
+        public const float BoundSpeed = 0.3f;
+
+        /// <summary>Wie lange die Bindung ueber den Treffer hinaus haelt.</summary>
+        public const float HoldAfterStrike = 0.08f;
+
+        public static float StepDistance(float distanceToTarget)
+            => Mathf.Clamp(distanceToTarget - IdealGap, 0f, MaxStep);
     }
 }

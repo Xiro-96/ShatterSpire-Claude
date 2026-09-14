@@ -80,6 +80,34 @@ namespace Shatterspire.Tests
             }
         }
 
+        /// <summary>
+        /// Der Schritt in den Schlag darf nie ueber das Ziel hinausfuehren. Ein falsches Vorzeichen
+        /// oder eine fehlende Grenze ergaebe einen Helden, der bei jedem Hieb in den Gegner
+        /// hineinlaeuft - oder quer durch den Raum springt.
+        /// </summary>
+        [Test]
+        public void DerSchrittFuehrtNieZuNahHeran()
+        {
+            for (var distance = 0f; distance <= 20f; distance += 0.1f)
+            {
+                var step = MeleeApproach.StepDistance(distance);
+                Assert.That(step, Is.GreaterThanOrEqualTo(0f), $"Rueckwaerts bei {distance:0.0}.");
+                Assert.That(step, Is.LessThanOrEqualTo(MeleeApproach.MaxStep), $"Zu weit bei {distance:0.0}.");
+                if (step > 0f)
+                    Assert.That(distance - step, Is.GreaterThanOrEqualTo(MeleeApproach.IdealGap - 0.001f),
+                        $"Aus {distance:0.0} wird {distance - step:0.00} - naeher als Schlagweite.");
+            }
+        }
+
+        /// <summary>Wer schon auf Schlagweite steht, soll nicht noch geschoben werden.</summary>
+        [Test]
+        public void AufSchlagweiteWirdNichtNachgesetzt()
+        {
+            Assert.That(MeleeApproach.StepDistance(MeleeApproach.IdealGap), Is.EqualTo(0f));
+            Assert.That(MeleeApproach.StepDistance(0.8f), Is.EqualTo(0f));
+            Assert.That(MeleeApproach.StepDistance(40f), Is.EqualTo(MeleeApproach.MaxStep));
+        }
+
         /// <summary>Der Treffer muss im gespielten Abschnitt liegen - sonst faellt Schaden ausserhalb des Schwungs.</summary>
         [Test]
         public void DerTrefferLiegtImFenster()
