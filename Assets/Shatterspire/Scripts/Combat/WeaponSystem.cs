@@ -23,7 +23,19 @@ namespace Shatterspire
         /// Schaden bis zur vollen Ultimate, in Grundschaden des Helden. Bei Dauerfeuer rund 20 bis 25
         /// Sekunden; zusammen mit erlittenem Schaden und Kills etwa eine Ultimate je grossem Kampf.
         /// </summary>
-        private const float UltimateDamageUnits = 70f;
+        /// <summary>
+        /// Wie viel eigener Schaden - in Vielfachen des Grundschadens - eine volle Ultimate-Ladung
+        /// kostet. Stand vorher auf 70 und war damit in gut zehn Sekunden Dauerkampf wieder voll.
+        /// </summary>
+        private const float UltimateDamageUnits = 150f;
+
+        /// <summary>
+        /// Sperre nach einer Ultimate. Deckt die Wirkdauer der laengsten Ultimate (9 s) mit ab, denn
+        /// keine darf sich waehrend ihrer eigenen Wirkung nachladen.
+        /// </summary>
+        private const float UltimateLockoutSeconds = 14f;
+
+        private float ultimateLockedUntil;
         private readonly List<Health> strikeTargets = new();
         private PlayerInputRouter input;
         private PlayerBuild build;
@@ -155,14 +167,14 @@ namespace Shatterspire
 
         private void OnDamaged(DamageInfo damage)
         {
-            // Wer einsteckt, laedt mit: 40 % der Lebenspunkte verloren ergibt 16 % Ladung.
-            if (health.Maximum > 0f) AddUltimateCharge(damage.Amount / (health.Maximum * 2.5f));
+            // Wer einsteckt, laedt mit: 40 % der Lebenspunkte verloren ergibt 10 % Ladung.
+            if (health.Maximum > 0f) AddUltimateCharge(damage.Amount / (health.Maximum * 4f));
         }
 
         private void OnEntityDied(Health value)
         {
             if (!value || value.Team != TeamId.Enemy) return;
-            AddUltimateCharge(0.02f);
+            AddUltimateCharge(0.01f);
             // Die Serie zaehlt jeden gefallenen Gegner des Aufstiegs, nicht nur die eigenen Treffer:
             // im Co-op kaempft die Gruppe zusammen, und eine Serie, die ein Mitspieler kaputtmacht,
             // waere eine Strafe fuer Zusammenspiel.
@@ -182,6 +194,11 @@ namespace Shatterspire
         private void AddUltimateCharge(float amount)
         {
             if (ultimateActive || UltimateReady || amount <= 0f) return;
+            // Eine Ultimate darf sich nicht selbst nachladen. Genau das passierte: XIROs Vergeltung
+            // gibt 25 % mehr Schaden und 25 % mehr Angriffstempo, und jeder dieser Treffer lud die
+            // naechste Vergeltung. Wer sie einmal hatte, hatte sie gleich wieder. Dasselbe gilt fuer
+            // Rex' Jaegerblick, der sich mit Abschuessen selbst verlaengert.
+            if (Time.time < ultimateLockedUntil || HunterFocusActive || build.Retribution) return;
             ultimateCharge = Mathf.Min(1f, ultimateCharge + amount * build.UltimateChargeMultiplier);
             if (!UltimateReady) return;
             PrototypeVfx.SpawnHeavyReady(transform.position);
@@ -845,6 +862,7 @@ namespace Shatterspire
         {
             ultimateActive = true;
             ultimateCharge = 0f;
+            ultimateLockedUntil = Time.time + UltimateLockoutSeconds;
             var direction = AcquireAttackDirection();
             health.SetInvulnerable(heroClass == HeroClassId.Guardian ? 2.2f : 1.3f);
             if (build.Has(PerkId.UltimateAfterglow)) health.Heal(health.Maximum * 0.3f);

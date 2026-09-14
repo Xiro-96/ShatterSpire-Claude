@@ -1641,6 +1641,11 @@ namespace Shatterspire
         private AnimationMixerPlayable locomotion;
         private AnimationClipPlayable idlePlayable;
         private AnimationClipPlayable movePlayable;
+        private AnimationClipPlayable backPlayable;
+        private AnimationClipPlayable strafeLeftPlayable;
+        private AnimationClipPlayable strafeRightPlayable;
+        /// <summary>Laufrichtung im Koerpersystem, geglaettet. x seitlich, y vorwaerts.</summary>
+        private Vector2 travel;
         private readonly AnimationClipPlayable[] fullPlayables = new AnimationClipPlayable[2];
         private readonly AnimationClipPlayable[] upperPlayables = new AnimationClipPlayable[2];
         private readonly float[] actionWeights = new float[2];
@@ -1652,6 +1657,9 @@ namespace Shatterspire
 
         private AnimationClip idle;
         private AnimationClip move;
+        private AnimationClip moveBack;
+        private AnimationClip strafeLeft;
+        private AnimationClip strafeRight;
         private AnimationClip attack;
         private AnimationClip roll;
         private AnimationClip ultimate;
@@ -1712,6 +1720,13 @@ namespace Shatterspire
                 ? FindClip(clips, "Skeletons_Idle", "Idle_A", "Idle_B", "Idle_No_Loop")
                 : FindClip(clips, "Idle_A", "Idle_B", "Idle_No_Loop");
             move = FindClip(clips, "Running_A", "Running_B", "Walking_A");
+            // Seitwaerts und rueckwaerts. Diese drei Clips lagen von Anfang an im Projekt und wurden
+            // nie benutzt: jede Figur spielte in jede Richtung denselben Vorwaertslauf. Fuer einen
+            // Fernkaempfer ist das der Normalfall - Rex sieht der Maus nach und laeuft dabei
+            // seitlich weg, also lief er die ganze Zeit rueckwaerts mit Vorwaertsbeinen.
+            moveBack = FindClip(clips, "Walking_Backwards", "Walking_A", "Running_A");
+            strafeLeft = FindClip(clips, "Running_Strafe_Left", "Running_A");
+            strafeRight = FindClip(clips, "Running_Strafe_Right", "Running_A");
             attack = FindClip(clips, "Throw", "Use_Item", "Interact");
             roll = FindClip(clips, "Dodge_Forward", "Jump_Start", "Jump_Full_Short", "Jump_Full_Long");
             dodgeBack = FindClip(clips, "Dodge_Backward");
@@ -1755,11 +1770,21 @@ namespace Shatterspire
 
             idlePlayable = CreateLoop(idle);
             movePlayable = CreateLoop(move ? move : idle);
-            locomotion = AnimationMixerPlayable.Create(graph, 2);
+            backPlayable = CreateLoop(moveBack ? moveBack : move ? move : idle);
+            strafeLeftPlayable = CreateLoop(strafeLeft ? strafeLeft : move ? move : idle);
+            strafeRightPlayable = CreateLoop(strafeRight ? strafeRight : move ? move : idle);
+            // Fuenf Eingaenge: Stand, vor, zurueck, links, rechts. Gemischt nach der Richtung, in
+            // die sich die Figur tatsaechlich bewegt - relativ zu ihrer Blickrichtung, nicht zur Welt.
+            locomotion = AnimationMixerPlayable.Create(graph, 5);
             graph.Connect(idlePlayable, 0, locomotion, 0);
             graph.Connect(movePlayable, 0, locomotion, 1);
+            graph.Connect(backPlayable, 0, locomotion, 2);
+            graph.Connect(strafeLeftPlayable, 0, locomotion, 3);
+            graph.Connect(strafeRightPlayable, 0, locomotion, 4);
             locomotion.SetInputWeight(0, 1f);
-            locomotion.SetInputWeight(1, 0f);
+            for (var i = 1; i < 5; i++) locomotion.SetInputWeight(i, 0f);
+            // Rueckwaerts ist ein Gehclip; ungebremst wirkt er zum Lauftempo wie Zeitlupe.
+            backPlayable.SetSpeed(1.5f);
 
             fullMixer = AnimationMixerPlayable.Create(graph, 2);
             upperMixer = AnimationMixerPlayable.Create(graph, 2);
@@ -1979,10 +2004,38 @@ namespace Shatterspire
             // Stick sieht die Figur auch halb so schnell aus.
             var desired = Mathf.Clamp01(speed / referenceSpeed);
             moveBlend = Mathf.MoveTowards(moveBlend, desired, delta / LocomotionBlendSeconds);
+
+            // Richtung im Koerpersystem. Geglaettet mit derselben Zeit wie der Blend, sonst springt
+            // die Mischung bei jeder kleinen Drehung der Figur.
+            var local = speed > 0.05f
+                ? transform.InverseTransformDirection(displacement.normalized)
+                : Vector3.zero;
+            travel = Vector2.MoveTowards(travel, new Vector2(local.x, local.z),
+                delta / LocomotionBlendSeconds);
+            var forward = Mathf.Max(0f, travel.y);
+            var back = Mathf.Max(0f, -travel.y);
+            var right = Mathf.Max(0f, travel.x);
+            var left = Mathf.Max(0f, -travel.x);
+            var sum = forward + back + right + left;
+            if (sum > 0.0001f)
+            {
+                forward /= sum;
+                back /= sum;
+                right /= sum;
+                left /= sum;
+            }
+            else forward = 1f;
+
             locomotion.SetInputWeight(0, 1f - moveBlend);
-            locomotion.SetInputWeight(1, moveBlend);
+            locomotion.SetInputWeight(1, moveBlend * forward);
+            locomotion.SetInputWeight(2, moveBlend * back);
+            locomotion.SetInputWeight(3, moveBlend * left);
+            locomotion.SetInputWeight(4, moveBlend * right);
             // Clip-Tempo mitziehen, sonst rutschen die Fuesse ueber den Boden.
             movePlayable.SetSpeed(Mathf.Lerp(0.75f, 1.35f, moveBlend));
+            strafeLeftPlayable.SetSpeed(Mathf.Lerp(0.75f, 1.35f, moveBlend));
+            strafeRightPlayable.SetSpeed(Mathf.Lerp(0.75f, 1.35f, moveBlend));
+            backPlayable.SetSpeed(Mathf.Lerp(1.1f, 1.9f, moveBlend));
 
             // Schritte aus der tatsaechlichen Strecke: bei halbem Tempo kommen sie von selbst
             // halb so oft, ohne dass irgendwo ein Takt gepflegt werden muesste.
@@ -2003,6 +2056,9 @@ namespace Shatterspire
 
             WrapLoop(idlePlayable);
             WrapLoop(movePlayable);
+            WrapLoop(backPlayable);
+            WrapLoop(strafeLeftPlayable);
+            WrapLoop(strafeRightPlayable);
 
             if (activeSlot >= 0 && Time.time >= actionHoldUntil) activeSlot = -1;
 

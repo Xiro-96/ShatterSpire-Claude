@@ -35,6 +35,11 @@ namespace Shatterspire.Tests
         {
             ("Idle", new[] { "Idle_A", "Idle_B", "Idle_No_Loop" }),
             ("Laufen", new[] { "Running_A", "Running_B", "Walking_A" }),
+            // Seitwaerts und rueckwaerts: ohne diese drei laeuft jede Figur in jede Richtung
+            // denselben Vorwaertslauf, und ein Fernkaempfer sieht dabei am schlechtesten aus.
+            ("Seitwaerts links", new[] { "Running_Strafe_Left" }),
+            ("Seitwaerts rechts", new[] { "Running_Strafe_Right" }),
+            ("Rueckwaerts", new[] { "Walking_Backwards" }),
             ("Angriff", new[] { "Throw", "Use_Item", "Interact" }),
             // Kampfclips ohne Ersatz in der Liste: faellt der Import aus, soll der Test rot werden.
             ("Hammer quer", new[] { "Melee_2H_Attack_Slice", "Melee_1H_Attack_Slice_Horizontal" }),
