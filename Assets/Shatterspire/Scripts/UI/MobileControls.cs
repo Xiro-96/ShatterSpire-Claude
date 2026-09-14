@@ -132,7 +132,11 @@ namespace Shatterspire
         private bool dragging;
         public void Configure(MobileAction value) => action = value;
 
-        private bool Aimable => action is MobileAction.Skill or MobileAction.Ultimate;
+        /// <summary>
+        /// Ziehbar sind die drei, die eine Richtung haben. Der normale Angriff gehoert ausdruecklich
+        /// dazu: fuer einen Fernkaempfer ist er die Aktion, die am haeufigsten gerichtet werden muss.
+        /// </summary>
+        private bool Aimable => action is MobileAction.Attack or MobileAction.Skill or MobileAction.Ultimate;
 
         public void OnDrag(PointerEventData eventData)
         {

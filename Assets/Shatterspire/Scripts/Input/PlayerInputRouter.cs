@@ -104,6 +104,8 @@ namespace Shatterspire
         public static bool AimAssist = true;
         /// <summary>Bis zu diesem Winkel darf die Zielhilfe die Richtung verschieben.</summary>
         private const float AimAssistDegrees = 16f;
+        /// <summary>Wie weit das Selbstzielen sucht, wenn niemand von Hand richtet.</summary>
+        private const float AutoAimRange = 18f;
         private Vector3 aimDirection = Vector3.forward;
 
         private void Start()
@@ -151,26 +153,60 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// Zielrichtung auf dem Telefon. Der Zielstick hat Vorrang; ohne ihn zeigt der Held dorthin,
-        /// wohin er laeuft, und im Stand behaelt er seine letzte Richtung. So ist jederzeit manuell
-        /// steuerbar, und die Zielhilfe korrigiert nur noch dicht daneben.
+        /// Zielrichtung auf dem Telefon.
+        ///
+        /// Drei Faelle, in dieser Reihenfolge. Wer von Hand richtet - Zielstick oder ein gezogener
+        /// Aktionsknopf - bestimmt die Richtung selbst; die Zielhilfe korrigiert dann nur noch dicht
+        /// daneben. Wer angreift, ohne zu richten, zielt auf den naechsten Gegner. Und wer gar
+        /// nichts tut, schaut dorthin, wohin er laeuft.
+        ///
+        /// Der mittlere Fall ist der wichtige und war vorher falsch: ohne Zielstick folgte das Ziel
+        /// der Laufrichtung. Fuer einen Fernkaempfer heisst das, dass Weglaufen bedeutet, vom Gegner
+        /// weg zu schiessen - man kann nicht gleichzeitig ausweichen und treffen. Genau das macht
+        /// Rex unspielbar, und genau das loest in Brawl Stars das Antippen des Angriffsknopfes:
+        /// es schiesst auf den naechsten Gegner, egal wohin man laeuft.
         /// </summary>
         private Vector3 ResolveTouchAim()
         {
-            // Was am Aktionsknopf gezogen wird, hat Vorrang: wer die Faehigkeit richtet, zielt
-            // damit und nicht mit dem Zielstick.
+            // Was am Aktionsknopf gezogen wird, hat Vorrang: wer eine Aktion richtet, zielt damit
+            // und nicht mit dem Zielstick.
             var stick = MobileInput.ActionAim.sqrMagnitude > 0.0004f ? MobileInput.ActionAim : MobileInput.Aim;
-            if (stick.sqrMagnitude > 0.0004f) aimDirection = new Vector3(stick.x, 0f, stick.y).normalized;
-            else if (Move.sqrMagnitude > 0.02f) aimDirection = new Vector3(Move.x, 0f, Move.y).normalized;
-            if (!AimAssist) return aimDirection;
+            if (stick.sqrMagnitude > 0.0004f)
+            {
+                aimDirection = new Vector3(stick.x, 0f, stick.y).normalized;
+                return AimAssist ? SnapToTarget(aimDirection, AimAssistDegrees) : aimDirection;
+            }
 
-            var target = Targeting.FindBestAutoAim(transform.position, aimDirection, 18f, TeamId.Enemy);
-            if (!target) return aimDirection;
+            if (Attacking)
+            {
+                // Volles Selbstzielen, ohne Winkelgrenze: hier hat niemand eine Richtung gemeint,
+                // die man verfehlen koennte.
+                var snapped = SnapToTarget(aimDirection, 180f);
+                aimDirection = snapped;
+                return snapped;
+            }
+
+            if (Move.sqrMagnitude > 0.02f) aimDirection = new Vector3(Move.x, 0f, Move.y).normalized;
+            return aimDirection;
+        }
+
+        /// <summary>Greift der Spieler gerade an oder richtet er eine Aktion?</summary>
+        private bool Attacking => MobileInput.Attack || MobileInput.SkillHeld || MobileInput.UltimateHeld
+                                  || MobileInput.Heavy || ScriptedAttack;
+
+        /// <summary>
+        /// Zieht eine Richtung auf den besten Gegner, aber hoechstens um <paramref name="degrees"/>.
+        /// Ohne Gegner bleibt die Richtung, wie sie war.
+        /// </summary>
+        private Vector3 SnapToTarget(Vector3 direction, float degrees)
+        {
+            var target = Targeting.FindBestAutoAim(transform.position, direction, AutoAimRange, TeamId.Enemy);
+            if (!target) return direction;
             var toTarget = target.transform.position - transform.position;
             toTarget.y = 0f;
-            if (toTarget.sqrMagnitude < 0.04f) return aimDirection;
+            if (toTarget.sqrMagnitude < 0.04f) return direction;
             toTarget.Normalize();
-            return Vector3.Angle(aimDirection, toTarget) <= AimAssistDegrees ? toTarget : aimDirection;
+            return Vector3.Angle(direction, toTarget) <= degrees ? toTarget : direction;
         }
     }
 
