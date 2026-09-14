@@ -1801,9 +1801,11 @@ namespace Shatterspire
         }
 
         /// <summary>Dauer einer Bewegung. Echte Clips bekommen mehr Zeit, sonst wirken sie gehetzt.</summary>
-        public float DurationFor(AttackMotion kind)
+        public float DurationFor(AttackMotion kind) => DurationFor(kind, HasCombatClip(kind));
+
+        /// <summary>Dieselbe Tabelle ohne laufenden Graphen, damit Tests sie nachrechnen koennen.</summary>
+        public static float DurationFor(AttackMotion kind, bool combat)
         {
-            var combat = HasCombatClip(kind);
             return kind switch
             {
                 AttackMotion.Swing => combat ? 0.42f : 0.3f,
@@ -1820,12 +1822,54 @@ namespace Shatterspire
             };
         }
 
-        /// <summary>Echte Kampfclips fast vollstaendig, Ersatzclips nur ihr Kern aus Ausholen und Durchziehen.</summary>
+        /// <summary>
+        /// Das Abspielfenster je Bewegung, als Anteil des Clips: von wo bis wo, und wo darin die
+        /// Waffe trifft.
+        ///
+        /// Die Zahlen sind gemessen, nicht geschaetzt - SHATTERSPIRE > Kampfclips vermessen faehrt
+        /// jeden Clip auf dem Rig ab und meldet, wann die Waffenhand am schnellsten ist. Beispiel
+        /// Melee_2H_Attack_Chop: 1,63 s lang, der Hammer trifft bei 0,44 des Clips, und der eigentliche
+        /// Schwung dauert von 0,39 bis 0,53. Alles davor ist Ausholen, alles danach Nachschwingen.
+        ///
+        /// Vorher lief jeder Kampfclip von 0 bis 0,92 - also einschliesslich des langen Ausholens -
+        /// und wurde in die kurze Aktionsdauer gequetscht: der Hieb mit 2,4-fachem, Schmettern und
+        /// Wirbel mit 2,8-fachem Tempo, und die beiden letzten wurden zusaetzlich abgeschnitten. Das
+        /// war kein Schlag mehr, sondern ein Zucken. Mit dem Fenster um den Schwung herum laeuft
+        /// derselbe Clip in derselben Zeit mit 1,0- bis 1,4-fachem Tempo.
+        /// </summary>
+        public static (float From, float To, float Strike) WindowFor(AttackMotion kind) => kind switch
+        {
+            AttackMotion.Swing => (0.22f, 0.62f, 0.364f),
+            AttackMotion.Smash => (0.28f, 0.68f, 0.436f),
+            AttackMotion.Spin => (0.40f, 0.72f, 0.563f),
+            AttackMotion.Stab => (0.20f, 0.60f, 0.346f),
+            AttackMotion.Leap => (0.34f, 0.74f, 0.549f),
+            AttackMotion.Shot => (0f, 0.36f, 0.121f),
+            AttackMotion.Cast => (0f, 0.42f, 0.172f),
+            AttackMotion.Release => (0f, 0.30f, 0.053f),
+            AttackMotion.Draw => (0f, 0.55f, 0.060f),
+            _ => (0f, 0.92f, 0.4f)
+        };
+
+        /// <summary>
+        /// Wann die Waffe trifft, in Sekunden nach dem Start der Bewegung. Der Schaden soll dann
+        /// fallen und nicht beim Tastendruck - sonst sieht es aus, als wuerde nur so getan.
+        /// </summary>
+        public float StrikeSecondsFor(AttackMotion kind)
+        {
+            var duration = DurationFor(kind);
+            if (!HasCombatClip(kind)) return duration * 0.4f;
+            var window = WindowFor(kind);
+            var span = Mathf.Max(0.01f, window.To - window.From);
+            return duration * Mathf.Clamp01((window.Strike - window.From) / span);
+        }
+
+        /// <summary>Echte Kampfclips im gemessenen Fenster um den Schwung, Ersatzclips in ihrem Kern.</summary>
         public void PlayMotion(AttackMotion kind, float duration)
         {
             var clip = ClipFor(kind);
             if (!ready || !clip || clip.length <= 0f) return;
-            var (from, to) = kind == AttackMotion.Draw ? (0f, 1f) : HasCombatClip(kind) ? (0f, 0.92f) : kind switch
+            var (from, to) = HasCombatClip(kind) ? (WindowFor(kind).From, WindowFor(kind).To) : kind switch
             {
                 AttackMotion.Swing => (0.1f, 0.7f),
                 AttackMotion.Shot => (0.2f, 0.55f),

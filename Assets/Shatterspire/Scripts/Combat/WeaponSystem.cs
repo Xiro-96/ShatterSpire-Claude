@@ -279,7 +279,7 @@ namespace Shatterspire
             {
                 nextShot = Time.time + 0.38f / build.AttackSpeedMultiplier;
                 motion?.PlayMotion(AttackMotion.Swing, 0.9f);
-                StartCoroutine(MeleeImpact(0.15f, () =>
+                StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Swing, 0.15f), () =>
                 {
                     var point = transform.position + direction * 1.25f;
                     Strike(point, 1.35f + reach, hit, type, flash: false);
@@ -293,7 +293,7 @@ namespace Shatterspire
             {
                 nextShot = Time.time + 0.46f / build.AttackSpeedMultiplier;
                 motion?.PlayMotion(AttackMotion.Smash, 1.1f);
-                StartCoroutine(MeleeImpact(0.2f, () =>
+                StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Smash, 0.2f), () =>
                 {
                     var point = transform.position + direction * 1.55f;
                     Strike(point, 1.7f + reach, hit * 1.4f, type, 7f, flash: false);
@@ -307,7 +307,7 @@ namespace Shatterspire
 
             nextShot = Time.time + 0.64f / build.AttackSpeedMultiplier;
             motion?.PlayMotion(AttackMotion.Spin, 1.3f);
-            StartCoroutine(MeleeImpact(0.17f, () =>
+            StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Spin, 0.17f), () =>
             {
                 var radius = 2.6f + reach;
                 Strike(transform.position, radius, hit * 1.75f, type, 8f, flash: false);
@@ -466,7 +466,8 @@ namespace Shatterspire
             comboExpiresAt = Time.time + 1.05f;
             nextShot = Time.time + (finisher ? 0.42f : 0.3f) / build.AttackSpeedMultiplier;
             motion?.PlayMotion(finisher ? AttackMotion.Smash : AttackMotion.Swing, finisher ? 1.15f : 0.85f);
-            StartCoroutine(MeleeImpact(finisher ? 0.18f : 0.13f, () =>
+            StartCoroutine(MeleeImpact(StrikeDelay(finisher ? AttackMotion.Smash : AttackMotion.Swing,
+                finisher ? 0.18f : 0.13f), () =>
             {
                 var point = transform.position + direction * 1.25f;
                 Strike(point, reach, hit, type, flash: false);
@@ -607,9 +608,8 @@ namespace Shatterspire
             // Der schwere Zweihand-Hieb, nicht die Zauberbewegung: die Faehigkeit ist ein Schlag.
             motion?.PlayMotion(AttackMotion.Smash, 1.45f);
             Sfx.Play(Sound.Draw, transform.position, 0.7f);
-            // Ausholen. Kurz genug, dass es sich nicht nach Warten anfuehlt, lang genug, dass der
-            // Schlag Gewicht bekommt.
-            yield return new WaitForSeconds(0.28f);
+            // Ausholen bis zu dem Bild, in dem die Klinge im Clip tatsaechlich durchzieht.
+            yield return new WaitForSeconds(StrikeDelay(AttackMotion.Smash, 0.28f));
             if (!health.IsAlive) yield break;
 
             var reach = build.Has(PerkId.PaladinWideGround) ? 16f : 11f;
@@ -638,6 +638,17 @@ namespace Shatterspire
             var seconds = build.Has(PerkId.PaladinLongVigil) ? 9f : 7f;
             AegisDome.Spawn(transform.position, 6.2f, seconds, accent, gameObject);
             yield return new WaitForSeconds(0.3f);
+        }
+
+        /// <summary>
+        /// Wann der Schaden faellt: in dem Moment, in dem die Waffe im Clip durchzieht. Vorher stand
+        /// hier je Schlag eine Zahl, die neben der Animation herlief - beim Wirbel fiel der Schaden
+        /// 0,31 s bevor sich die Waffe ueberhaupt bewegte. Ohne echten Kampfclip bleibt der alte Wert.
+        /// </summary>
+        private float StrikeDelay(AttackMotion kind, float fallback)
+        {
+            var measured = motion ? motion.StrikeSeconds(kind) : 0f;
+            return measured > 0f ? measured : fallback;
         }
 
         private IEnumerator MeleeImpact(float delay, System.Action impact)

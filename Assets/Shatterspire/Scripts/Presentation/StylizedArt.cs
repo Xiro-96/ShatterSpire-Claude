@@ -467,6 +467,13 @@ namespace Shatterspire
         /// </summary>
         public bool HoldPose(PresenceMotion kind, bool upperBody = false)
             => authoredAnimation && authoredAnimation.HoldPose(kind, upperBody);
+        /// <summary>
+        /// Wann die Waffe bei dieser Bewegung trifft, in Sekunden nach dem Start. Ohne echten
+        /// Kampfclip 0, dann bleibt der aufrufende Wert stehen.
+        /// </summary>
+        public float StrikeSeconds(AttackMotion kind)
+            => authoredAnimation ? authoredAnimation.StrikeSecondsFor(kind) : 0f;
+
         public void PulseUltimate() => authoredAnimation?.PulseUltimate();
         public void PulseHit() => authoredAnimation?.PulseHit();
 
@@ -480,12 +487,16 @@ namespace Shatterspire
             recoil = Mathf.MoveTowards(recoil, 0f, 7f * Time.deltaTime);
             if (authored)
             {
-                // Vorher 0,055 Einheiten Versatz und 3,5 Grad Neigung - das lag
-                // unter der Wahrnehmungsschwelle, der Effekt war praktisch
-                // unsichtbar. Jetzt mit echtem Squash: beim Schlag kurz tiefer
-                // und breiter, Volumen bleibt dabei etwa erhalten.
-                var squash = 1f - recoil * 0.11f;
-                var stretch = 1f + recoil * 0.07f;
+                var t = motionDuration > 0f ? (Time.time - motionStarted) / motionDuration : 1f;
+                var moving = t >= 0f && t < 1f;
+                // Ersatzwucht - zurueckkippen, zurueckrutschen, stauchen - war dafuer gedacht, dass
+                // kein Kampfclip da ist. Ueber einen echten Schwung gelegt arbeitet sie dagegen: die
+                // Figur schlaegt nach vorn und kippt im selben Moment 11 Grad nach hinten, rutscht
+                // 0,17 Einheiten zurueck und wird flacher. Das las sich als Wackeln, nicht als Schlag.
+                // Ein Rest bleibt, damit der Treffer trotzdem etwas absetzt.
+                var punch = moving && motionUsesClip ? recoil * 0.18f : recoil;
+                var squash = 1f - punch * 0.11f;
+                var stretch = 1f + punch * 0.07f;
 
                 // Neigung in die Laufrichtung. Kostet nichts und ist der
                 // Unterschied zwischen "gleitet" und "laeuft".
@@ -496,14 +507,12 @@ namespace Shatterspire
                     Mathf.Clamp(local.x / 7f, -1f, 1f));
                 lean = Vector2.Lerp(lean, desiredLean, 1f - Mathf.Exp(-9f * Time.deltaTime));
 
-                var t = motionDuration > 0f ? (Time.time - motionStarted) / motionDuration : 1f;
-                var moving = t >= 0f && t < 1f;
                 // Wirbel: die ganze Figur dreht sich einmal, schnell hinein, weich hinaus.
                 var spin = moving && motionKind == AttackMotion.Spin ? (1f - Mathf.Pow(1f - t, 3f)) * 360f : 0f;
 
-                model.localPosition = modelOrigin + new Vector3(0f, 0f, -recoil * 0.17f);
+                model.localPosition = modelOrigin + new Vector3(0f, 0f, -punch * 0.17f);
                 model.localRotation = Quaternion.Euler(
-                    recoil * -11f + lean.x * 5.5f, spin, lean.y * -5.5f);
+                    punch * -11f + lean.x * 5.5f, spin, lean.y * -5.5f);
                 model.localScale = new Vector3(
                     modelBaseScale.x * stretch,
                     modelBaseScale.y * squash,
