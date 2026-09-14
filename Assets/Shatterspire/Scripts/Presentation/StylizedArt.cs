@@ -467,6 +467,13 @@ namespace Shatterspire
             _ => null
         };
 
+        /// <summary>
+        /// Setzt die Fluegel der Zornigen Vergeltung auf den Ruecken. Sie haengen am Brustkorb, damit
+        /// sie sich mit der Figur bewegen statt hinterherzuschweben.
+        /// </summary>
+        public WrathWings ShowWrathWings(Color accent, float seconds)
+            => WrathWings.Attach(chest ? chest : transform, accent, seconds);
+
         public void PulseDash()
         {
             Sfx.Play(Sound.Dash, transform.position, 0.7f);

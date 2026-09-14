@@ -21,7 +21,7 @@ namespace Shatterspire
         BomberShortFuse, BomberClusterCharge, BomberLongCord, BomberStickyCluster, BomberChainFeed,
         BomberSmokeStep,
         // XIRO, die Paladin.
-        PaladinWideGround, PaladinLongVigil, PaladinAshStep, PaladinTwinWave, PaladinIronBrace
+        PaladinWideGround, PaladinLongVigil, PaladinAshStep, PaladinTwinWave, PaladinTwinVerdict
     }
 
     public enum PerkRarity { Common, Rare, Epic, Legendary }
@@ -133,9 +133,9 @@ namespace Shatterspire
             P(PerkId.BomberLongCord, "LONG CORD", "The Blast Cord lays five charges instead of three.", PerkRarity.Epic, ActionSlot.Skill, BomberOnly),
             P(PerkId.BomberChainFeed, "CHAIN FEED", "The Chain Detonator keeps feeding for 10 instead of 6 seconds.", PerkRarity.Epic, ActionSlot.Ultimate, BomberOnly),
             P(PerkId.PaladinTwinWave, "TWIN WAVE", "The Oathblade finisher sends a second wave and heals twice as much.", PerkRarity.Rare, ActionSlot.Light, PaladinOnly),
-            P(PerkId.PaladinIronBrace, "IRON BRACE", "Blade Guard holds everything from the front, and gives all of it back.", PerkRarity.Epic, ActionSlot.Heavy, PaladinOnly),
+            P(PerkId.PaladinTwinVerdict, "TWIN VERDICT", "A second Verdict falls a moment after the first.", PerkRarity.Epic, ActionSlot.Heavy, PaladinOnly),
             P(PerkId.PaladinWideGround, "LONG REACH", "The Ash Wave runs half again as far.", PerkRarity.Rare, ActionSlot.Skill, PaladinOnly),
-            P(PerkId.PaladinLongVigil, "LONG VIGIL", "Aegis stands for 9 instead of 7 seconds.", PerkRarity.Epic, ActionSlot.Ultimate, PaladinOnly),
+            P(PerkId.PaladinLongVigil, "LONG VIGIL", "Wrath lasts 9 instead of 7 seconds.", PerkRarity.Epic, ActionSlot.Ultimate, PaladinOnly),
 
             // PASSIVE
             Deep(PerkId.DamageUp, "TEMPERED POWER", "+25% damage for every action.", PerkRarity.Common, ActionSlot.Passive, 3),
@@ -362,7 +362,32 @@ namespace Shatterspire
         /// Angriffsstelle im Kampfcode sie einzeln abfragen muesste.
         /// </summary>
         public float DamageMultiplier =>
-            storedDamageMultiplier * (LowHealthFury ? 1.15f : 1f) * (InForgeCrater ? 1.25f : 1f);
+            storedDamageMultiplier * (LowHealthFury ? 1.15f : 1f) * (InForgeCrater ? 1.25f : 1f)
+            * (Retribution ? RetributionDamage : 1f);
+
+        // ── Zornige Vergeltung: XIROs Ultimate ──────────────────────────────
+        /// <summary>Schaden waehrend der Vergeltung.</summary>
+        public const float RetributionDamage = 1.25f;
+
+        /// <summary>Lauftempo waehrend der Vergeltung.</summary>
+        public const float RetributionSpeed = 1.1f;
+
+        /// <summary>Angriffstempo waehrend der Vergeltung.</summary>
+        public const float RetributionAttackSpeed = 1.25f;
+
+        private float retributionUntil = -1f;
+
+        /// <summary>
+        /// Laeuft die Vergeltung gerade? Ueber eine Ablaufzeit statt ueber ein Flag: ein Buff, den
+        /// jemand einschaltet und beim Tod oder Etagenwechsel auszuschalten vergisst, faellt
+        /// niemandem auf - er wirkt einfach weiter.
+        /// </summary>
+        public bool Retribution => Time.time < retributionUntil;
+
+        public void BeginRetribution(float seconds) => retributionUntil = Time.time + Mathf.Max(0f, seconds);
+
+        /// <summary>Restzeit der Vergeltung in Sekunden, fuer Anzeige und Tests.</summary>
+        public float RetributionRemaining => Mathf.Max(0f, retributionUntil - Time.time);
 
         /// <summary>Der Held steht in seinem eigenen Schmiedekrater. Wird vom Krater selbst gesetzt.</summary>
         public bool InForgeCrater { get; set; }
@@ -379,8 +404,11 @@ namespace Shatterspire
                 return cachedHealth && cachedHealth.IsAlive && cachedHealth.Normalized < 0.4f;
             }
         }
-        public float AttackSpeedMultiplier { get; private set; } = 1f;
-        public float MoveSpeedMultiplier => storedMoveSpeedMultiplier * focusSpeedMultiplier;
+        public float AttackSpeedMultiplier =>
+            storedAttackSpeedMultiplier * (Retribution ? RetributionAttackSpeed : 1f);
+        private float storedAttackSpeedMultiplier = 1f;
+        public float MoveSpeedMultiplier =>
+            storedMoveSpeedMultiplier * focusSpeedMultiplier * (Retribution ? RetributionSpeed : 1f);
         private float storedMoveSpeedMultiplier = 1f;
         private float focusSpeedMultiplier = 1f;
 
@@ -431,7 +459,7 @@ namespace Shatterspire
             if (config.HasRelic(RelicId.SwiftBoots)) storedMoveSpeedMultiplier *= 1.12f;
             if (config.HasRelic(RelicId.FocusCrystal)) SkillCooldownMultiplier *= 0.8f;
             if (config.HasRelic(RelicId.SurgeCore)) UltimateChargeMultiplier *= 1.2f;
-            if (config.HasRelic(RelicId.TwinCharge)) AttackSpeedMultiplier *= 1.1f;
+            if (config.HasRelic(RelicId.TwinCharge)) storedAttackSpeedMultiplier *= 1.1f;
             if (config.HasRelic(RelicId.GoldVein)) GoldMultiplier *= 1.3f;
             if (config.HasRelic(RelicId.GuardPlate))
             {
@@ -458,13 +486,13 @@ namespace Shatterspire
             switch (id)
             {
                 case ShopOfferId.Whetstone: storedDamageMultiplier *= 1.12f; break;
-                case ShopOfferId.OiledGears: AttackSpeedMultiplier *= 1.08f; break;
+                case ShopOfferId.OiledGears: storedAttackSpeedMultiplier *= 1.08f; break;
                 case ShopOfferId.IronRation: GetComponent<Health>().IncreaseMaximum(25f, true); break;
                 case ShopOfferId.FocusLens: CritChance = Mathf.Min(0.85f, CritChance + 0.06f); break;
                 case ShopOfferId.Counterweight: HeavyDamageMultiplier *= 1.18f; break;
                 case ShopOfferId.ForgedBlade:
                     storedDamageMultiplier *= 1.3f;
-                    AttackSpeedMultiplier *= 0.94f;
+                    storedAttackSpeedMultiplier *= 0.94f;
                     break;
             }
             Changed?.Invoke();
@@ -483,7 +511,7 @@ namespace Shatterspire
             switch (wager.Effect)
             {
                 case WagerEffect.Damage: storedDamageMultiplier *= wager.Amount; break;
-                case WagerEffect.AttackSpeed: AttackSpeedMultiplier *= wager.Amount; break;
+                case WagerEffect.AttackSpeed: storedAttackSpeedMultiplier *= wager.Amount; break;
                 case WagerEffect.MoveSpeed: storedMoveSpeedMultiplier *= wager.Amount; break;
                 case WagerEffect.UltimateCharge: UltimateChargeMultiplier *= wager.Amount; break;
                 case WagerEffect.MaxHealth:
@@ -506,7 +534,7 @@ namespace Shatterspire
             switch (perk.Id)
             {
                 case PerkId.DamageUp: storedDamageMultiplier *= 1.25f; break;
-                case PerkId.AttackSpeed: AttackSpeedMultiplier *= 1.22f; break;
+                case PerkId.AttackSpeed: storedAttackSpeedMultiplier *= 1.22f; break;
                 // Geklemmt wie beim Haendler: eine kritische Chance ueber 85 Prozent nimmt dem
                 // kritischen Treffer seine Bedeutung.
                 case PerkId.CritChance: CritChance = Mathf.Min(0.85f, CritChance + 0.12f); break;

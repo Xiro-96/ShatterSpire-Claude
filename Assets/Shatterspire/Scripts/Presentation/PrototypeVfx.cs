@@ -250,6 +250,41 @@ namespace Shatterspire
             }
         }
 
+        /// <summary>
+        /// Ein Urteil, das herabfaehrt: eine Saeule aus Licht, die in sich zusammenfaellt, mit einem
+        /// Ring am Fuss. Anders als eine Explosion kommt sie von oben - das ist der ganze Punkt.
+        /// </summary>
+        public static void SpawnJudgement(Vector3 point, float radius, Color color)
+        {
+            Sfx.Play(Sound.Smash, point, 0.95f);
+            CameraController.Impulse(Mathf.Min(0.18f, radius * 0.05f));
+            var column = PrototypeFactory.Primitive(PrimitiveType.Cylinder, "Verdict Column",
+                point + Vector3.up * 5.5f, new Vector3(radius * 0.9f, 5.5f, radius * 0.9f),
+                Color.Lerp(color, Color.white, 0.4f), true);
+            Object.Destroy(column.GetComponent<Collider>());
+            column.AddComponent<VfxPulse>().Configure(0.3f, 0f, false);
+
+            var ring = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            ring.name = "Verdict Ring";
+            ring.transform.position = point + Vector3.up * 0.05f;
+            ring.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            ring.transform.localScale = Vector3.one * radius;
+            var tint = color;
+            tint.a = 0.8f;
+            ring.GetComponent<Renderer>().sharedMaterial = PrototypeFactory.CreateRadialDecal(tint, 0.72f);
+            PrototypeFactory.RemoveCollider(ring.GetComponent<Collider>());
+            ring.AddComponent<VfxPulse>().Configure(0.34f, 2.4f, true);
+
+            for (var i = 0; i < 6; i++)
+            {
+                var mote = PrototypeFactory.Primitive(PrimitiveType.Cube, "Verdict Mote",
+                    point + Vector3.up * 0.3f, new Vector3(0.08f, 0.24f, 0.08f), color, true);
+                Object.Destroy(mote.GetComponent<Collider>());
+                mote.AddComponent<VfxShard>().Configure(
+                    (Quaternion.Euler(0f, i * 60f, 0f) * Vector3.forward + Vector3.up * 1.4f) * Random.Range(2.2f, 3.6f));
+            }
+        }
+
         public static void SpawnExplosion(Vector3 position, float radius, Color color)
         {
             // Eine kleine Detonation soll nicht so laut sein wie eine grosse.

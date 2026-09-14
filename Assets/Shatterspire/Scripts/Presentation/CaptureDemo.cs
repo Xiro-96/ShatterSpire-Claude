@@ -165,7 +165,6 @@ namespace Shatterspire
             yield return new WaitForSecondsRealtime(0.6f);
 
             if (Hero == HeroClassId.Bomber) yield return ShowBomberHeavy();
-            if (Hero == HeroClassId.Paladin) yield return ShowPaladinGuard();
             yield return ShowFloorPace();
             yield return ShowStreakAndOrbs();
             yield return ShowThreatMarker();
@@ -572,81 +571,6 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// XIROs Klingenwehr: einstecken und zurueckgeben.
-        ///
-        /// Ihr ganzes Versprechen steht in zwei Zahlen - wie viel der Schild gehalten hat und wie
-        /// viel davon zurueckgeht. Beides ist nur zu pruefen, wenn waehrend des Ladens wirklich
-        /// jemand auf sie einschlaegt, also stellt diese Folge ihr Gegner vor die Nase.
-        /// </summary>
-        private IEnumerator ShowPaladinGuard()
-        {
-            var weapon = player.GetComponent<WeaponSystem>();
-            if (!weapon) yield break;
-            frameOn = null;
-            overviewPoint = null;
-            frameSize = 6.5f;
-
-            // Erst den schweren Balken fuellen - er kommt aus leichten Treffern.
-            var victim = SpawnDemoEnemy(EnemyKind.Crawler, 3.2f);
-            input.ScriptedAim = victim ? (victim.transform.position - player.position).normalized : Vector3.forward;
-            yield return new WaitForSecondsRealtime(0.4f);
-            input.ScriptedAttack = true;
-            var waited = 0f;
-            while (!weapon.HeavyReady && waited < 12f)
-            {
-                waited += Time.unscaledDeltaTime;
-                if (victim && !victim.GetComponent<Health>().IsAlive) victim = SpawnDemoEnemy(EnemyKind.Crawler, 3.2f);
-                yield return null;
-            }
-            input.ScriptedAttack = false;
-            Debug.Log($"SHATTERSPIRE XIRO: Balken nach {waited:0.0} s, bereit {weapon.HeavyReady}.");
-            if (!weapon.HeavyReady) yield break;
-
-            // Zwei Angreifer von vorn, damit der Schild etwas zu halten hat. Sie bekommen Zeit,
-            // heranzukommen, bevor der Schild hochgeht: der Balken laedt in gut einer Sekunde voll
-            // und loest dann von selbst aus - im ersten Aufnahmelauf stand die Ladung schon wieder,
-            // als der erste Gegner ankam, und der Schild hielt folgerichtig null.
-            var first = SpawnDemoEnemy(EnemyKind.Brute, 2.2f);
-            var second = SpawnDemoEnemy(EnemyKind.Crawler, 2.6f);
-            yield return new WaitForSecondsRealtime(1.8f);
-            var before = player.GetComponent<Health>().Current;
-            input.ScriptedHeavy = true;
-            var start = Time.unscaledTime;
-            for (var i = 0; i < 7; i++)
-            {
-                while (Time.unscaledTime - start < i * 0.3f) yield return null;
-                yield return Shot($"p{i:00}");
-            }
-            var held = before - player.GetComponent<Health>().Current;
-            Debug.Log($"SHATTERSPIRE XIRO: waehrend des Schildstands {held:0} Leben verloren.");
-            input.ScriptedHeavy = false;
-            for (var i = 7; i < 13; i++)
-            {
-                while (Time.unscaledTime - start < i * 0.3f) yield return null;
-                yield return Shot($"p{i:00}");
-            }
-
-            // Und die Faehigkeit: geweihter Boden.
-            input.ScriptedSkill = true;
-            yield return new WaitForSecondsRealtime(0.2f);
-            input.ScriptedSkill = false;
-            // Erst ausholen, dann laeuft die Welle - und sie ist nach gut einer halben Sekunde
-            // durch. Frueher stand die Zaehlung am Ende der Folge und meldete deshalb immer null.
-            yield return new WaitForSecondsRealtime(0.45f);
-            Debug.Log($"SHATTERSPIRE XIRO: {FindObjectsByType<AshWave>(FindObjectsSortMode.None).Length} "
-                      + "Aschewelle(n) unterwegs.");
-            for (var i = 13; i < 18; i++)
-            {
-                while (Time.unscaledTime - start < i * 0.3f) yield return null;
-                yield return Shot($"p{i:00}");
-            }
-            if (first) Destroy(first.gameObject);
-            if (second) Destroy(second.gameObject);
-            if (victim) Destroy(victim.gameObject);
-            input.ScriptedAim = new Vector3(0.75f, 0f, -1f);
-            yield return new WaitForSecondsRealtime(0.4f);
-        }
-
         /// <summary>
         /// Brax' Ultimate: Absprung, Flug, Aufschlag, Krater. Genau hier greift die Ultimate in den
         /// CharacterController ein - wenn der Held haengen bleibt oder unter dem Boden landet, sieht

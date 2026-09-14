@@ -10,11 +10,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5af8b1a5949405545b66be559ef3a0bb, type: 3}
-  m_Name: Perk_PaladinIronBrace
+  m_Name: Perk_PaladinTwinVerdict
   m_EditorClassIdentifier: 
   id: 51
-  displayName: IRON BRACE
-  description: Blade Guard holds everything from the front, and gives all of it back.
+  displayName: TWIN VERDICT
+  description: A second Verdict falls a moment after the first.
   rarity: 2
   color: {r: 0.75, g: 0.3, b: 1, a: 1}
   slot: 1

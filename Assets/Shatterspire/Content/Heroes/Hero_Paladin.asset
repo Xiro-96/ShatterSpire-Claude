@@ -15,12 +15,12 @@ MonoBehaviour:
   id: 4
   displayName: XIRO
   role: OATH WARDEN
-  kitSummary: "OATHBLADE  \xB7  BLADE GUARD  \xB7  ASH WAVE"
+  kitSummary: "OATHBLADE  \xB7  VERDICT  \xB7  ASH WAVE"
   accent: {r: 1, g: 0.93, b: 0.66, a: 1}
   baseHealth: 160
   baseSpeed: 4.9
   baseDamage: 14
   skillCooldown: 9
   lightAttackName: OATHBLADE
-  heavyAttackName: BLADE GUARD
+  heavyAttackName: VERDICT
   skillName: ASH WAVE

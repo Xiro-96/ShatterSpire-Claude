@@ -77,7 +77,7 @@ namespace Shatterspire
 
         public static string Kit(HeroClassId hero) => hero switch
         {
-            HeroClassId.Paladin => "OATHBLADE  ·  BLADE GUARD  ·  ASH WAVE",
+            HeroClassId.Paladin => "OATHBLADE  ·  VERDICT  ·  ASH WAVE",
             HeroClassId.Bomber => "THROWN CHARGES  ·  STICKY MINE  ·  BLAST CORD",
             HeroClassId.Guardian => "HAMMER COMBO  ·  PERFECT SLAM  ·  BULL RUSH",
             HeroClassId.Arcanist => "ARC BOLTS  ·  GRAVITY BURST  ·  BLACK STAR",
@@ -148,7 +148,7 @@ namespace Shatterspire
 
         public static string HeavyAttackName(HeroClassId hero) => hero switch
         {
-            HeroClassId.Paladin => "BLADE GUARD",
+            HeroClassId.Paladin => "VERDICT",
             HeroClassId.Bomber => "STICKY MINE",
             HeroClassId.Guardian => "GROUND BREAKER",
             HeroClassId.Arcanist => "GRAVITY BURST",
@@ -166,7 +166,7 @@ namespace Shatterspire
 
         public static string UltimateName(HeroClassId hero) => hero switch
         {
-            HeroClassId.Paladin => "AEGIS",
+            HeroClassId.Paladin => "WRATH",
             HeroClassId.Bomber => "CHAIN DETONATOR",
             HeroClassId.Guardian => "FORGE PLUNGE",
             HeroClassId.Arcanist => "TIME RIFT",

@@ -510,10 +510,8 @@ namespace Shatterspire
             { "OATHBLADE", "EIDKLINGE" },
             // ── XIROs Verbesserungen ────────────────────────────────────
             { "TWIN WAVE", "ZWILLINGSWELLE" },
-            { "IRON BRACE", "EISERNER STAND" },
             { "LONG VIGIL", "LANGE WACHE" },
             { "The Oathblade finisher sends a second wave and heals twice as much.", "Der Abschluss der Eidklinge schickt eine zweite Welle und heilt doppelt." },
-            { "Aegis stands for 9 instead of 7 seconds.", "Aegis steht 9 statt 7 Sekunden." },
 
             // ── Die drei Waechter ───────────────────────────────────────
             { "RIFT TWIN", "SPLITTERZWILLING" },
@@ -527,14 +525,18 @@ namespace Shatterspire
             { "DEFEAT SPIRE WARDEN", "BESIEGE DEN TURMWÄCHTER" },
 
             // ── XIRO, die Eidwaechterin ─────────────────────────────────
-            { "OATHBLADE  ·  BLADE GUARD  ·  ASH WAVE", "EIDKLINGE  ·  KLINGENWEHR  ·  ASCHEWELLE" },
-            { "BLADE GUARD", "KLINGENWEHR" },
             { "ASH WAVE", "ASCHEWELLE" },
             { "ASH STEP", "ASCHESPUR" },
             { "LONG REACH", "WEITE BAHN" },
             { "Dashing drags a small ash wave behind you.", "Der Dash zieht eine kleine Aschewelle hinter sich her." },
-            { "Blade Guard holds everything from the front, and gives all of it back.", "Die Klingenwehr hält alles von vorn — und gibt alles zurück." },
             { "The Ash Wave runs half again as far.", "Die Aschewelle läuft um die Hälfte weiter." },
+
+            { "OATHBLADE  ·  VERDICT  ·  ASH WAVE", "EIDKLINGE  ·  RICHTURTEIL  ·  ASCHEWELLE" },
+            { "VERDICT", "RICHTURTEIL" },
+            { "WRATH", "ZORNIGE VERGELTUNG" },
+            { "TWIN VERDICT", "ZWEITES URTEIL" },
+            { "A second Verdict falls a moment after the first.", "Ein zweites Urteil fällt kurz nach dem ersten." },
+            { "Wrath lasts 9 instead of 7 seconds.", "Die Zornige Vergeltung hält 9 statt 7 Sekunden." },
 
             // ── Verbesserungen: Beschreibungen ──────────────────────────
             { "Heavy attacks deal 40% more damage.", "Schwere Angriffe machen 40 % mehr Schaden." },

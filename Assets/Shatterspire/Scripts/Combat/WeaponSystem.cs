@@ -44,8 +44,8 @@ namespace Shatterspire
         /// <summary>Bis hierhin laesst jeder Abschuss eine neue Ladung fallen (Kettenzuender).</summary>
         private float chainUntil;
 
-        /// <summary>Was XIROs Klinge in der laufenden Klingenwehr gehalten hat.</summary>
-        private float bracedDamage;
+        /// <summary>Wie weit XIROs Richturteil reicht.</summary>
+        private const float VerdictRange = 13f;
         /// <summary>Rex' Jaegerblick laeuft bis zu diesem Zeitpunkt. Jeder Abschuss verlaengert ihn.</summary>
         private float focusUntil;
         private const float FocusBaseSeconds = 5f;
@@ -193,7 +193,6 @@ namespace Shatterspire
             if (input.HeavyPressed && HeavyReady && !chargingHeavy && !ultimateActive)
             {
                 chargingHeavy = true;
-                if (heroClass == HeroClassId.Paladin) BeginShieldBrace();
                 heavyCharge = 0f;
                 PublishHeavyState();
             }
@@ -525,68 +524,59 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// XIROs schwerer Angriff: KLINGENWEHR. Waehrend des Ladens faengt die flach gestellte Klinge von vorn fast
-        /// alles ab; beim Loslassen geht das Gehaltene als Stoss nach vorn zurueck.
+        /// XIROs schwerer Angriff: RICHTURTEIL. Halten richtet die Klinge auf, Loslassen ruft ein
+        /// Urteil auf die anvisierte Stelle herab - eine Saeule aus Licht, die auch aus der Ferne
+        /// trifft.
         ///
-        /// Beim perfekten Moment kommt kein hoeherer Multiplikator, sondern ein Betaeuben - bei ihr
-        /// ist der Lohn fuers Timing Kontrolle, nicht eine groessere Zahl.
+        /// Vorher stand hier die Klingenwehr: halten, Schlaege auffangen, zurueckgeben. Als Mechanik
+        /// in Ordnung, aber es war die einzige schwere Aktion im Spiel, die nicht zuschlaegt - und
+        /// sie belohnte nicht das Timing, sondern das In-Gefahr-Geraten. Wer nicht getroffen wurde,
+        /// gab nichts zurueck.
+        ///
+        /// Das Richturteil ist die Gegenrichtung: XIRO braucht keinen Nahkontakt mehr, um Druck zu
+        /// machen. Der perfekte Moment gibt weiterhin Kontrolle statt einer groesseren Zahl - das
+        /// bleibt seine Handschrift.
         /// </summary>
-        private void BeginShieldBrace()
+        private void ReleaseVerdict(bool perfect, float normalized)
         {
-            bracedDamage = 0f;
-            if (!health) return;
-            health.AddDamageFilter(FilterBraced);
-        }
-
-        private float FilterBraced(DamageInfo damage, float amount)
-        {
-            var from = damage.Source ? damage.Source.transform.position : damage.HitPoint;
-            var toSource = from - transform.position;
-            toSource.y = 0f;
-            // Nur von vorn: wer ihn umlaeuft, trifft ihn voll. Derselbe Winkel wie beim
-            // Schildtraeger unter den Gegnern, damit die Regel im Spiel nur einmal gelernt wird.
-            if (toSource.sqrMagnitude > 0.001f &&
-                Vector3.Angle(transform.forward, toSource.normalized) > 55f) return amount;
-            // Eiserner Stand: der Schild haelt alles von vorn - dafuer steht sie waehrenddessen still.
-            var held = amount * (build.Has(PerkId.PaladinIronBrace) ? 1f : 0.8f);
-            bracedDamage += held;
-            PrototypeVfx.SpawnShockwave(transform.position + transform.forward * 0.9f, 1.2f,
-                HeroCatalog.Accent(heroClass));
-            Sfx.Play(Sound.Block, transform.position, 0.7f);
-            return amount - held;
-        }
-
-        private void ReleaseShieldBash(bool perfect, float normalized)
-        {
-            if (health) health.RemoveDamageFilter(FilterBraced);
-            var type = ResolveDamageType(DamageType.Physical);
+            var type = ResolveDamageType(DamageType.Holy);
             var accent = HeroCatalog.Accent(heroClass);
             var direction = AcquireAttackDirection();
-            var point = transform.position + direction * 2f;
-            // Was der Schild gehalten hat, geht zurueck - das ist sein ganzes Versprechen in einer Zahl.
-            var damage = (BaseDamage * Mathf.Lerp(1.8f, 3f, normalized) * build.HeavyDamageMultiplier
-                          + bracedDamage * (build.Has(PerkId.PaladinIronBrace) ? 2.2f : 1.6f))
-                         * build.DamageMultiplier;
-            Strike(point, 2.6f, damage, type, flash: true);
-            PrototypeVfx.SpawnShockwave(point, 3.2f, accent);
-            if (perfect)
+            var point = lockedTarget && lockedTarget.IsAlive
+                ? new Vector3(lockedTarget.transform.position.x, transform.position.y, lockedTarget.transform.position.z)
+                : ThrowTarget(direction, VerdictRange);
+            var radius = perfect ? 3.4f : 2.6f;
+            var damage = BaseDamage * Mathf.Lerp(2.2f, 4.2f, normalized)
+                         * build.HeavyDamageMultiplier * build.DamageMultiplier;
+
+            // Die Klinge geht hoch und faellt - das Urteil kommt mit ihr herunter.
+            motion?.PlayMotion(AttackMotion.Smash, perfect ? 1.4f : 1.15f);
+            Sfx.Play(Sound.Draw, transform.position, 0.8f);
+            var fall = StrikeDelay(AttackMotion.Smash, 0.22f);
+            StartCoroutine(Verdict(point, radius, damage, type, accent, perfect, fall));
+            if (build.Has(PerkId.PaladinTwinVerdict))
+                StartCoroutine(Verdict(point, radius * 0.85f, damage * 0.55f, type, accent, false, fall + 0.34f));
+            Debug.Log($"SHATTERSPIRE Richturteil: {damage:0} Schaden, Radius {radius:0.0}, "
+                      + $"{Vector3.Distance(transform.position, point):0.0} Einheiten entfernt, perfekt {perfect}.");
+        }
+
+        private IEnumerator Verdict(Vector3 point, float radius, float damage, DamageType type,
+            Color accent, bool perfect, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (!health.IsAlive) yield break;
+            PrototypeVfx.SpawnJudgement(point, radius, accent);
+            Strike(point, radius, damage, type, 6f, flash: false);
+            if (!perfect) yield break;
+            // Kein hoeherer Schaden, sondern Zeit: was unter der Saeule steht, steht still.
+            foreach (var enemy in EnemyAgent.Active)
             {
-                // Kein hoeherer Schaden, sondern Zeit: alles in Reichweite steht still.
-                foreach (var enemy in EnemyAgent.Active)
-                {
-                    if (!enemy) continue;
-                    var offset = enemy.transform.position - point;
-                    offset.y = 0f;
-                    if (offset.sqrMagnitude <= 12.25f) enemy.Stun(1.4f);
-                }
-                PrototypeVfx.SpawnExplosion(point, 3.5f, accent);
+                if (!enemy) continue;
+                var offset = enemy.transform.position - point;
+                offset.y = 0f;
+                if (offset.sqrMagnitude <= radius * radius) enemy.Stun(1.4f);
             }
-            Debug.Log($"SHATTERSPIRE Klingenwehr: {bracedDamage:0} gehalten, {damage:0} zurueckgegeben, "
-                      + $"perfekt {perfect}.");
-            bracedDamage = 0f;
-            motion?.PlayMotion(AttackMotion.Smash, perfect ? 1.4f : 1.1f);
-            Sfx.Play(perfect ? Sound.GuardBreak : Sound.HitHeavy, transform.position);
-            controller?.CombatStep(direction, 0.5f);
+            PrototypeVfx.SpawnExplosion(point, radius, accent);
         }
 
         /// <summary>
@@ -625,14 +615,20 @@ namespace Shatterspire
         /// XIROs Ultimate: AEGIS. Eine Kuppel, die den Schaden der Gruppe schluckt und ihn am Ende
         /// zurueckgibt.
         /// </summary>
-        private IEnumerator RaiseAegis()
+        private IEnumerator WrathfulRetribution()
         {
             var accent = HeroCatalog.Accent(heroClass);
             Sfx.Play2D(Sound.UltimateRise);
             PrototypeVfx.SpawnExplosion(transform.position + Vector3.up * 0.8f, 3.4f, accent);
-            CameraController.Impulse(0.18f);
+            PrototypeVfx.SpawnShockwave(transform.position, 4.2f, accent);
+            CameraController.Impulse(0.22f);
             var seconds = build.Has(PerkId.PaladinLongVigil) ? 9f : 7f;
-            AegisDome.Spawn(transform.position, 6.2f, seconds, accent, gameObject);
+            build.BeginRetribution(seconds);
+            motion?.ShowWrathWings(accent, seconds);
+            Debug.Log($"SHATTERSPIRE Zornige Vergeltung: {seconds:0} s, "
+                      + $"{(PlayerBuild.RetributionDamage - 1f) * 100f:0} % Schaden, "
+                      + $"{(PlayerBuild.RetributionAttackSpeed - 1f) * 100f:0} % Angriffstempo, "
+                      + $"{(PlayerBuild.RetributionSpeed - 1f) * 100f:0} % Lauftempo.");
             yield return new WaitForSeconds(0.3f);
         }
 
@@ -686,7 +682,7 @@ namespace Shatterspire
             var perfect = normalized >= PerfectStart && normalized <= PerfectEnd;
             if (heroClass == HeroClassId.Paladin)
             {
-                ReleaseShieldBash(perfect, normalized);
+                ReleaseVerdict(perfect, normalized);
                 heavyMeter = 0f;
                 chargingHeavy = false;
                 heavyCharge = 0f;
@@ -861,7 +857,7 @@ namespace Shatterspire
             if (heroClass == HeroClassId.Guardian) yield return ForgePlunge(direction);
             else if (heroClass == HeroClassId.Arcanist) yield return OpenTimeRift(direction);
             else if (heroClass == HeroClassId.Bomber) yield return ChainDetonator();
-            else if (heroClass == HeroClassId.Paladin) yield return RaiseAegis();
+            else if (heroClass == HeroClassId.Paladin) yield return WrathfulRetribution();
             else yield return HuntersFocus();
 
             ultimateActive = false;

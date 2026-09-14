@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   id: 48
   displayName: LONG VIGIL
-  description: Aegis stands for 9 instead of 7 seconds.
+  description: Wrath lasts 9 instead of 7 seconds.
   rarity: 2
   color: {r: 0.75, g: 0.3, b: 1, a: 1}
   slot: 4
