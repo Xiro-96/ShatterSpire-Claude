@@ -90,7 +90,14 @@ namespace Shatterspire
         public string SkillName => HeroCatalog.SkillName(heroClass);
         public string UltimateName => HeroCatalog.UltimateName(heroClass);
 
-        public void ConfigureClass(HeroClassId value) => heroClass = value;
+        public void ConfigureClass(HeroClassId value)
+        {
+            heroClass = value;
+            // Erst hier steht die Klasse fest, und damit die Farbe der Anzeige.
+            if (!aimIndicator) aimIndicator = AimIndicator.Attach(transform, HeroCatalog.Accent(heroClass));
+        }
+
+        private AimIndicator aimIndicator;
 
         public void SetMuzzle(Transform value)
         {
@@ -128,10 +135,14 @@ namespace Shatterspire
             if (input.AttackHeld) attackRequestedAt = Time.time;
             if (!chargingHeavy && !ultimateActive && Time.time - attackRequestedAt <= AttackBufferSeconds)
                 TryLightAttack();
-            if (!chargingHeavy && input.SkillPressed && Time.time >= skillReadyAt && !ultimateActive)
+            // Ausloesen beim Loslassen, nicht beim Druck: ein kurzer Tipp ist beides in einem, wer
+            // haelt kann vorher richten. Das ist der ganze Unterschied zwischen "sofort" und
+            // "genau", und er kostet keine zweite Taste.
+            if (!chargingHeavy && input.SkillReleased && Time.time >= skillReadyAt && !ultimateActive)
                 StartCoroutine(ClassSkill());
-            if (!chargingHeavy && input.UltimatePressed && UltimateReady && !ultimateActive)
+            if (!chargingHeavy && input.UltimateReleased && UltimateReady && !ultimateActive)
                 StartCoroutine(Ultimate());
+            UpdateAimIndicator();
         }
 
         /// <summary>
@@ -689,6 +700,61 @@ namespace Shatterspire
             if (!health.IsAlive) yield break;
             impact();
             NotifyLightHit();
+        }
+
+        // ── Zielanzeige ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Zeigt, was die gerade gerichtete Aktion trifft. Die Reihenfolge ist die Reihenfolge der
+        /// Absicht: wer die Ultimate haelt, will die Ultimate sehen, nicht seinen Schuss.
+        /// </summary>
+        private void UpdateAimIndicator()
+        {
+            if (!aimIndicator) return;
+            if (ultimateActive || !health.IsAlive)
+            {
+                aimIndicator.Hide();
+                return;
+            }
+            var slot = input.UltimateHeld && UltimateReady ? ActionSlot.Ultimate
+                : input.SkillHeld && Time.time >= skillReadyAt ? ActionSlot.Skill
+                : chargingHeavy ? ActionSlot.Heavy
+                : input.AttackHeld ? ActionSlot.Light
+                : ActionSlot.Passive;
+            if (slot == ActionSlot.Passive)
+            {
+                aimIndicator.Hide();
+                return;
+            }
+            var aim = DescribeAim(slot);
+            aimIndicator.Show(aim, AcquireAttackDirection(), AimTarget(aim));
+        }
+
+        /// <summary>
+        /// Welche Form die Aktion dieses Helden auf dem Boden hat. Die Zahlen stehen in AimCatalog,
+        /// damit sie sich ohne laufendes Spiel nachrechnen lassen.
+        /// </summary>
+        public AimDescription DescribeAim(ActionSlot slot)
+            => AimCatalog.Describe(heroClass, slot, build.Pierces, build.Has(PerkId.PaladinWideGround),
+                AimAssistRange, VerdictRange);
+
+        /// <summary>
+        /// Wohin ein Kreis dieser Aktion faellt. Dieselbe Rechnung wie die Aktion selbst: erfasstes
+        /// Ziel zuerst, sonst die Zielrichtung auf Reichweite - und nie durch eine Wand.
+        /// </summary>
+        public Vector3 AimTarget(AimDescription aim)
+        {
+            if (aim.Shape == AimShape.Around) return transform.position;
+            var direction = AcquireAttackDirection();
+            if (lockedTarget && lockedTarget.IsAlive)
+            {
+                var offset = lockedTarget.transform.position - transform.position;
+                offset.y = 0f;
+                if (offset.magnitude <= aim.Range)
+                    return new Vector3(lockedTarget.transform.position.x, transform.position.y,
+                        lockedTarget.transform.position.z);
+            }
+            return ThrowTarget(direction, aim.Range);
         }
 
         // ── HEAVY ───────────────────────────────────────────────────────────

@@ -11,9 +11,13 @@ namespace Shatterspire
         bool HeavyHeld { get; }
         bool HeavyPressed { get; }
         bool HeavyReleased { get; }
-        bool SkillPressed { get; }
         bool DashPressed { get; }
-        bool UltimatePressed { get; }
+        /// <summary>Die Faehigkeit wird gehalten und damit gezielt.</summary>
+        bool SkillHeld { get; }
+        /// <summary>Die Faehigkeit wurde losgelassen - jetzt loest sie aus.</summary>
+        bool SkillReleased { get; }
+        bool UltimateHeld { get; }
+        bool UltimateReleased { get; }
     }
 
     [DisallowMultipleComponent]
@@ -27,9 +31,11 @@ namespace Shatterspire
         public bool HeavyHeld { get; private set; }
         public bool HeavyPressed { get; private set; }
         public bool HeavyReleased { get; private set; }
-        public bool SkillPressed { get; private set; }
         public bool DashPressed { get; private set; }
-        public bool UltimatePressed { get; private set; }
+        public bool SkillHeld { get; private set; }
+        public bool SkillReleased { get; private set; }
+        public bool UltimateHeld { get; private set; }
+        public bool UltimateReleased { get; private set; }
         /// <summary>Nur fuer automatische Vorfuehrungen (CaptureDemo): haelt den Angriff gedrueckt.</summary>
         public bool ScriptedAttack { get; set; }
         /// <summary>
@@ -119,11 +125,16 @@ namespace Shatterspire
             HeavyReleased = (mouse && Input.GetMouseButtonUp(1)) || MobileInput.ConsumeHeavyReleased()
                             || Consume(ref scriptedHeavyReleaseFrames);
             HeavyHeld = (mouse && Input.GetMouseButton(1)) || MobileInput.Heavy || scriptedHeavy;
-            SkillPressed = Input.GetKeyDown(KeyCode.Q) || MobileInput.ConsumeSkill() || Consume(ref scriptedSkillFrames);
+            // Halten zielt, Loslassen loest aus - auch ein kurzer Tipp, denn der ist Druck und
+            // Loslassen in einem. So bleibt die Aktion sofort verfuegbar und laesst sich trotzdem
+            // richten, wenn man sich Zeit nimmt.
+            SkillHeld = Input.GetKey(KeyCode.Q) || MobileInput.SkillHeld;
+            SkillReleased = Input.GetKeyUp(KeyCode.Q) || MobileInput.ConsumeSkillReleased()
+                            || Consume(ref scriptedSkillFrames);
             DashPressed = Input.GetKeyDown(KeyCode.Space) || MobileInput.ConsumeDash();
-            UltimatePressed = Input.GetKeyDown(KeyCode.R) || MobileInput.ConsumeUltimate() ||
-                              scriptedUltimateFrames > 0;
-            if (scriptedUltimateFrames > 0) scriptedUltimateFrames--;
+            UltimateHeld = Input.GetKey(KeyCode.R) || MobileInput.UltimateHeld;
+            UltimateReleased = Input.GetKeyUp(KeyCode.R) || MobileInput.ConsumeUltimateReleased()
+                               || Consume(ref scriptedUltimateFrames);
 
             if (worldCamera && !Application.isMobilePlatform && Input.touchCount == 0)
             {
@@ -146,7 +157,9 @@ namespace Shatterspire
         /// </summary>
         private Vector3 ResolveTouchAim()
         {
-            var stick = MobileInput.Aim;
+            // Was am Aktionsknopf gezogen wird, hat Vorrang: wer die Faehigkeit richtet, zielt
+            // damit und nicht mit dem Zielstick.
+            var stick = MobileInput.ActionAim.sqrMagnitude > 0.0004f ? MobileInput.ActionAim : MobileInput.Aim;
             if (stick.sqrMagnitude > 0.0004f) aimDirection = new Vector3(stick.x, 0f, stick.y).normalized;
             else if (Move.sqrMagnitude > 0.02f) aimDirection = new Vector3(Move.x, 0f, Move.y).normalized;
             if (!AimAssist) return aimDirection;
@@ -168,6 +181,12 @@ namespace Shatterspire
         public static Vector2 Aim;
         /// <summary>Der Zielstick ist ausgelenkt und feuert damit mit.</summary>
         public static bool AimFire;
+        /// <summary>Richtung, die gerade an einem Aktionsknopf gezogen wird. Null, wenn keiner zieht.</summary>
+        public static Vector2 ActionAim;
+        /// <summary>Der Faehigkeitsknopf wird gehalten.</summary>
+        public static bool SkillHeld;
+        /// <summary>Der Ultimate-Knopf wird gehalten.</summary>
+        public static bool UltimateHeld;
         public static bool Attack;
         public static bool Heavy;
         private static bool skill;
@@ -184,18 +203,41 @@ namespace Shatterspire
         public static void PressSkill() => skill = true;
         public static void PressDash() => dash = true;
         public static void PressUltimate() => ultimate = true;
+
+        /// <summary>Haelt den Faehigkeitsknopf. Beim Loslassen loest die Faehigkeit aus.</summary>
+        public static void SetSkill(bool value)
+        {
+            if (value && !SkillHeld) skill = true;
+            if (!value && SkillHeld) skillReleased = true;
+            SkillHeld = value;
+        }
+
+        public static void SetUltimate(bool value)
+        {
+            if (value && !UltimateHeld) ultimate = true;
+            if (!value && UltimateHeld) ultimateReleased = true;
+            UltimateHeld = value;
+        }
+
+        private static bool skillReleased;
+        private static bool ultimateReleased;
         public static bool ConsumeSkill() { var value = skill; skill = false; return value; }
         public static bool ConsumeDash() { var value = dash; dash = false; return value; }
         public static bool ConsumeUltimate() { var value = ultimate; ultimate = false; return value; }
+        public static bool ConsumeSkillReleased() { var value = skillReleased; skillReleased = false; return value; }
+        public static bool ConsumeUltimateReleased() { var value = ultimateReleased; ultimateReleased = false; return value; }
         public static bool ConsumeHeavyPressed() { var value = heavyPressed; heavyPressed = false; return value; }
         public static bool ConsumeHeavyReleased() { var value = heavyReleased; heavyReleased = false; return value; }
         public static void Reset()
         {
             Move = Vector2.zero;
             Aim = Vector2.zero;
+            ActionAim = Vector2.zero;
             AimFire = false;
             Attack = Heavy = false;
+            SkillHeld = UltimateHeld = false;
             skill = dash = ultimate = heavyPressed = heavyReleased = false;
+            skillReleased = ultimateReleased = false;
         }
     }
 }

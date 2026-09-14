@@ -112,25 +112,73 @@ namespace Shatterspire
 
     public enum MobileAction { Attack, Heavy, Skill, Dash, Ultimate }
 
-    public sealed class MobileActionButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
+    /// <summary>
+    /// Ein Aktionsknopf, den man ziehen kann.
+    ///
+    /// Tippen loest sofort aus, wie bisher. Zieht man ihn stattdessen auf, wird die Richtung zur
+    /// Zielrichtung und die Zielanzeige erscheint auf dem Boden; erst das Loslassen loest aus. Das
+    /// ist der Griff aus Brawl Stars: dieselbe Taste fuer "schnell" und fuer "genau".
+    /// </summary>
+    public sealed class MobileActionButton : MonoBehaviour,
+        IPointerDownHandler, IPointerUpHandler, IDragHandler
     {
+        /// <summary>Weg bis Vollausschlag beim Ziehen, als Anteil der Bildschirmhoehe.</summary>
+        private const float TravelFraction = 0.12f;
+        /// <summary>Darunter gilt der Zug als Tippen und die Zielrichtung bleibt unberuehrt.</summary>
+        private const float DeadZone = 0.22f;
+
         private MobileAction action;
+        private Vector2 origin;
+        private bool dragging;
         public void Configure(MobileAction value) => action = value;
+
+        private bool Aimable => action is MobileAction.Skill or MobileAction.Ultimate;
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (!Aimable) return;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    (RectTransform)transform, eventData.position, eventData.pressEventCamera, out var local))
+                return;
+            if (!dragging)
+            {
+                origin = local;
+                dragging = true;
+            }
+            var canvas = GetComponentInParent<Canvas>();
+            var scale = canvas && canvas.scaleFactor > 0.01f ? canvas.scaleFactor : 1f;
+            var travel = Mathf.Max(40f, Screen.height * TravelFraction) / scale;
+            var offset = Vector2.ClampMagnitude((local - origin) / travel, 1f);
+            MobileInput.ActionAim = offset.magnitude <= DeadZone ? Vector2.zero : offset.normalized;
+        }
         public void OnPointerDown(PointerEventData eventData)
         {
             switch (action)
             {
                 case MobileAction.Attack: MobileInput.Attack = true; break;
                 case MobileAction.Heavy: MobileInput.SetHeavy(true); break;
-                case MobileAction.Skill: MobileInput.PressSkill(); break;
+                case MobileAction.Skill: MobileInput.SetSkill(true); break;
                 case MobileAction.Dash: MobileInput.PressDash(); break;
-                case MobileAction.Ultimate: MobileInput.PressUltimate(); break;
+                case MobileAction.Ultimate: MobileInput.SetUltimate(true); break;
             }
         }
         public void OnPointerUp(PointerEventData eventData)
         {
             if (action == MobileAction.Attack) MobileInput.Attack = false;
             if (action == MobileAction.Heavy) MobileInput.SetHeavy(false);
+            if (action == MobileAction.Skill) MobileInput.SetSkill(false);
+            if (action == MobileAction.Ultimate) MobileInput.SetUltimate(false);
+            // Erst die Richtung loeschen, nachdem die Aktion sie gelesen hat: das Loslassen und der
+            // Schuss liegen im selben Bild.
+            if (dragging) MobileInput.ActionAim = Vector2.zero;
+            dragging = false;
+        }
+
+        private void OnDisable()
+        {
+            if (action == MobileAction.Skill) MobileInput.SetSkill(false);
+            if (action == MobileAction.Ultimate) MobileInput.SetUltimate(false);
+            dragging = false;
         }
     }
 }
