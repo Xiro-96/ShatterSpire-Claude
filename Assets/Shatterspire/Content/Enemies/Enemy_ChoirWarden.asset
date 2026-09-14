@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bb09c633e63ea7f4bb8fda542a7e3860, type: 3}
+  m_Name: Enemy_ChoirWarden
+  m_EditorClassIdentifier: 
+  kind: 8
+  health: 2200
+  speed: 1.1
+  attackRange: 3.2
+  attackDamage: 22
+  knockbackResistance: 0.05
+  staggerSeconds: 0.02
+  separationSpacing: 1.8
+  telegraphSeconds: 1
+  attackCooldown: 2.6
+  colliderHeight: 3.4
+  colliderRadius: 1.15

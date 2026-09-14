@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bb09c633e63ea7f4bb8fda542a7e3860, type: 3}
+  m_Name: Enemy_IronWarden
+  m_EditorClassIdentifier: 
+  kind: 4
+  health: 1900
+  speed: 1.75
+  attackRange: 2.5
+  attackDamage: 24
+  knockbackResistance: 0.08
+  staggerSeconds: 0.025
+  separationSpacing: 1.65
+  telegraphSeconds: 0.86
+  attackCooldown: 1.8
+  colliderHeight: 3.2
+  colliderRadius: 1.1

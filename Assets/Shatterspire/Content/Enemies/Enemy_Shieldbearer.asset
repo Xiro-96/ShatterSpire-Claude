@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bb09c633e63ea7f4bb8fda542a7e3860, type: 3}
+  m_Name: Enemy_Shieldbearer
+  m_EditorClassIdentifier: 
+  kind: 5
+  health: 130
+  speed: 1.75
+  attackRange: 1.9
+  attackDamage: 16
+  knockbackResistance: 0.14
+  staggerSeconds: 0.05
+  separationSpacing: 1.5
+  telegraphSeconds: 0.62
+  attackCooldown: 1.9
+  colliderHeight: 2
+  colliderRadius: 0.62
