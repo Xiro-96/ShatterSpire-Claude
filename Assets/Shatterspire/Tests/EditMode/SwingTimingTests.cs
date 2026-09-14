@@ -99,13 +99,44 @@ namespace Shatterspire.Tests
             }
         }
 
+        /// <summary>
+        /// Der Schritt darf kein Dash werden. Genau das war zu sehen: bei manchen normalen Hieben
+        /// schoss der Held auf sein Ziel zu. 1,7 Einheiten in den 0,13 s Ausholzeit eines Hiebs sind
+        /// 13 Einheiten je Sekunde - doppeltes Lauftempo.
+        /// </summary>
+        [Test]
+        public void DerSchrittBleibtEinSchrittUndWirdKeinSatz()
+        {
+            for (var seconds = 0.08f; seconds <= 0.40f; seconds += 0.02f)
+            for (var distance = 0f; distance <= 12f; distance += 0.2f)
+            {
+                var step = MeleeApproach.StepDistance(distance, seconds);
+                Assert.That(step / seconds, Is.LessThanOrEqualTo(MeleeApproach.MaxStepSpeed + 0.001f),
+                    $"{distance:0.0} Einheiten in {seconds:0.00}s waeren {step / seconds:0.0}/s.");
+                Assert.That(step, Is.LessThanOrEqualTo(MeleeApproach.StepDistance(distance) + 0.001f));
+            }
+        }
+
+        /// <summary>
+        /// Die Zielhilfe erfasst bis 15 Einheiten weit. So weit darf der Schritt nicht folgen - er
+        /// wuerde nichts schliessen und nur aussehen wie ein Sprung.
+        /// </summary>
+        [Test]
+        public void WeitEntfernteZieleWerdenNichtAngegangen()
+        {
+            Assert.That(MeleeApproach.StepDistance(MeleeApproach.MaxEngage + 0.1f), Is.EqualTo(0f));
+            Assert.That(MeleeApproach.StepDistance(15f), Is.EqualTo(0f));
+            Assert.That(MeleeApproach.StepDistance(MeleeApproach.MaxEngage), Is.GreaterThan(0f));
+        }
+
         /// <summary>Wer schon auf Schlagweite steht, soll nicht noch geschoben werden.</summary>
         [Test]
         public void AufSchlagweiteWirdNichtNachgesetzt()
         {
             Assert.That(MeleeApproach.StepDistance(MeleeApproach.IdealGap), Is.EqualTo(0f));
             Assert.That(MeleeApproach.StepDistance(0.8f), Is.EqualTo(0f));
-            Assert.That(MeleeApproach.StepDistance(40f), Is.EqualTo(MeleeApproach.MaxStep));
+            // Am Rand der Reichweite ist der Schritt am groessten - darueber hinaus gar nicht mehr.
+            Assert.That(MeleeApproach.StepDistance(MeleeApproach.MaxEngage), Is.EqualTo(MeleeApproach.MaxStep));
         }
 
         /// <summary>Der Treffer muss im gespielten Abschnitt liegen - sonst faellt Schaden ausserhalb des Schwungs.</summary>

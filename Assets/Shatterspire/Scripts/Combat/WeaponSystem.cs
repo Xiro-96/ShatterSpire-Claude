@@ -655,7 +655,7 @@ namespace Shatterspire
             if (!lockedTarget || !lockedTarget.IsAlive) return;
             var offset = lockedTarget.transform.position - transform.position;
             offset.y = 0f;
-            var step = MeleeApproach.StepDistance(offset.magnitude);
+            var step = MeleeApproach.StepDistance(offset.magnitude, windup);
             if (step > 0f) controller?.Lunge(direction, step, windup);
         }
 
@@ -1281,6 +1281,20 @@ namespace Shatterspire
         /// <summary>Obergrenze eines einzelnen Schritts.</summary>
         public const float MaxStep = 1.7f;
 
+        /// <summary>
+        /// Weiter entfernte Ziele werden nicht angegangen. Die Zielhilfe erfasst bis 15 Einheiten
+        /// weit; ein Schritt von 1,7 bringt dort nichts, sieht aber aus wie ein Sprung nach vorn.
+        /// Genau das war zu sehen: bei manchen normalen Hieben schoss der Held auf sein Ziel zu.
+        /// </summary>
+        public const float MaxEngage = 4.2f;
+
+        /// <summary>
+        /// Hoechstes Tempo des Schritts. Der zweite Teil desselben Fehlers: 1,7 Einheiten in den
+        /// 0,13 s Ausholzeit eines Hiebs sind 13 Einheiten je Sekunde - doppeltes Lauftempo, und
+        /// damit ein Dash. Der Schritt ist eine Gewichtsverlagerung, kein Satz.
+        /// </summary>
+        public const float MaxStepSpeed = 6.5f;
+
         /// <summary>Anteil des vollen Lauftempos, waehrend ein Schlag laeuft.</summary>
         public const float BoundSpeed = 0.3f;
 
@@ -1291,6 +1305,13 @@ namespace Shatterspire
         public const float MaxBoundSeconds = 0.3f;
 
         public static float StepDistance(float distanceToTarget)
-            => Mathf.Clamp(distanceToTarget - IdealGap, 0f, MaxStep);
+            => distanceToTarget > MaxEngage ? 0f : Mathf.Clamp(distanceToTarget - IdealGap, 0f, MaxStep);
+
+        /// <summary>
+        /// Derselbe Schritt, zusaetzlich vom Tempo begrenzt: was in <paramref name="seconds"/> nicht
+        /// als Verlagerung durchgeht, wird gekuerzt.
+        /// </summary>
+        public static float StepDistance(float distanceToTarget, float seconds)
+            => Mathf.Min(StepDistance(distanceToTarget), MaxStepSpeed * Mathf.Max(0.01f, seconds));
     }
 }

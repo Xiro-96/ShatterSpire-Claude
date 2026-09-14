@@ -19,7 +19,7 @@ namespace Shatterspire
     public sealed class BladeTrail : MonoBehaviour
     {
         /// <summary>Wie lange ein Stueck Spur stehen bleibt. Laenger wird daraus ein Band, kuerzer sieht man nichts.</summary>
-        private const float Persistence = 0.16f;
+        private const float Persistence = 0.22f;
 
         private TrailRenderer trail;
         private Coroutine sweep;
@@ -49,7 +49,7 @@ namespace Shatterspire
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
             renderer.widthCurve = new AnimationCurve(
-                new Keyframe(0f, 0.62f), new Keyframe(0.45f, 0.34f), new Keyframe(1f, 0f));
+                new Keyframe(0f, 0.9f), new Keyframe(0.4f, 0.55f), new Keyframe(1f, 0f));
             var head = Color.Lerp(accent, Color.white, 0.6f);
             var tail = accent;
             head.a = 0.85f;

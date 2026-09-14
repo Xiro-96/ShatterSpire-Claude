@@ -516,7 +516,7 @@ namespace Shatterspire
                 // Figur schlaegt nach vorn und kippt im selben Moment 11 Grad nach hinten, rutscht
                 // 0,17 Einheiten zurueck und wird flacher. Das las sich als Wackeln, nicht als Schlag.
                 // Ein Rest bleibt, damit der Treffer trotzdem etwas absetzt.
-                var punch = moving && motionUsesClip ? recoil * 0.18f : recoil;
+                var punch = moving && motionUsesClip ? recoil * 0.34f : recoil;
                 var squash = 1f - punch * 0.11f;
                 var stretch = 1f + punch * 0.07f;
 

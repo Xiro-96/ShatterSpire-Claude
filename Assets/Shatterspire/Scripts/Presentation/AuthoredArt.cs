@@ -1854,9 +1854,9 @@ namespace Shatterspire
         /// </summary>
         public static (float From, float To, float Strike) WindowFor(AttackMotion kind) => kind switch
         {
-            AttackMotion.Swing => (0.26f, 0.54f, 0.391f),
-            AttackMotion.Smash => (0.38f, 0.64f, 0.528f),
-            AttackMotion.Spin => (0.20f, 0.44f, 0.288f),
+            AttackMotion.Swing => (0.24f, 0.60f, 0.391f),
+            AttackMotion.Smash => (0.34f, 0.68f, 0.528f),
+            AttackMotion.Spin => (0.18f, 0.46f, 0.288f),
             AttackMotion.Stab => (0.42f, 0.70f, 0.523f),
             AttackMotion.Leap => (0.40f, 0.78f, 0.564f),
             AttackMotion.Shot => (0f, 0.34f, 0.075f),
