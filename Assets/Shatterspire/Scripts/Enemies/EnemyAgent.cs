@@ -241,8 +241,35 @@ namespace Shatterspire
             health.Damaged -= OnDamaged;
         }
 
+        /// <summary>
+        /// Wie schnell und wohin sich der Gegner bewegt, geglaettet. Das Selbstzielen braucht das,
+        /// um vorzuhalten: ein Pfeil fliegt 22 Einheiten je Sekunde, auf zehn Einheiten also knapp
+        /// eine halbe Sekunde - in der ein laufender Gegner zwei Einheiten weiter ist.
+        /// </summary>
+        public Vector3 Velocity { get; private set; }
+        private Vector3 lastPosition;
+        private bool trackedOnce;
+
+        private void TrackVelocity()
+        {
+            if (Time.deltaTime <= 0f) return;
+            if (!trackedOnce)
+            {
+                lastPosition = transform.position;
+                trackedOnce = true;
+                return;
+            }
+            var delta = transform.position - lastPosition;
+            delta.y = 0f;
+            lastPosition = transform.position;
+            // Geglaettet, sonst zappelt die Vorhaltung bei jedem Ausweichschritt.
+            Velocity = Vector3.Lerp(Velocity, delta / Time.deltaTime,
+                1f - Mathf.Exp(-8f * Time.deltaTime));
+        }
+
         private void Update()
         {
+            TrackVelocity();
             if (state == State.Dead || !target) return;
             ApplyKnockback();
             if (kind == EnemyKind.Shieldbearer) UpdateGuardPose();

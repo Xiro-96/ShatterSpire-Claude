@@ -20,6 +20,28 @@ namespace Shatterspire
             return best;
         }
 
+        /// <summary>
+        /// Wohin man zielen muss, um ein laufendes Ziel zu treffen.
+        ///
+        /// Zwei Durchgaenge statt einer geschlossenen Loesung: der erste schaetzt die Flugzeit aus
+        /// dem heutigen Abstand, der zweite aus dem geschaetzten Treffpunkt. Das reicht auf jede
+        /// Entfernung, die hier vorkommt, und kommt ohne Wurzel einer quadratischen Gleichung aus,
+        /// die bei zu schnellen Zielen gar keine Loesung haette.
+        /// </summary>
+        public static Vector3 PredictIntercept(Vector3 from, Vector3 targetPoint, Vector3 targetVelocity,
+            float projectileSpeed)
+        {
+            if (projectileSpeed <= 0.01f) return targetPoint;
+            var predicted = targetPoint;
+            for (var pass = 0; pass < 2; pass++)
+            {
+                var flight = Vector3.Distance(from, predicted) / projectileSpeed;
+                // Nicht beliebig weit vorhalten: auf sehr lange Sicht wird aus der Schaetzung Unsinn.
+                predicted = targetPoint + targetVelocity * Mathf.Min(flight, 0.85f);
+            }
+            return predicted;
+        }
+
         public static Health FindBestAutoAim(Vector3 point, Vector3 forward, float radius, TeamId team)
         {
             Health best = null;

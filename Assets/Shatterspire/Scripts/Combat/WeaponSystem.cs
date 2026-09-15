@@ -17,7 +17,12 @@ namespace Shatterspire
         private const float PerfectStart = 0.5f;
         private const float PerfectEnd = 0.76f;
         // Zielhilfe nur knapp neben der Ziellinie. Alles ausserhalb trifft nur, wer dorthin zielt.
-        private const float AimAssistAngle = 12f;
+        /// <summary>
+        /// Kegel, in dem die Waffe ein Ziel erfasst. Stand auf 12 Grad und war damit enger als die
+        /// Zielhilfe der Eingabe - die Eingabe zog auf einen Gegner, die Waffe erkannte ihn nicht
+        /// mehr als erfasst, und der Schritt ins Ziel blieb aus.
+        /// </summary>
+        private const float AimAssistAngle = 32f;
         private const float AimAssistRange = 15f;
         /// <summary>
         /// Schaden bis zur vollen Ultimate, in Grundschaden des Helden. Bei Dauerfeuer rund 20 bis 25
@@ -1263,12 +1268,24 @@ namespace Shatterspire
             return direction.sqrMagnitude > 0.05f ? direction.normalized : transform.forward;
         }
 
+        /// <summary>Geschwindigkeit der Geschosse. Muss zu Projectile.Spawn passen.</summary>
+        private const float ProjectileSpeed = 22f;
+
         private Vector3 AcquireAttackDirection()
         {
             UpdateTargetLock();
             if (lockedTarget)
             {
-                var direction = lockedTarget.transform.position - transform.position;
+                var aimAt = lockedTarget.transform.position;
+                // Auf ein laufendes Ziel muss vorgehalten werden, sonst geht der Pfeil hinterher.
+                // Nur fuer Geschosse: ein Hieb trifft dort, wo der Gegner jetzt steht.
+                if (heroClass is HeroClassId.Ranger or HeroClassId.Arcanist)
+                {
+                    var agent = lockedTarget.GetComponent<EnemyAgent>();
+                    if (agent) aimAt = Targeting.PredictIntercept(transform.position, aimAt,
+                        agent.Velocity, ProjectileSpeed);
+                }
+                var direction = aimAt - transform.position;
                 direction.y = 0f;
                 if (direction.sqrMagnitude > 0.05f) return direction.normalized;
             }

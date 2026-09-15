@@ -102,10 +102,23 @@ namespace Shatterspire
         /// Gegner, die gerade erschienen, statt dorthin, wohin gezielt wurde.
         /// </summary>
         public static bool AimAssist = true;
-        /// <summary>Bis zu diesem Winkel darf die Zielhilfe die Richtung verschieben.</summary>
-        private const float AimAssistDegrees = 16f;
+        /// <summary>
+        /// Bis zu diesem Winkel darf die Zielhilfe eine von Hand gewaehlte Richtung verschieben.
+        /// Stand auf 16 Grad. Das war zu wenig: wer mit dem Daumen grob in die richtige Ecke zeigt,
+        /// liegt schnell 25 Grad daneben, und dann ging der Schuss ins Leere.
+        /// </summary>
+        private const float AimAssistDegrees = 30f;
         /// <summary>Wie weit das Selbstzielen sucht, wenn niemand von Hand richtet.</summary>
         private const float AutoAimRange = 18f;
+        /// <summary>
+        /// Ab dieser Auslenkung gilt der Zielstick als bewusst gerichtet.
+        ///
+        /// Vorher zaehlte jede Auslenkung ueber der Totzone von 0,14 als Zielen. Auf dem Telefon
+        /// liegt der Daumen aber staendig irgendwo leicht ausgelenkt auf dem Stick - damit war
+        /// praktisch immer von Hand gezielt, und das Selbstzielen kam nie zum Zug. Genau deshalb
+        /// schoss der Held weiter in die Richtung, in die er gerade schaute.
+        /// </summary>
+        private const float ManualAimThreshold = 0.45f;
         private Vector3 aimDirection = Vector3.forward;
 
         private void Start()
@@ -168,9 +181,13 @@ namespace Shatterspire
         /// </summary>
         private Vector3 ResolveTouchAim()
         {
-            // Was am Aktionsknopf gezogen wird, hat Vorrang: wer eine Aktion richtet, zielt damit
-            // und nicht mit dem Zielstick.
-            var stick = MobileInput.ActionAim.sqrMagnitude > 0.0004f ? MobileInput.ActionAim : MobileInput.Aim;
+            // Von Hand gerichtet wird nur, wer es auch meint: ein gezogener Aktionsknopf immer,
+            // der Zielstick erst ab einer deutlichen Auslenkung. Alles darunter ist ein Daumen, der
+            // auf dem Stick liegt - und kein Ziel.
+            var dragged = MobileInput.ActionAim;
+            var stick = dragged.sqrMagnitude > 0.0004f ? dragged
+                : MobileInput.Aim.magnitude >= ManualAimThreshold ? MobileInput.Aim
+                : Vector2.zero;
             if (stick.sqrMagnitude > 0.0004f)
             {
                 aimDirection = new Vector3(stick.x, 0f, stick.y).normalized;
@@ -190,9 +207,13 @@ namespace Shatterspire
             return aimDirection;
         }
 
-        /// <summary>Greift der Spieler gerade an oder richtet er eine Aktion?</summary>
-        private bool Attacking => MobileInput.Attack || MobileInput.SkillHeld || MobileInput.UltimateHeld
-                                  || MobileInput.Heavy || ScriptedAttack;
+        /// <summary>
+        /// Greift der Spieler gerade an oder richtet er eine Aktion? AimFire gehoert dazu: ein
+        /// leicht ausgelenkter Zielstick feuert mit, zaehlt aber nicht als gerichtet - und genau
+        /// dieser Fall soll selbst zielen.
+        /// </summary>
+        private bool Attacking => MobileInput.Attack || MobileInput.AimFire || MobileInput.SkillHeld
+                                  || MobileInput.UltimateHeld || MobileInput.Heavy || ScriptedAttack;
 
         /// <summary>
         /// Zieht eine Richtung auf den besten Gegner, aber hoechstens um <paramref name="degrees"/>.
