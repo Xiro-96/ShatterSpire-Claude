@@ -38,6 +38,21 @@ namespace Shatterspire
         public bool HeavyReleased { get; private set; }
         public bool DashPressed { get; private set; }
         public bool AutoAim { get; private set; }
+
+        /// <summary>
+        /// Richtet der Spieler gerade selbst? Am PC immer - die Maus ist eine Absicht. Auf dem
+        /// Telefon nur mit deutlich ausgelenktem Stick oder gezogenem Knopf.
+        /// </summary>
+        public bool ManualAim { get; private set; }
+
+        /// <summary>
+        /// Wie lange die Absicht beim Loslassen einer Faehigkeit noch gilt. Kurz: sie muss nur die
+        /// Bilder ueberbruecken, bis die Waffe ausloest - danach haelt die Waffe sie selbst fest.
+        /// </summary>
+        private const float ReleaseLatchSeconds = 0.25f;
+        private float latchUntil;
+        private bool latchAuto;
+        private Vector3 latchDirection;
         public bool SkillHeld { get; private set; }
         public bool SkillReleased { get; private set; }
         public bool UltimateHeld { get; private set; }
@@ -148,8 +163,12 @@ namespace Shatterspire
             UltimateHeld = Input.GetKey(KeyCode.R) || MobileInput.UltimateHeld;
             UltimateReleased = Input.GetKeyUp(KeyCode.R) || MobileInput.ConsumeUltimateReleased()
                                || Consume(ref scriptedUltimateFrames);
+            // Richtung und Loslassen werden zusammen abgeholt, damit sie nie auseinanderfallen.
+            var released = MobileInput.ConsumeReleasedAim();
+            if (SkillReleased || UltimateReleased) LatchRelease(released);
 
             AutoAim = false;
+            ManualAim = true;
             if (worldCamera && !Application.isMobilePlatform && Input.touchCount == 0)
             {
                 var ray = worldCamera.ScreenPointToRay(Input.mousePosition);
@@ -192,6 +211,23 @@ namespace Shatterspire
                 aimDirection = new Vector3(stick.x, 0f, stick.y).normalized;
                 return aimDirection;
             }
+            ManualAim = false;
+
+            // Gerade eine Faehigkeit losgelassen: der Knopf ist nicht mehr gedrueckt, gemeint war
+            // aber genau diese Richtung. Vorher galt in diesem Bild "greift nicht an", das
+            // Selbstzielen war aus, und die Faehigkeit ging in Laufrichtung - also bei jedem
+            // Rueckzug nach hinten.
+            if (Time.time < latchUntil)
+            {
+                if (latchAuto)
+                {
+                    AutoAim = true;
+                    return aimDirection;
+                }
+                ManualAim = true;
+                aimDirection = latchDirection;
+                return aimDirection;
+            }
 
             // Angriff ohne Richten: die Waffe waehlt das Ziel. Frueher tat das die Eingabe selbst,
             // mit eigenen Regeln - und die Waffe waehlte danach noch einmal, mit anderen. Koerper,
@@ -213,6 +249,31 @@ namespace Shatterspire
         /// </summary>
         private bool Attacking => MobileInput.Attack || MobileInput.AimFire || MobileInput.SkillHeld
                                   || MobileInput.UltimateHeld || MobileInput.Heavy || ScriptedAttack;
+
+        /// <summary>
+        /// Haelt fest, was beim Loslassen gemeint war: eine gezogene Richtung, ein ausgelenkter Stick -
+        /// oder, bei einem kurzen Tipp, das Selbstzielen.
+        /// </summary>
+        private void LatchRelease(Vector2 released)
+        {
+            latchUntil = Time.time + ReleaseLatchSeconds;
+            var stick = MobileInput.Aim;
+            if (released.sqrMagnitude > 0.0004f)
+            {
+                latchAuto = false;
+                latchDirection = new Vector3(released.x, 0f, released.y).normalized;
+            }
+            else if (stick.magnitude >= ManualAimThreshold)
+            {
+                latchAuto = false;
+                latchDirection = new Vector3(stick.x, 0f, stick.y).normalized;
+            }
+            else
+            {
+                latchAuto = AimAssist;
+                latchDirection = aimDirection;
+            }
+        }
 
         /// <summary>
         /// Uebernimmt die Richtung, die die Waffe tatsaechlich schiesst. So setzt ein spaeteres
@@ -272,6 +333,24 @@ namespace Shatterspire
 
         private static bool skillReleased;
         private static bool ultimateReleased;
+        private static Vector2 releasedAim;
+
+        /// <summary>
+        /// Uebergibt die gezogene Richtung beim Loslassen. Sie bleibt liegen, bis die Eingabe sie im
+        /// selben Zug wie das Loslassen abholt.
+        /// </summary>
+        public static void ReleaseActionAim()
+        {
+            releasedAim = ActionAim;
+            ActionAim = Vector2.zero;
+        }
+
+        public static Vector2 ConsumeReleasedAim()
+        {
+            var value = releasedAim;
+            releasedAim = Vector2.zero;
+            return value;
+        }
         public static bool ConsumeSkill() { var value = skill; skill = false; return value; }
         public static bool ConsumeDash() { var value = dash; dash = false; return value; }
         public static bool ConsumeUltimate() { var value = ultimate; ultimate = false; return value; }
@@ -289,6 +368,7 @@ namespace Shatterspire
             SkillHeld = UltimateHeld = false;
             skill = dash = ultimate = heavyPressed = heavyReleased = false;
             skillReleased = ultimateReleased = false;
+            releasedAim = Vector2.zero;
         }
     }
 }

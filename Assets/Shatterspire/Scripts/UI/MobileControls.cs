@@ -172,9 +172,14 @@ namespace Shatterspire
             if (action == MobileAction.Heavy) MobileInput.SetHeavy(false);
             if (action == MobileAction.Skill) MobileInput.SetSkill(false);
             if (action == MobileAction.Ultimate) MobileInput.SetUltimate(false);
-            // Erst die Richtung loeschen, nachdem die Aktion sie gelesen hat: das Loslassen und der
-            // Schuss liegen im selben Bild.
-            if (dragging) MobileInput.ActionAim = Vector2.zero;
+            // Die gezogene Richtung wird uebergeben, nicht geloescht. Frueher stand hier ein Kommentar,
+            // sie werde erst nach dem Lesen geloescht - der Code loeschte sie aber sofort, noch bevor
+            // die Faehigkeit ausloeste. Ein gezielter Wurf ging dadurch in Laufrichtung.
+            if (dragging)
+            {
+                if (action is MobileAction.Skill or MobileAction.Ultimate) MobileInput.ReleaseActionAim();
+                else MobileInput.ActionAim = Vector2.zero;
+            }
             dragging = false;
         }
 

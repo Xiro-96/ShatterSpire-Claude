@@ -852,7 +852,21 @@ namespace Shatterspire
 
         // ── SKILL ───────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Rahmen um die Faehigkeit: haelt ihre Zielabsicht fest, solange sie laeuft, und gibt sie
+        /// danach frei - egal, an welcher der vielen Stellen die Faehigkeit endet.
+        /// </summary>
         private IEnumerator ClassSkill()
+        {
+            // Im Bild des Ausloesens, nicht erst in der verschachtelten Faehigkeit: sonst koennte ein
+            // zweites Loslassen im selben Moment eine zweite Faehigkeit starten.
+            skillReadyAt = Time.time + SkillCooldown;
+            BeginAbilityAim();
+            yield return ClassSkillBody();
+            abilityAimUntil = 0f;
+        }
+
+        private IEnumerator ClassSkillBody()
         {
             skillReadyAt = Time.time + SkillCooldown;
             if (build.Has(PerkId.SkillOvercharge)) AddUltimateCharge(0.1f);
@@ -937,6 +951,7 @@ namespace Shatterspire
             ultimateActive = true;
             ultimateCharge = 0f;
             ultimateLockedUntil = Time.time + UltimateLockoutSeconds;
+            BeginAbilityAim();
             var direction = AcquireAttackDirection();
             health.SetInvulnerable(heroClass == HeroClassId.Guardian ? 2.2f : 1.3f);
             if (build.Has(PerkId.UltimateAfterglow)) health.Heal(health.Maximum * 0.3f);
@@ -952,6 +967,7 @@ namespace Shatterspire
             else if (heroClass == HeroClassId.Paladin) yield return WrathfulRetribution();
             else yield return HuntersFocus();
 
+            abilityAimUntil = 0f;
             ultimateActive = false;
         }
 
@@ -1301,6 +1317,15 @@ namespace Shatterspire
         private float engagedUntil;
 
         /// <summary>
+        /// So lange haelt eine Faehigkeit die Absicht fest, mit der sie ausgeloest wurde. Deckt die
+        /// laengste mehrstufige Faehigkeit ab; endet sie frueher, wird die Sperre sofort geloest.
+        /// </summary>
+        private const float AbilityAimSeconds = 1.6f;
+        private float abilityAimUntil;
+        private bool abilityAimAuto;
+        private Vector3 abilityAimDirection = Vector3.forward;
+
+        /// <summary>
         /// Die eine Richtung, in die in diesem Bild geschossen wird. Koerper, Zielanzeige und Schuss
         /// lesen alle diesen Wert.
         ///
@@ -1322,6 +1347,14 @@ namespace Shatterspire
         {
             var manual = FlatAimDirection();
             var auto = input.AutoAim;
+            // Waehrend eine Faehigkeit laeuft, gilt die Absicht vom Ausloesen - es sei denn, der
+            // Spieler richtet gerade neu. Rex' Pfeilhagel fragt die Richtung bei jeder Salve ab; ohne
+            // das gingen die Salven nach dem Loslassen in Laufrichtung.
+            if (Time.time < abilityAimUntil && !input.ManualAim)
+            {
+                auto = abilityAimAuto;
+                if (!auto) manual = abilityAimDirection;
+            }
             lockedTarget = ChooseTarget(manual, auto);
             targetIndicator?.SetTarget(lockedTarget);
             aimDirection = lockedTarget ? DirectionTo(lockedTarget) : manual;
@@ -1387,6 +1420,15 @@ namespace Shatterspire
             var direction = aimAt - transform.position;
             direction.y = 0f;
             return direction.sqrMagnitude > 0.05f ? direction.normalized : aimDirection;
+        }
+
+        /// <summary>Haelt die Absicht einer gerade ausgeloesten Faehigkeit fest und dreht die Figur dorthin.</summary>
+        private void BeginAbilityAim()
+        {
+            abilityAimUntil = Time.time + AbilityAimSeconds;
+            abilityAimAuto = input.AutoAim;
+            abilityAimDirection = aimDirection;
+            FaceNow(aimDirection);
         }
 
         /// <summary>Dreht die Figur ohne Verzoegerung in Schussrichtung - im Moment des Schusses.</summary>
