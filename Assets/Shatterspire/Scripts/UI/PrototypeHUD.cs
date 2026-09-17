@@ -178,7 +178,6 @@ namespace Shatterspire
             championAccent.raycastTarget = false;
 
             CreateChampionPanel(root.transform);
-            CreatePauseButton(root.transform);
             var hpBack = CreateImage(root.transform, "HP", new Color(0.05f, 0.035f, 0.03f, 0.92f),
                 new Vector2(112, -62), new Vector2(268, 23), new Vector2(0, 1));
             ApplyRounded(hpBack);
@@ -252,11 +251,17 @@ namespace Shatterspire
             CreateTouchSticks(root.transform);
             CreateActionCluster(root.transform);
             CreateAnnouncement(root.transform);
+            // Zuletzt, damit er oben liegt. Auf dem Telefon ist die ganze linke Haelfte die Flaeche des
+            // Laufsticks; wurde der Knopf vor ihr gebaut, lag sie darueber und schluckte jede
+            // Beruehrung - der Tipp auf die Pause startete den Stick. Am PC fiel das nie auf, weil es
+            // dort keine Stickflaechen gibt.
+            CreatePauseButton(root.transform);
         }
 
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.Escape)) HandleEscape();
+            if (!modal) HandlePauseTap();
             HandleModalInput();
             RefreshScore();
             if (hpChip)
@@ -1403,6 +1408,8 @@ namespace Shatterspire
         /// <summary>Anteil der Splitter, der beim Verlassen bleibt - derselbe wie bei einer Niederlage.</summary>
         public float AbandonShareKept = 0.65f;
 
+        private Button pauseButton;
+
         private void CreatePauseButton(Transform parent)
         {
             // Oben neben dem Heldenfeld, in Daumenreichweite und weit weg von den Aktionsknoepfen.
@@ -1412,6 +1419,34 @@ namespace Shatterspire
             rect.pivot = new Vector2(0, 1);
             rect.anchoredPosition = new Vector2(412, -22);
             button.onClick.AddListener(ShowPause);
+            button.transform.SetAsLastSibling();
+            pauseButton = button;
+        }
+
+        /// <summary>
+        /// Derselbe Weg wie bei den Fensterknoepfen: eine eigene Trefferpruefung, unabhaengig davon,
+        /// welche Flaeche das Klick-System gerade fuer die oberste haelt. Loest der Knopf zusaetzlich
+        /// selbst aus, passiert nichts Doppeltes - eine offene Pause oeffnet sich nicht ein zweites Mal.
+        /// </summary>
+        private void HandlePauseTap()
+        {
+            if (!pauseButton) return;
+            var rect = (RectTransform)pauseButton.transform;
+            // Auf dem Telefon meldet Unity jede Beruehrung zusaetzlich als Maus - dort zaehlen nur die Beruehrungen.
+            if (Input.touchCount == 0 && Input.GetMouseButtonDown(0)
+                && RectTransformUtility.RectangleContainsScreenPoint(rect, Input.mousePosition, null))
+            {
+                ShowPause();
+                return;
+            }
+            for (var i = 0; i < Input.touchCount; i++)
+            {
+                var touch = Input.GetTouch(i);
+                if (touch.phase != TouchPhase.Began) continue;
+                if (!RectTransformUtility.RectangleContainsScreenPoint(rect, touch.position, null)) continue;
+                ShowPause();
+                return;
+            }
         }
 
         /// <summary>Esc schliesst, was offen ist, oder oeffnet die Pause - aber nie ueber einer Wahl.</summary>
