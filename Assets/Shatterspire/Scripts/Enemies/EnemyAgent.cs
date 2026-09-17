@@ -50,6 +50,8 @@ namespace Shatterspire
         /// </summary>
         private int runSeed;
         private int floorIndex;
+        /// <summary>Der Pfad des Laufs. Gerufene Verstaerkung muss genauso zaeh sein wie ihr Rufer.</summary>
+        private RunMode runPath;
         private int salt;
         // Vier Fragen an denselben Gegner. Jede bekommt ihren eigenen Abstand im Salzraum: sonst
         // zoege der Nachbar im Lager fuer seine erste Frage dieselbe Zahl wie dieser Gegner fuer
@@ -113,12 +115,13 @@ namespace Shatterspire
         /// was zwischen den Spielern uebereinstimmen muss.
         /// </summary>
         public void Configure(EnemyKind value, Transform player, int floor, in FloorModifier modifier,
-            int seed, int enemySalt)
+            int seed, int enemySalt, RunMode path = RunMode.Brave)
         {
             kind = value;
             target = player;
             runSeed = seed;
             floorIndex = floor;
+            runPath = path;
             salt = enemySalt;
             health = GetComponent<Health>();
             status = GetComponent<StatusReceiver>();
@@ -135,8 +138,8 @@ namespace Shatterspire
             }
 
             var depth = Mathf.Max(0, floor - 1);
-            var healthScale = 1f + depth * EnemyBalance.HealthPerFloor;
-            var damageScale = 1f + depth * EnemyBalance.DamagePerFloor;
+            var healthScale = EnemyBalance.HealthScale(path, floor);
+            var damageScale = EnemyBalance.DamageScale(path, floor);
             health.IncreaseMaximum(health.Maximum * (healthScale - 1f), true);
             attackDamage *= damageScale;
             speed *= 1f + Mathf.Min(EnemyBalance.MaximumSpeedBonus, depth * EnemyBalance.SpeedPerFloor);
@@ -845,7 +848,7 @@ namespace Shatterspire
                     if (state == State.Dead) yield break;
                     var called = EnemyFactory.Create(phase >= 3 ? EnemyKind.Shieldbearer : EnemyKind.Crawler,
                         spot, target, floorIndex, FloorModifierCatalog.For(FloorModifierId.None),
-                        runSeed, bossAttackIndex++ * 31 + i);
+                        runSeed, bossAttackIndex++ * 31 + i, runPath);
                     called.SetBehaviour(navigation, spot, false);
                     choir.Add(called);
                 }

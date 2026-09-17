@@ -57,6 +57,43 @@ namespace Shatterspire
         public const float SpeedPerFloor = 0.012f;
         public const float MaximumSpeedBonus = 0.22f;
 
+        /// <summary>
+        /// Grundhaerte auf jedem Pfad, schon ab Etage 1.
+        ///
+        /// Vorher war Etage 1 der absolute Tiefpunkt: ein frischer Rex schoss einen Crawler in gut
+        /// einer Sekunde um, und der Anfang fuehlte sich leicht an. Die Staerke soll aus dem Lauf
+        /// kommen - Upgrades, Heldenstufen, Schmied - und nicht von vornherein da sein.
+        /// </summary>
+        public const float BaseHealthScale = 1.35f;
+        public const float BaseDamageScale = 1.2f;
+
+        /// <summary>
+        /// Wie viel zaeher die Gegner auf einem Pfad sind. Vorher unterschieden sich die Pfade nur in
+        /// der Zahl der Etagen; Etage 1 war auf Legendary dieselbe wie auf Brave. In R.I.S.E. werden
+        /// die Pfade schwerer und laenger, und man soll in sie hineinwachsen.
+        /// </summary>
+        public static float PathHealth(RunMode path) => path switch
+        {
+            RunMode.Brave => 1f,
+            RunMode.Heroic => 1.2f,
+            _ => 1.45f
+        };
+
+        public static float PathDamage(RunMode path) => path switch
+        {
+            RunMode.Brave => 1f,
+            RunMode.Heroic => 1.15f,
+            _ => 1.35f
+        };
+
+        /// <summary>Leben eines Gegners gegenueber seinem Tabellenwert, auf dieser Etage und diesem Pfad.</summary>
+        public static float HealthScale(RunMode path, int floor)
+            => BaseHealthScale * PathHealth(path) * (1f + Mathf.Max(0, floor - 1) * HealthPerFloor);
+
+        /// <summary>Schaden eines Gegners gegenueber seinem Tabellenwert, auf dieser Etage und diesem Pfad.</summary>
+        public static float DamageScale(RunMode path, int floor)
+            => BaseDamageScale * PathDamage(path) * (1f + Mathf.Max(0, floor - 1) * DamagePerFloor);
+
         private static readonly EnemyStats[] Table =
         {
             //                       kind                  hp     spd   range  dmg   knock  stag   space  tele   cool   height radius

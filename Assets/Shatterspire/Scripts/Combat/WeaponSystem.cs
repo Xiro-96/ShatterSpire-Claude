@@ -87,7 +87,22 @@ namespace Shatterspire
         public bool ChargingHeavy => chargingHeavy;
         public bool HeavyPerfect => chargingHeavy && HeavyChargeNormalized >= PerfectStart && HeavyChargeNormalized <= PerfectEnd;
         public float UltimateNormalized => ultimateCharge;
-        public bool UltimateReady => ultimateCharge >= 1f;
+        public bool UltimateReady => UltimateUnlocked && ultimateCharge >= 1f;
+
+        /// <summary>Die Etage, auf der der Held gerade kaempft. Setzt der RunDirector.</summary>
+        private int currentFloor = 1;
+
+        /// <summary>Nur fuer die automatische Vorfuehrung: Ultimate unabhaengig von der Etage.</summary>
+        private bool captureUltimate;
+
+        /// <summary>Ist die Ultimate auf dieser Etage schon verdient? Siehe UltimateProgression.</summary>
+        public bool UltimateUnlocked => captureUltimate || UltimateProgression.IsUnlocked(currentFloor);
+
+        /// <summary>Wie stark die Ultimate gerade wirkt, 0 bis 1.</summary>
+        public float UltimatePower => captureUltimate ? 1f : UltimateProgression.Power(currentFloor);
+
+        /// <summary>Wird bei jedem Etagenwechsel gerufen.</summary>
+        public void SetFloor(int floor) => currentFloor = Mathf.Max(1, floor);
         public bool UltimateActive => ultimateActive;
         public HeroClassId HeroClass => heroClass;
         public string LightName => HeroCatalog.LightAttackName(heroClass);
@@ -156,6 +171,7 @@ namespace Shatterspire
         /// </summary>
         public void FillUltimateForCapture()
         {
+            captureUltimate = true;
             ultimateCharge = 1f;
             PublishHeavyState();
         }
@@ -203,13 +219,18 @@ namespace Shatterspire
             // Jaegerblick lebt von Abschuessen: wer trifft, bleibt laenger im Zustand. Das macht die
             // Ultimate zu einer Kette statt zu einem einzelnen Knall.
             if (!HunterFocusActive) return;
-            focusUntil = Mathf.Min(Time.time + FocusMaximum, focusUntil + FocusPerKill);
+            // Die Obergrenze waechst mit der Staerke: sonst holten ein paar Abschuesse die volle
+            // Dauer zurueck, und eine frisch verdiente Ultimate waere nur am Anfang schwaecher.
+            focusUntil = Mathf.Min(Time.time + FocusMaximum * UltimatePower, focusUntil + FocusPerKill);
             Sfx.Play2D(Sound.FocusExtend, 0.6f);
         }
 
         private void AddUltimateCharge(float amount)
         {
             if (ultimateActive || UltimateReady || amount <= 0f) return;
+            // Noch nicht verdient: nichts ansammeln. Sonst stuende sie auf Etage 3 sofort voll da,
+            // und die Freischaltung waere nur eine Verzoegerung statt eines Anfangs.
+            if (!UltimateUnlocked) return;
             // Eine Ultimate darf sich nicht selbst nachladen. Genau das passierte: XIROs Vergeltung
             // gibt 25 % mehr Schaden und 25 % mehr Angriffstempo, und jeder dieser Treffer lud die
             // naechste Vergeltung. Wer sie einmal hatte, hatte sie gleich wieder. Dasselbe gilt fuer
@@ -468,7 +489,10 @@ namespace Shatterspire
             Sfx.Play2D(Sound.ChainDetonate);
             PrototypeVfx.SpawnExplosion(transform.position, 3f, accent);
             CameraController.Impulse(0.26f);
-            var chained = TimedBomb.DetonateAll(2f, 1.4f);
+            // Der Zuschlag waechst mit der Staerke, nicht die ganze Ladung: auch eine frische
+            // Ultimate zuendet mindestens mit vollem Wurfschaden.
+            var power = UltimatePower;
+            var chained = TimedBomb.DetonateAll(1f + 1f * power, 1f + 0.4f * power);
             Debug.Log($"SHATTERSPIRE Kettenzuender: {chained} Ladung(en) gleichzeitig gezuendet.");
             // Ohne vorbereitetes Feld wenigstens ein Fundament, damit die Ultimate nie ins Leere geht.
             if (chained == 0)
@@ -476,10 +500,10 @@ namespace Shatterspire
                 var direction = AcquireAttackDirection();
                 for (var i = 0; i < 3; i++)
                     TimedBomb.Throw(MuzzlePosition(), ThrowTarget(direction, 3f + i * 2.2f), 0.3f, 0.35f + i * 0.1f,
-                        3.4f, BaseDamage * 2.4f * build.DamageMultiplier,
+                        3.4f, BaseDamage * 2.4f * power * build.DamageMultiplier,
                         ResolveDamageType(DamageType.Fire), gameObject, accent);
             }
-            chainUntil = Time.time + (build.Has(PerkId.BomberChainFeed) ? 10f : 6f);
+            chainUntil = Time.time + (build.Has(PerkId.BomberChainFeed) ? 10f : 6f) * power;
             yield return new WaitForSeconds(0.3f);
         }
 
@@ -658,7 +682,7 @@ namespace Shatterspire
             PrototypeVfx.SpawnExplosion(transform.position + Vector3.up * 0.8f, 3.4f, accent);
             PrototypeVfx.SpawnShockwave(transform.position, 4.2f, accent);
             CameraController.Impulse(0.22f);
-            var seconds = build.Has(PerkId.PaladinLongVigil) ? 9f : 7f;
+            var seconds = (build.Has(PerkId.PaladinLongVigil) ? 9f : 7f) * UltimatePower;
             build.BeginRetribution(seconds);
             motion?.ShowWrathWings(accent, seconds);
             Debug.Log($"SHATTERSPIRE Zornige Vergeltung: {seconds:0} s, "
@@ -1027,7 +1051,9 @@ namespace Shatterspire
             CameraController.Impulse(0.3f);
             Hitstop.Freeze(0.08f, 0.08f);
             var type = build.Has(PerkId.GuardianMoltenQuake) ? DamageType.Fire : ResolveDamageType(DamageType.Physical);
-            Strike(landing, impactRadius, BaseDamage * 4.5f * build.DamageMultiplier, type, 6f);
+            // Frisch verdient wirkt die Ultimate schwaecher; der Radius bleibt, damit man sie lesen kann.
+            var power = UltimatePower;
+            Strike(landing, impactRadius, BaseDamage * 4.5f * power * build.DamageMultiplier, type, 6f);
             PrototypeVfx.SpawnShockwave(landing, impactRadius + 0.6f, accent);
             PrototypeVfx.SpawnExplosion(landing, impactRadius * 0.7f, accent);
 
@@ -1037,9 +1063,9 @@ namespace Shatterspire
                 if (!agent) continue;
                 var offset = agent.transform.position - landing;
                 offset.y = 0f;
-                if (offset.sqrMagnitude <= impactRadius * impactRadius) agent.Stun(2f);
+                if (offset.sqrMagnitude <= impactRadius * impactRadius) agent.Stun(2f * power);
             }
-            ForgeCrater.Spawn(landing, impactRadius, 8f, transform, build,
+            ForgeCrater.Spawn(landing, impactRadius, 8f * power, transform, build,
                 type == DamageType.Fire ? new Color(1f, 0.42f, 0.08f) : accent);
         }
 
@@ -1060,8 +1086,9 @@ namespace Shatterspire
             var accent = Color.Lerp(HeroCatalog.Accent(heroClass), new Color(0.1f, 0.9f, 1f), 0.45f);
             Sfx.Play(Sound.RiftOpen, centre);
             PrototypeVfx.SpawnExplosion(centre, 3.2f, accent);
-            var seconds = build.Has(PerkId.ArcanistEventHorizon) ? 8.5f : 6.5f;
-            TimeRift.Spawn(centre, 6.2f, seconds, BaseDamage * 0.18f * build.DamageMultiplier, gameObject, accent);
+            var power = UltimatePower;
+            var seconds = (build.Has(PerkId.ArcanistEventHorizon) ? 8.5f : 6.5f) * power;
+            TimeRift.Spawn(centre, 6.2f, seconds, BaseDamage * 0.18f * power * build.DamageMultiplier, gameObject, accent);
             // Der Arkanist ist sofort wieder handlungsfaehig: die Zone arbeitet allein.
             yield return new WaitForSeconds(0.35f);
         }
@@ -1076,7 +1103,8 @@ namespace Shatterspire
         /// </summary>
         private IEnumerator HuntersFocus()
         {
-            focusUntil = Time.time + (build.Has(PerkId.RangerHomingBarrage) ? FocusBaseSeconds + 2f : FocusBaseSeconds);
+            focusUntil = Time.time + (build.Has(PerkId.RangerHomingBarrage) ? FocusBaseSeconds + 2f : FocusBaseSeconds)
+                * UltimatePower;
             motion?.PlayMotion(AttackMotion.Draw, 1.4f);
             Sfx.Play2D(Sound.FocusEnter);
             PrototypeVfx.SpawnHeavyReady(transform.position);

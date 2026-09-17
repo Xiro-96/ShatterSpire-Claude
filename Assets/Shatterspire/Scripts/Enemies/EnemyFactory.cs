@@ -13,7 +13,7 @@ namespace Shatterspire
         /// seine Eigenschaften, damit im Co-op alle Spieler denselben Gegner vor sich haben.
         /// </summary>
         public static EnemyAgent Create(EnemyKind kind, Vector3 position, Transform player, int floor,
-            in FloorModifier modifier, int runSeed, int salt)
+            in FloorModifier modifier, int runSeed, int salt, RunMode path = RunMode.Brave)
         {
             var root = new GameObject(kind.ToString());
             root.transform.position = position;
@@ -31,7 +31,7 @@ namespace Shatterspire
             StylizedArt.BuildEnemy(root.transform, kind);
 
             var agent = root.AddComponent<EnemyAgent>();
-            agent.Configure(kind, player, floor, modifier, runSeed, salt);
+            agent.Configure(kind, player, floor, modifier, runSeed, salt, path);
             StylizedArt.AddHealthBar(root, kind);
             return agent;
         }

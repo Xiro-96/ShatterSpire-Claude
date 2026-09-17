@@ -41,6 +41,8 @@ namespace Shatterspire
                     config.Relics.Add((RelicId)value);
             if (Enum.IsDefined(typeof(HeroClassId), save.lastHero)) config.Hero = (HeroClassId)save.lastHero;
             if (Enum.IsDefined(typeof(RunMode), save.lastPath)) config.Mode = (RunMode)save.lastPath;
+            // Ein zuletzt gewaehlter Pfad kann gesperrt sein - etwa bei einem Stand von vor der Sperre.
+            if (!PathProgress.IsUnlocked(save, config.Mode)) config.Mode = PathProgress.Highest(save);
             BuildCanvas();
             ShowLobby();
         }
@@ -248,13 +250,21 @@ namespace Shatterspire
         {
             Text(screen.transform, "CHOOSE YOUR PATH", 18, TextAnchor.LowerRight, new Vector2(-56, 420), new Vector2(460, 26), new Vector2(1, 0))
                 .color = new Color(0.62f, 0.72f, 0.84f);
+            var save = MetaSaveSystem.Load();
             for (var i = 0; i < Paths.Length; i++)
             {
                 var path = Paths[i];
                 var selected = path == config.Mode;
-                Button(screen.transform, PathCatalog.Name(path) + "\n<size=16>" + Loc.T(PathCatalog.Summary(path)) + "</size>",
+                var open = PathProgress.IsUnlocked(save, path);
+                // Gesperrt zeigt der Knopf, was fehlt - nicht nur, dass etwas fehlt.
+                var detail = open
+                    ? Loc.T(PathCatalog.Summary(path))
+                    : Loc.T("LOCKED") + " · " + Loc.T(PathProgress.Requirement(path));
+                Button(screen.transform, PathCatalog.Name(path) + "\n<size=16>" + detail + "</size>",
                     new Vector2(-56, 326 - i * 94), new Vector2(460, 84), new Vector2(1, 0),
-                    selected ? PathCatalog.Accent(path) : new Color(0.32f, 0.4f, 0.5f), () => SelectPath(path), selected);
+                    !open ? new Color(0.2f, 0.22f, 0.26f)
+                        : selected ? PathCatalog.Accent(path) : new Color(0.32f, 0.4f, 0.5f),
+                    () => SelectPath(path), selected && open);
             }
             var climb = Button(screen.transform, Loc.T("CLIMB") + "\n<size=18>" + PathCatalog.Name(config.Mode)
                 + "  ·  " + Loc.T(PathCatalog.Summary(config.Mode)) + "</size>",
@@ -304,8 +314,15 @@ namespace Shatterspire
 
         private void CyclePath(int step)
         {
+            var save = MetaSaveSystem.Load();
             var index = Array.IndexOf(Paths, config.Mode);
-            SelectPath(Paths[Mathf.Clamp(index + step, 0, Paths.Length - 1)]);
+            // Gesperrte Pfade werden uebersprungen; gibt es in der Richtung keinen offenen, bleibt es.
+            for (var next = index + step; next >= 0 && next < Paths.Length; next += step)
+            {
+                if (!PathProgress.IsUnlocked(save, Paths[next])) continue;
+                SelectPath(Paths[next]);
+                return;
+            }
         }
 
         private void SelectHero(HeroClassId hero)
@@ -317,6 +334,7 @@ namespace Shatterspire
 
         private void SelectPath(RunMode path)
         {
+            if (!PathProgress.IsUnlocked(MetaSaveSystem.Load(), path)) return;
             config.Mode = path;
             MetaSaveSystem.SaveLobbySelection(config.Hero, config.Mode);
             ShowLobby();
@@ -408,6 +426,9 @@ namespace Shatterspire
 
         private void BeginRun()
         {
+            // Letzte Absicherung: ein gesperrter Pfad startet nie, auch nicht ueber eine Tastenkuerzel-Luecke.
+            var save = MetaSaveSystem.Load();
+            if (!PathProgress.IsUnlocked(save, config.Mode)) config.Mode = PathProgress.Highest(save);
             MetaSaveSystem.SaveRelics(config.Relics);
             MetaSaveSystem.SaveLobbySelection(config.Hero, config.Mode);
             RunLaunchSettings.Prepare(config);

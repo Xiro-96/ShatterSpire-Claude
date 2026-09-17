@@ -538,6 +538,14 @@ namespace Shatterspire
             { "A second Verdict falls a moment after the first.", "Ein zweites Urteil fällt kurz nach dem ersten." },
             { "Wrath lasts 9 instead of 7 seconds.", "Die Zornige Vergeltung hält 9 statt 7 Sekunden." },
 
+            // ── Pfade und verdiente Ultimate ──
+            { "LOCKED", "GESPERRT" },
+            { "POWER", "STÄRKE" },
+            { "ULTIMATE UNLOCKED", "ULTIMATE FREIGESCHALTET" },
+            { "PATH UNLOCKED", "PFAD FREIGESCHALTET" },
+            { "Clear Brave first.", "Erst Brave schaffen." },
+            { "Clear Heroic with 2 heroes.", "Heroic mit 2 Helden schaffen." },
+
             // ── Verbesserungen: Beschreibungen ──────────────────────────
             { "Heavy attacks deal 40% more damage.", "Schwere Angriffe machen 40 % mehr Schaden." },
             { "Light attacks are 22% faster.", "Leichte Angriffe sind 22 % schneller." },

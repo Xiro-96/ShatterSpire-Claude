@@ -50,12 +50,19 @@ namespace Shatterspire
         /// laesst JsonUtility unberuehrt.
         /// </summary>
         public int[] heroExperience = Array.Empty<int>();
+
+        /// <summary>
+        /// Je Pfad (nach <see cref="RunMode"/>) eine Bitmaske der Helden, die ihn geschafft haben.
+        /// Seit Version 5. Siehe <see cref="PathProgress"/>.
+        /// </summary>
+        public int[] pathClears = Array.Empty<int>();
     }
 
     public static class MetaSaveSystem
     {
-        private const int CurrentVersion = 4;
-        private const string Key = "shatterspire.meta.v4";
+        private const int CurrentVersion = 5;
+        private const string Key = "shatterspire.meta.v5";
+        private const string KeyV4 = "shatterspire.meta.v4";
         private const string KeyV3 = "shatterspire.meta.v3";
         private const string KeyV2 = "shatterspire.meta.v2";
         private const string KeyV1 = "shatterspire.meta.v1";
@@ -75,6 +82,7 @@ namespace Shatterspire
             if (TryRead(Key, out var current)) return current;
             // Aeltere Staende hochziehen statt wegwerfen. Wer schon Shards und
             // Upgrades hat, soll sie behalten.
+            if (TryRead(KeyV4, out var v4)) return Migrate(v4);
             if (TryRead(KeyV3, out var v3)) return Migrate(v3);
             if (TryRead(KeyV2, out var v2)) return Migrate(v2);
             if (TryRead(KeyV1, out var v1)) return Migrate(v1);
@@ -95,11 +103,28 @@ namespace Shatterspire
             // Vor Version 3 gab es Shift und Rang nicht, vor Version 4 keine Heldenstufen.
             // shiftIndex bleibt -1, damit der erste Rollover nur registriert und nichts auszahlt;
             // die Erfahrung beginnt bei null, ohne dass Shards oder Upgrades verloren gehen.
+            if (data.version < 5) GrantLegacyClears(data);
             data.version = CurrentVersion;
             Save(data);
             Debug.Log($"SHATTERSPIRE: Spielstand auf Version {CurrentVersion} migriert, "
                       + "Shards und Upgrades erhalten.");
             return data;
+        }
+
+        /// <summary>
+        /// Vor Version 5 wurde nicht festgehalten, welcher Held welchen Pfad geschafft hat. Wer aber
+        /// schon einmal fuenf Etagen weit kam, hat Brave nachweislich durchgespielt - dem soll die
+        /// neue Sperre nichts wegnehmen, was er sich verdient hat. Gutgeschrieben wird dem zuletzt
+        /// gewaehlten Helden, weil der Stand nicht mehr hergibt.
+        /// </summary>
+        public static void GrantLegacyClears(MetaSaveData data)
+        {
+            if (data == null) return;
+            var hero = Enum.IsDefined(typeof(HeroClassId), data.lastHero) ? (HeroClassId)data.lastHero : HeroClassId.Ranger;
+            if (data.bestFloor >= PathCatalog.FloorCount(RunMode.Brave))
+                PathProgress.MarkCleared(data, RunMode.Brave, hero);
+            if (data.bestFloor >= PathCatalog.FloorCount(RunMode.Heroic))
+                PathProgress.MarkCleared(data, RunMode.Heroic, hero);
         }
 
         /// <summary>Gibt true zurueck, wenn gespeichert werden muss.</summary>
@@ -129,12 +154,13 @@ namespace Shatterspire
         /// Traegt einen abgeschlossenen Aufstieg ein und gibt den gespeicherten
         /// Stand samt Punktzahl zurueck, damit der Endbildschirm ihn zeigen kann.
         /// </summary>
-        public static (MetaSaveData Save, int Score, int RankPoints) RecordClimb(
+        public static (MetaSaveData Save, int Score, int RankPoints, RunMode? UnlockedPath) RecordClimb(
             in ClimbResult result, int shardsEarned)
         {
             var data = Load();
             var score = ClimbScore.Evaluate(result);
             AddHeroExperience(data, result.Hero, HeroProgress.ExperienceFor(result));
+            var unlocked = PathProgress.Record(data, result);
 
             data.runs++;
             if (result.Extracted) data.victories++;
@@ -149,7 +175,7 @@ namespace Shatterspire
             data.bestRankTier = Mathf.Max(data.bestRankTier, (int)RankTable.TierFor(rankPoints));
 
             Save(data);
-            return (data, score, rankPoints);
+            return (data, score, rankPoints, unlocked);
         }
 
         /// <summary>Rangpunkte des laufenden Shifts.</summary>
@@ -265,6 +291,7 @@ namespace Shatterspire
             data.equippedRelics ??= Array.Empty<int>();
             data.climbScores ??= Array.Empty<int>();
             data.heroExperience ??= Array.Empty<int>();
+            data.pathClears ??= Array.Empty<int>();
             return data;
         }
 

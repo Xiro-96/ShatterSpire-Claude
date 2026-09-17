@@ -252,11 +252,16 @@ namespace Shatterspire
         /// Raenge kennt, darf erneut kommen. Damit entsteht die Entscheidung, die vorher fehlte -
         /// breit sammeln oder eine Aktion zuspitzen.
         /// </summary>
+        /// <param name="ultimateUnlocked">
+        /// Gibt es die Ultimate schon, wenn das gewaehlte Upgrade wirkt? Ein Upgrade fuer eine
+        /// Ultimate, die noch gesperrt ist, waere eine leere Karte.
+        /// </param>
         public static List<PerkDefinition> RollThree(HeroClassId hero, ICollection<PerkId> owned,
-            System.Random random, int floor, PlayerBuild build)
+            System.Random random, int floor, PlayerBuild build, bool ultimateUnlocked = true)
         {
             random ??= new System.Random();
-            var available = All.Where(perk => perk.AvailableFor(hero)).ToList();
+            var available = All.Where(perk => perk.AvailableFor(hero)
+                                              && (ultimateUnlocked || perk.Slot != ActionSlot.Ultimate)).ToList();
             // Vertiefbar ist, was man hat und was noch einen Rang frei hat.
             bool Exhausted(PerkDefinition perk)
             {

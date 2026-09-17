@@ -22,6 +22,7 @@ namespace Shatterspire
         private Transform player;
         private FloorNavigation navigation;
         private int activeFloor = 1;
+        private RunMode runPath = RunMode.Brave;
         /// <summary>
         /// Anomalie der laufenden Etage. Liegt am Spawner und nicht in einer statischen Ablage:
         /// im Co-op laeuft jede Instanz ihre eigene Etage, und zwischen zwei Etagen muss der Wert
@@ -80,9 +81,11 @@ namespace Shatterspire
         /// Beginnt eine Etage. Der Lauf-Seed gehoert dazu: ohne ihn koennte der Spawner seine
         /// Entscheidungen nur wuerfeln, und im Co-op saehen drei Spieler drei verschiedene Etagen.
         /// </summary>
-        public void BeginFloor(FloorNavigation floorNavigation, int floor, FloorModifierId anomaly, int seed)
+        public void BeginFloor(FloorNavigation floorNavigation, int floor, FloorModifierId anomaly, int seed,
+            RunMode path = RunMode.Brave)
         {
             Clear();
+            runPath = path;
             navigation = floorNavigation;
             activeFloor = Mathf.Max(1, floor);
             modifier = FloorModifierCatalog.For(anomaly);
@@ -261,7 +264,8 @@ namespace Shatterspire
 
         private EnemyAgent Spawn(EnemyKind kind, Vector3 position, Vector3 home, bool idle, int salt)
         {
-            var enemy = EnemyFactory.Create(kind, Walkable(position), player, activeFloor, modifier, runSeed, salt);
+            var enemy = EnemyFactory.Create(kind, Walkable(position), player, activeFloor, modifier, runSeed, salt,
+                runPath);
             enemy.SetBehaviour(navigation, home, idle);
             enemy.Defeated += OnDefeated;
             return enemy;

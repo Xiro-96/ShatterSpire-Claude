@@ -57,6 +57,7 @@ namespace Shatterspire
 
         /// <summary>Laufende Etage. Die Auswahl der Verbesserungen haengt daran.</summary>
         private int currentFloor = 1;
+        private bool ultimateWasUnlocked = true;
         private Image vaultPanel;
         private Text vaultText;
         private Image anomalyPanel;
@@ -620,8 +621,29 @@ namespace Shatterspire
             if (heavyButton != null && weapon.HeavyReady && !weapon.ChargingHeavy)
                 heavyButton.Progress.color = Color.Lerp(new Color(1f, 0.66f, 0.1f), new Color(1f, 0.95f, 0.7f),
                     0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 8f));
-            if (ultimateButton != null)
+            if (ultimateButton != null && !weapon.UltimateUnlocked)
             {
+                // Gesperrt: kein Fuellstand, der nie steigt, sondern die Etage, ab der es sie gibt.
+                ultimateButton.Progress.fillAmount = 0f;
+                ultimateButton.Cooldown.fillAmount = 1f;
+                ultimateButton.Center.text = Loc.T("FLOOR") + " " + UltimateProgression.UnlockFloor;
+                ultimateButton.Status.text = Loc.T("LOCKED");
+                ultimateWasUnlocked = false;
+            }
+            else if (ultimateButton != null)
+            {
+                if (!ultimateWasUnlocked)
+                {
+                    ultimateWasUnlocked = true;
+                    // Nur ansagen, wenn sie im Lauf freigeschaltet wurde - nicht beim Start eines
+                    // Laufs, der auf einer spaeteren Etage beginnt.
+                    if (currentFloor > 1)
+                    {
+                        ultimateButton.Punch();
+                        ShowAnnouncement(Loc.T("ULTIMATE UNLOCKED") + "\n" + Loc.T(weapon.UltimateName) + " · "
+                                         + Mathf.RoundToInt(weapon.UltimatePower * 100f) + "%", 1.6f);
+                    }
+                }
                 var ready = weapon.UltimateReady;
                 ultimateButton.Progress.fillAmount = weapon.UltimateNormalized;
                 ultimateButton.Progress.color = ready
@@ -629,7 +651,11 @@ namespace Shatterspire
                     : new Color(1f, 0.74f, 0.16f);
                 ultimateButton.Cooldown.fillAmount = weapon.UltimateActive ? 1f : 1f - weapon.UltimateNormalized;
                 ultimateButton.Center.text = ready || weapon.UltimateActive ? string.Empty : Mathf.FloorToInt(weapon.UltimateNormalized * 100f) + "%";
-                ultimateButton.Status.text = ready ? Loc.T("ULTIMATE READY") : string.Empty;
+                // Unter voller Staerke steht der Anteil dabei: man soll sehen, dass sie noch waechst.
+                var power = weapon.UltimatePower;
+                ultimateButton.Status.text = ready
+                    ? Loc.T("ULTIMATE READY")
+                    : power < 0.999f ? Mathf.RoundToInt(power * 100f) + "% " + Loc.T("POWER") : string.Empty;
                 if (ready && !ultimateWasReady)
                 {
                     ultimateButton.Punch();
@@ -1102,8 +1128,9 @@ namespace Shatterspire
                 $"{Loc.T(selectingLevelPerk ? "LEVEL UP" : "FLOOR CLEARED")} · {Loc.T("CHOOSE AN UPGRADE")}",
                 Loc.T("EVERY UPGRADE CHANGES ONE OF YOUR ACTIONS"));
             var hero = runConfig.Hero;
+            // Das Upgrade wirkt ab der naechsten Etage - dort muss die Ultimate schon da sein.
             var choices = PerkCatalog.RollThree(hero, new HashSet<PerkId>(build.Perks), perkRandom,
-                currentFloor, build);
+                currentFloor, build, UltimateProgression.IsUnlocked(currentFloor + 1));
             for (var i = 0; i < choices.Count; i++)
             {
                 var perk = choices[i];
@@ -1266,7 +1293,7 @@ namespace Shatterspire
         }
 
         public void ShowRunEnd(bool victory, int earned, MetaSaveData save, int roomsCleared,
-            ClimbResult result, int score, int rankPoints)
+            ClimbResult result, int score, int rankPoints, RunMode? unlockedPath = null)
         {
             if (modal) Destroy(modal);
             if (Camera.main)
@@ -1276,8 +1303,11 @@ namespace Shatterspire
             }
             Time.timeScale = 0f;
             openModal = ModalKind.RunEnd;
-            modal = CreateModal(Loc.T(victory ? "TOWER PATH CLEARED" : "CLIMB ENDED"),
-                Loc.T(victory ? "THE TEAM RETURNS WITH SECURED SHARDS" : "A PORTION OF YOUR SHARDS SURVIVED"));
+            // Ein neu geoeffneter Pfad ist die wichtigste Nachricht dieses Bildschirms - er steht oben.
+            var subtitle = unlockedPath.HasValue
+                ? PathCatalog.Name(unlockedPath.Value) + " · " + Loc.T("PATH UNLOCKED")
+                : Loc.T(victory ? "THE TEAM RETURNS WITH SECURED SHARDS" : "A PORTION OF YOUR SHARDS SURVIVED");
+            modal = CreateModal(Loc.T(victory ? "TOWER PATH CLEARED" : "CLIMB ENDED"), subtitle);
 
             // Links die Punkte dieses Aufstiegs, rechts was er fuer den Rang
             // bedeutet. Die Aufschluesselung steht bewusst da: ein Rang, dessen
