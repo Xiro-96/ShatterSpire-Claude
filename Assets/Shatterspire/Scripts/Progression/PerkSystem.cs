@@ -368,7 +368,62 @@ namespace Shatterspire
         /// </summary>
         public float DamageMultiplier =>
             storedDamageMultiplier * (LowHealthFury ? 1.15f : 1f) * (InForgeCrater ? 1.25f : 1f)
-            * (Retribution ? RetributionDamage : 1f);
+            * (Retribution ? RetributionDamage : 1f)
+            * (hasBloodPact ? RelicRules.BloodPactDamage : 1f)
+            * (hasWarBanner ? 1f + RelicRules.WarBannerBonus(climbFloor) : 1f);
+
+        // ── Relikte mit eigenem Verb ────────────────────────────────────────
+        private bool hasBloodPact;
+        private bool hasWarBanner;
+        private int climbFloor = 1;
+        private float adrenalineUntil;
+        private float sparkWardUntil;
+        private bool lastBreathUsed;
+
+        public bool HasSplinterBurst { get; private set; }
+        public bool HasAdrenaline { get; private set; }
+        public bool HasStormBell { get; private set; }
+        public bool HasSparkWard { get; private set; }
+        public bool HasPhantomEdge { get; private set; }
+        public bool HasSteadyHeart { get; private set; }
+        public bool HasOverflow { get; private set; }
+
+        /// <summary>Die Etage, auf der gekaempft wird. Das Kriegsbanner waechst mit ihr.</summary>
+        public void SetClimbFloor(int floor) => climbFloor = Mathf.Max(1, floor);
+
+        /// <summary>Adrenalin: fuer ein paar Sekunden schneller. Ein weiterer Abschuss verlaengert.</summary>
+        public void TriggerAdrenaline()
+            => adrenalineUntil = Mathf.Max(adrenalineUntil, Time.time + RelicRules.AdrenalineSeconds);
+
+        /// <summary>Funkenschild: nach einem Dash haelt er den naechsten Treffer ab.</summary>
+        public void ArmSparkWard() => sparkWardUntil = Time.time + RelicRules.SparkWardSeconds;
+
+        private float FilterSparkWard(DamageInfo damage, float amount)
+        {
+            if (Time.time >= sparkWardUntil || amount <= 0f) return amount;
+            sparkWardUntil = 0f;
+            PrototypeVfx.SpawnShockwave(transform.position, 1.7f, new Color(0.55f, 0.9f, 1f));
+            Sfx.Play(Sound.Block, transform.position, 0.9f);
+            return 0f;
+        }
+
+        /// <summary>
+        /// Letzter Atem: faengt genau einen toedlichen Treffer je Aufstieg ab. Steht als letzte Abwehr
+        /// in der Kette - er muss den Betrag sehen, der nach allen anderen uebrig bleibt.
+        /// </summary>
+        private float FilterLastBreath(DamageInfo damage, float amount)
+        {
+            var own = cachedHealth ? cachedHealth : (cachedHealth = GetComponent<Health>());
+            if (!own || !RelicRules.LastBreathCatches(lastBreathUsed, amount, own.Current)) return amount;
+            lastBreathUsed = true;
+            own.Heal(RelicRules.LastBreathHealthAfter(own.Current, own.Maximum) - own.Current);
+            own.SetInvulnerable(RelicRules.LastBreathGrace);
+            PrototypeVfx.SpawnExplosion(transform.position + Vector3.up * 0.6f, 3.2f, new Color(1f, 0.86f, 0.45f));
+            Sfx.Play2D(Sound.UltimateRise, 0.85f);
+            CameraController.Impulse(0.2f);
+            Debug.Log("SHATTERSPIRE Letzter Atem: toedlicher Treffer abgefangen.");
+            return 0f;
+        }
 
         // ── Zornige Vergeltung: XIROs Ultimate ──────────────────────────────
         /// <summary>Schaden waehrend der Vergeltung.</summary>
@@ -413,7 +468,8 @@ namespace Shatterspire
             storedAttackSpeedMultiplier * (Retribution ? RetributionAttackSpeed : 1f);
         private float storedAttackSpeedMultiplier = 1f;
         public float MoveSpeedMultiplier =>
-            storedMoveSpeedMultiplier * focusSpeedMultiplier * (Retribution ? RetributionSpeed : 1f);
+            storedMoveSpeedMultiplier * focusSpeedMultiplier * (Retribution ? RetributionSpeed : 1f)
+            * (Time.time < adrenalineUntil ? RelicRules.AdrenalineSpeed : 1f);
         private float storedMoveSpeedMultiplier = 1f;
         private float focusSpeedMultiplier = 1f;
 
@@ -473,6 +529,23 @@ namespace Shatterspire
                 var own = GetComponent<Health>();
                 if (own) own.AddDamageFilter((_, amount) => amount * 0.9f);
             }
+            var body = GetComponent<Health>();
+            if (config.HasRelic(RelicId.BloodPact))
+            {
+                hasBloodPact = true;
+                if (body) body.IncreaseMaximum(-body.Maximum * RelicRules.BloodPactHealthLoss, true);
+            }
+            if (config.HasRelic(RelicId.SparkWard) && body) body.AddDamageFilter(FilterSparkWard);
+            // Zuletzt: der Letzte Atem entscheidet ueber den Betrag, der nach allen Abwehren bleibt.
+            if (config.HasRelic(RelicId.LastBreath) && body) body.AddDamageFilter(FilterLastBreath);
+            hasWarBanner = config.HasRelic(RelicId.WarBanner);
+            HasSplinterBurst = config.HasRelic(RelicId.SplinterBurst);
+            HasAdrenaline = config.HasRelic(RelicId.Adrenaline);
+            HasStormBell = config.HasRelic(RelicId.StormBell);
+            HasSparkWard = config.HasRelic(RelicId.SparkWard);
+            HasPhantomEdge = config.HasRelic(RelicId.PhantomEdge);
+            HasSteadyHeart = config.HasRelic(RelicId.SteadyHeart);
+            HasOverflow = config.HasRelic(RelicId.Overflow);
             HasEmberLens = config.HasRelic(RelicId.EmberLens);
             HasDawnSeed = config.HasRelic(RelicId.DawnSeed);
             HasFortunePrism = config.HasRelic(RelicId.FortunePrism);

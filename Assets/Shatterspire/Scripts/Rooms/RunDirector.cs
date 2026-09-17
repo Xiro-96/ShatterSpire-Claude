@@ -47,6 +47,11 @@ namespace Shatterspire
             playerController = player.GetComponent<PlayerController>();
             spawner = enemySpawner;
             hud = prototypeHud;
+            if (hud)
+            {
+                hud.AbandonRequested = AbandonRun;
+                hud.AbandonShareKept = DefeatShareKept;
+            }
             config = runConfig ?? new RunConfig();
             cameraController = runCamera;
             companions = team ?? Array.Empty<CompanionBot>();
@@ -300,11 +305,25 @@ namespace Shatterspire
             }
         }
 
-        private void EndRun(bool victory)
+        /// <summary>Anteil der Splitter, der nach einer Niederlage bleibt - auch beim Verlassen.</summary>
+        public const float DefeatShareKept = 0.65f;
+
+        /// <summary>
+        /// Der Spieler verlaesst den Aufstieg ueber die Pause. Das zaehlt wie eine Niederlage: sonst
+        /// waere das Menue ein Ausweg, der mehr Splitter behaelt als ein ehrlicher Fall.
+        /// </summary>
+        private void AbandonRun()
+        {
+            if (!ended) EndRun(false, showSummary: false);
+            RunLaunchSettings.Clear();
+            PrototypeBootstrap.Reload();
+        }
+
+        private void EndRun(bool victory, bool showSummary = true)
         {
             if (ended) return;
             ended = true;
-            var earned = victory ? shards : Mathf.RoundToInt(shards * 0.65f);
+            var earned = victory ? shards : Mathf.RoundToInt(shards * DefeatShareKept);
             if (build && build.HasFortunePrism) earned = Mathf.RoundToInt(earned * 1.25f);
             var streak = player ? player.GetComponent<KillStreak>() : null;
             var result = new ClimbResult(floorsCleared, bossesDefeated, enemiesDefeated,
@@ -312,6 +331,7 @@ namespace Shatterspire
                 streak ? streak.Bonus : 0, streak ? streak.Best : 0);
             var record = MetaSaveSystem.RecordClimb(result, earned);
             GameEvents.RaiseRunEnded(victory, earned);
+            if (!showSummary) return;
             hud.ShowRunEnd(victory, earned, record.Save, roomIndex, result, record.Score, record.RankPoints,
                 record.UnlockedPath);
         }

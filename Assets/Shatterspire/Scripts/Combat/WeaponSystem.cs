@@ -102,7 +102,11 @@ namespace Shatterspire
         public float UltimatePower => captureUltimate ? 1f : UltimateProgression.Power(currentFloor);
 
         /// <summary>Wird bei jedem Etagenwechsel gerufen.</summary>
-        public void SetFloor(int floor) => currentFloor = Mathf.Max(1, floor);
+        public void SetFloor(int floor)
+        {
+            currentFloor = Mathf.Max(1, floor);
+            build?.SetClimbFloor(currentFloor);
+        }
         public bool UltimateActive => ultimateActive;
         public HeroClassId HeroClass => heroClass;
         public string LightName => HeroCatalog.LightAttackName(heroClass);
@@ -206,6 +210,14 @@ namespace Shatterspire
         private void OnEntityDied(Health value)
         {
             if (!value || value.Team != TeamId.Enemy) return;
+            if (build.HasSplinterBurst) QueueSplinterBurst(value.transform.position);
+            if (build.HasAdrenaline)
+            {
+                var offset = value.transform.position - transform.position;
+                offset.y = 0f;
+                if (offset.sqrMagnitude <= RelicRules.AdrenalineRange * RelicRules.AdrenalineRange)
+                    build.TriggerAdrenaline();
+            }
             AddUltimateCharge(0.01f);
             // Die Serie zaehlt jeden gefallenen Gegner des Aufstiegs, nicht nur die eigenen Treffer:
             // im Co-op kaempft die Gruppe zusammen, und eine Serie, die ein Mitspieler kaputtmacht,
@@ -269,6 +281,11 @@ namespace Shatterspire
             // Die Figur steht im Moment des Schusses genau in Schussrichtung - sonst sitzt die
             // Muendung noch am alten Winkel, und Pfeil und Linie laufen nebeneinander her.
             FaceNow(direction);
+            if (build.HasStormBell && ++stormBellCount >= RelicRules.StormBellEvery)
+            {
+                stormBellCount = 0;
+                StartCoroutine(StormBell(direction));
+            }
 
             if (heroClass == HeroClassId.Guardian)
             {
@@ -726,6 +743,63 @@ namespace Shatterspire
             return measured > 0f ? measured : fallback;
         }
 
+        // ── Relikte ─────────────────────────────────────────────────────────
+
+        private int stormBellCount;
+        private float splinterWindowStart = -10f;
+        private int splinterBurstsInWindow;
+
+        /// <summary>Splitterbersten: der Gegner berstet einen Moment nach seinem Fall.</summary>
+        private void QueueSplinterBurst(Vector3 point)
+        {
+            if (Time.time - splinterWindowStart >= 1f)
+            {
+                splinterWindowStart = Time.time;
+                splinterBurstsInWindow = 0;
+            }
+            if (splinterBurstsInWindow >= RelicRules.SplinterBurstsPerSecond) return;
+            splinterBurstsInWindow++;
+            StartCoroutine(SplinterBurst(point));
+        }
+
+        private IEnumerator SplinterBurst(Vector3 point)
+        {
+            // Kurz verzoegert: sonst toetet ein Bersten im selben Aufruf den naechsten Gegner, der
+            // wieder berstet - eine Rekursion statt einer sichtbaren Kette.
+            yield return new WaitForSeconds(0.12f);
+            CombatUtility.Explode(point, RelicRules.SplinterBurstRadius,
+                BaseDamage * RelicRules.SplinterBurstDamage * build.DamageMultiplier,
+                TeamId.Enemy, ResolveDamageType(DamageType.Physical), gameObject);
+        }
+
+        /// <summary>Sturmglocke: ein Blitz faellt auf das Ziel des Angriffs.</summary>
+        private IEnumerator StormBell(Vector3 direction)
+        {
+            var point = lockedTarget && lockedTarget.IsAlive
+                ? lockedTarget.transform.position
+                : ThrowTarget(direction, 8f);
+            point.y = transform.position.y;
+            yield return new WaitForSeconds(0.18f);
+            if (!health.IsAlive) yield break;
+            var color = PrototypeVfx.ElementColor(DamageType.Lightning);
+            PrototypeVfx.SpawnJudgement(point, RelicRules.StormBellRadius, color);
+            Strike(point, RelicRules.StormBellRadius,
+                BaseDamage * RelicRules.StormBellDamage * build.DamageMultiplier, DamageType.Lightning, 4f, flash: false);
+        }
+
+        /// <summary>Phantomklinge: nach dem Dash schneidet es entlang der gerade gelaufenen Strecke.</summary>
+        private IEnumerator PhantomEdge(Vector3 origin)
+        {
+            yield return new WaitForSeconds(0.24f);
+            if (!health.IsAlive) yield break;
+            var end = transform.position;
+            var type = ResolveDamageType(DamageType.Physical);
+            var damage = BaseDamage * RelicRules.PhantomEdgeDamage * build.DamageMultiplier;
+            for (var cut = 1; cut <= RelicRules.PhantomEdgeCuts; cut++)
+                Strike(Vector3.Lerp(origin, end, cut / (float)RelicRules.PhantomEdgeCuts), RelicRules.PhantomEdgeRadius,
+                    damage, type, 3f, flash: false, weaponImpact: true);
+        }
+
         private IEnumerator MeleeImpact(float delay, System.Action impact)
         {
             yield return new WaitForSeconds(delay);
@@ -795,6 +869,7 @@ namespace Shatterspire
         {
             var normalized = HeavyChargeNormalized;
             var perfect = normalized >= PerfectStart && normalized <= PerfectEnd;
+            if (perfect && build.HasSteadyHeart) health.Heal(health.Maximum * RelicRules.SteadyHeartHeal);
             if (heroClass == HeroClassId.Paladin)
             {
                 ReleaseVerdict(perfect, normalized);
@@ -886,6 +961,11 @@ namespace Shatterspire
             // zweites Loslassen im selben Moment eine zweite Faehigkeit starten.
             skillReadyAt = Time.time + SkillCooldown;
             BeginAbilityAim();
+            if (build.HasOverflow)
+            {
+                heavyMeter = Mathf.Min(HeavyMeterMaximum, heavyMeter + HeavyMeterMaximum * RelicRules.OverflowHeavyFill);
+                PublishHeavyState();
+            }
             yield return ClassSkillBody();
             abilityAimUntil = 0f;
         }
@@ -1123,6 +1203,8 @@ namespace Shatterspire
         /// <summary>Vom PlayerController zu Beginn eines Dash gerufen. Hier haengen die Dash-Upgrades der Helden.</summary>
         public void OnDashStarted(Vector3 origin, Vector3 direction)
         {
+            if (build.HasSparkWard) build.ArmSparkWard();
+            if (build.HasPhantomEdge) StartCoroutine(PhantomEdge(origin));
             if (heroClass == HeroClassId.Ranger && build.Has(PerkId.RangerPartingShot))
             {
                 var aim = AcquireAttackDirection();

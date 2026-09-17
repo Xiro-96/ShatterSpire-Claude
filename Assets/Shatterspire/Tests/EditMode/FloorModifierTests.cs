@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using NUnit.Framework;
 
@@ -44,21 +45,48 @@ namespace Shatterspire.Tests
             }
         }
 
+        /// <summary>
+        /// Immer, nicht meistens. Frueher stand hier "mehr als 150 von 200" - und in 3,8 % der
+        /// Wahlen trugen alle drei Karten dieselbe Anomalie. Genau das fiel beim Spielen auf.
+        /// </summary>
         [Test]
-        public void DieDreiRoutenEinerEtageUnterscheidenSich()
+        public void DieDreiRoutenEinerEtageUnterscheidenSichImmer()
         {
-            // Nicht auf jeder Etage, aber meistens: sonst waere das Salz der Raumart wirkungslos
-            // und die Wahl am Aufzug haette wieder nur eine Achse.
-            var differing = 0;
-            for (var seed = 0; seed < 200; seed++)
+            for (var seed = 0; seed < 2000; seed++)
+            for (var floor = 2; floor <= 16; floor++)
             {
-                var combat = FloorModifierCatalog.Offer(seed, 3, RoomKind.Combat);
-                var elite = FloorModifierCatalog.Offer(seed, 3, RoomKind.Elite);
-                var treasure = FloorModifierCatalog.Offer(seed, 3, RoomKind.Treasure);
-                if (combat != elite || elite != treasure) differing++;
+                if (PathCatalog.IsBossFloor(floor)) continue;
+                var combat = FloorModifierCatalog.Offer(seed, floor, RoomKind.Combat);
+                var elite = FloorModifierCatalog.Offer(seed, floor, RoomKind.Elite);
+                var third = FloorModifierCatalog.Offer(seed, floor, RoomKind.Mystery);
+                Assert.That(combat, Is.Not.EqualTo(elite), $"Seed {seed}, Etage {floor}");
+                Assert.That(elite, Is.Not.EqualTo(third), $"Seed {seed}, Etage {floor}");
+                Assert.That(combat, Is.Not.EqualTo(third), $"Seed {seed}, Etage {floor}");
             }
-            Assert.That(differing, Is.GreaterThan(150),
-                $"Nur {differing} von 200 Etagen boten unterschiedliche Anomalien an.");
+        }
+
+        /// <summary>Schatz und Geheimnis stehen auf demselben Platz - sie bekommen dieselbe Anomalie.</summary>
+        [Test]
+        public void SchatzUndGeheimnisTeilenSichDenDrittenPlatz()
+        {
+            for (var seed = 0; seed < 200; seed++)
+                Assert.That(FloorModifierCatalog.Offer(seed, 4, RoomKind.Treasure),
+                    Is.EqualTo(FloorModifierCatalog.Offer(seed, 4, RoomKind.Mystery)));
+        }
+
+        /// <summary>Jede zweite Etage hat eine ruhige Route als sichere Wahl, die andere Haelfte keine.</summary>
+        [Test]
+        public void EtwaJedeZweiteEtageBietetEineRuhigeRoute()
+        {
+            var calm = 0;
+            var floors = 0;
+            for (var seed = 0; seed < 400; seed++)
+            for (var floor = 2; floor <= 16; floor++)
+            {
+                floors++;
+                if (FloorModifierCatalog.OffersFor(seed, floor).Contains(FloorModifierId.None)) calm++;
+            }
+            Assert.That(calm / (float)floors, Is.EqualTo(0.5f).Within(0.05f));
         }
 
         [Test]
@@ -75,15 +103,11 @@ namespace Shatterspire.Tests
                 total++;
             }
 
-            // Die Ruhe steht zweimal im Topf, also rund zwei Siebtel. Alles andere je ein Siebtel.
-            Assert.That(counts[FloorModifierId.None] / (float)total, Is.EqualTo(2f / 7f).Within(0.04f),
-                "Ohne stille Etagen verliert die Anomalie ihren Bezugspunkt.");
+            // Sechs verschiedene, drei davon je Etage: jede - auch die Ruhe - auf rund einem Sechstel
+            // der Karten. Keine dominiert, keine fehlt.
             foreach (var pair in counts)
-            {
-                if (pair.Key == FloorModifierId.None) continue;
-                Assert.That(pair.Value / (float)total, Is.EqualTo(1f / 7f).Within(0.04f),
+                Assert.That(pair.Value / (float)total, Is.EqualTo(1f / 6f).Within(0.03f),
                     $"{pair.Key} kommt zu {pair.Value / (float)total:P1} vor.");
-            }
         }
 
         [Test]
@@ -131,6 +155,28 @@ namespace Shatterspire.Tests
             }
         }
 
+        [Test]
+        public void ProzenteTragenVorzeichenUndStimmen()
+        {
+            Assert.That(FloorModifierCatalog.Percent(1.5f), Is.EqualTo("+50%"));
+            Assert.That(FloorModifierCatalog.Percent(0.75f), Is.EqualTo("-25%"));
+            Assert.That(FloorModifierCatalog.Percent(1.35f), Is.EqualTo("+35%"));
+            Assert.That(FloorModifierCatalog.Percent(0.5f), Is.EqualTo("-50%"));
+            Assert.That(FloorModifierCatalog.Percent(2.3f), Is.EqualTo("+130%"));
+        }
+
+        /// <summary>Die Farbe muss sagen, was die Wirkung fuer den Spieler bedeutet - nicht, ob die Zahl steigt.</summary>
+        [Test]
+        public void DieFarbeFolgtDemSpielerNichtDerZahl()
+        {
+            Assert.That(FloorModifierCatalog.Verdict("ENEMY HEALTH", 1.5f), Is.EqualTo(FloorModifierCatalog.EffectVerdict.Harmful));
+            Assert.That(FloorModifierCatalog.Verdict("ENEMY SPEED", 0.75f), Is.EqualTo(FloorModifierCatalog.EffectVerdict.Helpful));
+            Assert.That(FloorModifierCatalog.Verdict("ENEMY COUNT", 1.85f), Is.EqualTo(FloorModifierCatalog.EffectVerdict.Harmful));
+            Assert.That(FloorModifierCatalog.Verdict("ENEMY DAMAGE", 0.85f), Is.EqualTo(FloorModifierCatalog.EffectVerdict.Helpful));
+            Assert.That(FloorModifierCatalog.Verdict("SHARDS", 1.35f), Is.EqualTo(FloorModifierCatalog.EffectVerdict.Reward));
+            Assert.That(FloorModifierCatalog.Verdict("GOLD", 2.3f), Is.EqualTo(FloorModifierCatalog.EffectVerdict.Reward));
+        }
+
         /// <summary>Ein Faktor steht genau dann im Text, wenn er nicht 1 ist - und mit seinem Wert.</summary>
         private static void Expect(string text, string label, float factor, FloorModifierId id)
         {
@@ -139,7 +185,7 @@ namespace Shatterspire.Tests
                 Assert.That(text, Does.Not.Contain(label), $"{id} nennt {label}, obwohl der Faktor 1 ist.");
                 return;
             }
-            var expected = label + " ×" + Loc.Number(factor);
+            var expected = label + " " + FloorModifierCatalog.Percent(factor);
             Assert.That(text, Does.Contain(expected), $"{id}: {expected} fehlt in {text}.");
         }
 

@@ -148,6 +148,8 @@ namespace Shatterspire.Tests
             }
         }
 
+        private static readonly RelicEffect Neutral = new(0, 0f, 1f, 0f, 1f, false);
+
         /// <summary>
         /// Jedes Relic muss genau den Effekt tragen, den PlayerBuild.ConfigureRun
         /// und RunDirector heute anwenden — und keinen zweiten dazu.
@@ -173,7 +175,19 @@ namespace Shatterspire.Tests
                 [RelicId.SurgeCore] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, ultimateCharge: 1.2f),
                 [RelicId.TwinCharge] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, attackSpeed: 1.1f),
                 [RelicId.GuardPlate] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, damageTaken: 0.9f),
-                [RelicId.GoldVein] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, gold: 1.3f)
+                [RelicId.GoldVein] = new RelicEffect(0, 0f, 1f, 0f, 1f, false, gold: 1.3f),
+                // Die zehn mit eigenem Verb wirken im Kampfcode, nicht ueber diese Zahlen - ihre Assets
+                // tragen neutrale Werte. Ihre Regeln prueft RelicRuleTests.
+                [RelicId.LastBreath] = Neutral,
+                [RelicId.SplinterBurst] = Neutral,
+                [RelicId.Adrenaline] = Neutral,
+                [RelicId.BloodPact] = Neutral,
+                [RelicId.StormBell] = Neutral,
+                [RelicId.SparkWard] = Neutral,
+                [RelicId.PhantomEdge] = Neutral,
+                [RelicId.SteadyHeart] = Neutral,
+                [RelicId.Overflow] = Neutral,
+                [RelicId.WarBanner] = Neutral
             };
 
             Assert.That(expected.Keys, Is.EquivalentTo(Enum.GetValues(typeof(RelicId)).Cast<RelicId>()),

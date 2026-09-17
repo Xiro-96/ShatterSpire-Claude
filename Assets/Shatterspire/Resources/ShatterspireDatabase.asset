@@ -44,6 +44,16 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 70cef517e3205854199b0b4d7fcf8b15, type: 2}
   - {fileID: 11400000, guid: 87194fc2ce65e16448191021cdc3766b, type: 2}
   - {fileID: 11400000, guid: 545739246bc2036458714f06caec193b, type: 2}
+  - {fileID: 11400000, guid: c86ca9ae5bcb3e843849837ebd8c954a, type: 2}
+  - {fileID: 11400000, guid: 627e38998417a6540a349a25395c0253, type: 2}
+  - {fileID: 11400000, guid: 761ba0964399cfe4b80f942b712ef29c, type: 2}
+  - {fileID: 11400000, guid: 8c05dafe5e412e841a5fe971210ff950, type: 2}
+  - {fileID: 11400000, guid: 9ba15265f20562948b040586d4aac693, type: 2}
+  - {fileID: 11400000, guid: 4c9bbdd538c2d4e4f9344850b86bede1, type: 2}
+  - {fileID: 11400000, guid: 4feb43fafc6e85147879282878240c9d, type: 2}
+  - {fileID: 11400000, guid: c03646e2a141ddc44ba812e4561dfc9e, type: 2}
+  - {fileID: 11400000, guid: ff5564af7b7f0324c996b1275a67601a, type: 2}
+  - {fileID: 11400000, guid: 966a3d1df1f94f04799e0a0d221ceb56, type: 2}
   perks:
   - {fileID: 11400000, guid: ec0d35a2f60b6da49a6b7ec3c51739e9, type: 2}
   - {fileID: 11400000, guid: 51564d916f555094399cc911d10a2e36, type: 2}

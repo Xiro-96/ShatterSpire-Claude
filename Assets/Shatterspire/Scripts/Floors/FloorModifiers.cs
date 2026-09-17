@@ -79,14 +79,19 @@ namespace Shatterspire
         };
 
         /// <summary>
-        /// Der Topf, aus dem gezogen wird. Die Ruhe steht zweimal darin: ohne stille Etagen
-        /// verliert die Anomalie ihre Bedeutung, weil es keinen Normalzustand mehr gibt.
+        /// Der Topf, aus dem die drei Routen einer Etage ziehen - ohne Zuruecklegen.
+        ///
+        /// Vorher zog jede Route fuer sich aus einem Topf, in dem die Ruhe zweimal stand. In 3,8 %
+        /// aller Routenwahlen trugen dadurch alle drei Karten dieselbe Anomalie, und die Wahl hatte
+        /// genau die zweite Achse verloren, fuer die es Anomalien gibt - auf einem Heroic-Aufstieg
+        /// mit einem Drittel Wahrscheinlichkeit mindestens einmal. Jetzt sind die drei immer
+        /// verschieden. Die Ruhe steht nur noch einmal darin: jede zweite Etage bietet sie als
+        /// sichere Route an, die andere Haelfte hat keine.
         /// </summary>
         private static readonly FloorModifierId[] Pool =
         {
-            FloorModifierId.None, FloorModifierId.None, FloorModifierId.Overload,
-            FloorModifierId.Brittle, FloorModifierId.Swarm, FloorModifierId.Bounty,
-            FloorModifierId.Warded
+            FloorModifierId.None, FloorModifierId.Overload, FloorModifierId.Brittle,
+            FloorModifierId.Swarm, FloorModifierId.Bounty, FloorModifierId.Warded
         };
 
         public static IReadOnlyList<FloorModifier> All => Table;
@@ -107,10 +112,38 @@ namespace Shatterspire
         public static FloorModifierId Offer(int runSeed, int floor, RoomKind kind)
         {
             if (floor <= 1 || kind == RoomKind.Boss) return FloorModifierId.None;
-            // Die Raumart geht als Salz ein: die drei Routen derselben Etage tragen dadurch
-            // verschiedene Anomalien, und die Wahl hat zwei Achsen statt einer.
-            return Pool[RunRandom.Index(runSeed, floor, (int)kind + 1, Pool.Length)];
+            return OffersFor(runSeed, floor)[RouteSlot(kind)];
         }
+
+        /// <summary>
+        /// Die drei Anomalien einer Etage, in der Reihenfolge der Routen am Aufzug: Kampf, Elite,
+        /// dann Schatz oder Geheimnis. Ohne Zuruecklegen gezogen, also immer drei verschiedene.
+        /// </summary>
+        public static FloorModifierId[] OffersFor(int runSeed, int floor)
+        {
+            var bag = new List<FloorModifierId>(Pool);
+            var offers = new FloorModifierId[RouteSlots];
+            for (var slot = 0; slot < RouteSlots; slot++)
+            {
+                var index = RunRandom.Index(runSeed, floor, 300 + slot, bag.Count);
+                offers[slot] = bag[index];
+                bag.RemoveAt(index);
+            }
+            return offers;
+        }
+
+        private const int RouteSlots = 3;
+
+        /// <summary>
+        /// Welcher Platz am Aufzug eine Raumart ist. Schatz und Geheimnis teilen sich den dritten:
+        /// eine Etage bietet immer nur einen der beiden an.
+        /// </summary>
+        private static int RouteSlot(RoomKind kind) => kind switch
+        {
+            RoomKind.Combat => 0,
+            RoomKind.Elite => 1,
+            _ => 2
+        };
 
         /// <summary>
         /// Die Wirkung in Worten, aus den Faktoren selbst gebaut. Wer eine Zahl in
@@ -126,19 +159,54 @@ namespace Shatterspire
             Append(parts, "ENEMY COUNT", modifier.EnemyCount);
             Append(parts, "GOLD", modifier.Gold);
             Append(parts, "SHARDS", modifier.Shards);
-            var text = new StringBuilder();
-            for (var i = 0; i < parts.Count; i++)
-            {
-                if (i > 0) text.Append(i == parts.Count - 1 ? "\n" : "  ·  ");
-                text.Append(parts[i]);
-            }
-            return text.ToString();
+            // Eine Wirkung je Zeile. Vorher standen sie mit Punkten hintereinander, und die Karte
+            // brach mitten in der Aufzaehlung um.
+            return string.Join("\n", parts);
         }
 
+        /// <summary>
+        /// Eine Wirkung als Zeile: Name, Aenderung in Prozent, und die Farbe dessen, was sie fuer den
+        /// Spieler bedeutet.
+        ///
+        /// Vorher stand hier ein Faktor - "GEGNERTEMPO ×0,75". Ob das hilft oder schadet, musste man
+        /// selbst ausrechnen, und bei drei Karten mit je drei Zahlen tat das niemand. Jetzt sagt die
+        /// Farbe es: rot schadet, gruen hilft, gold ist die Belohnung.
+        /// </summary>
         private static void Append(List<string> parts, string label, float factor)
         {
             if (Mathf.Approximately(factor, 1f)) return;
-            parts.Add($"{Loc.T(label)} ×{Loc.Number(factor)}");
+            var color = Verdict(label, factor) switch
+            {
+                EffectVerdict.Harmful => HarmfulColor,
+                EffectVerdict.Helpful => HelpfulColor,
+                _ => RewardColor
+            };
+            parts.Add($"<color={color}>{Loc.T(label)} {Percent(factor)}</color>");
+        }
+
+        private const string HarmfulColor = "#FF7B7B";
+        private const string HelpfulColor = "#8CF5A0";
+        private const string RewardColor = "#FFD36B";
+
+        /// <summary>Was eine Wirkung fuer den Spieler bedeutet.</summary>
+        public enum EffectVerdict { Harmful, Helpful, Reward }
+
+        /// <summary>
+        /// Mehr Gegnerleben, -schaden, -tempo oder -zahl schadet, weniger hilft. Mehr Gold oder
+        /// Splitter ist Belohnung, weniger schadet.
+        /// </summary>
+        public static EffectVerdict Verdict(string label, float factor)
+        {
+            var reward = label == "GOLD" || label == "SHARDS";
+            if (reward) return factor >= 1f ? EffectVerdict.Reward : EffectVerdict.Harmful;
+            return factor > 1f ? EffectVerdict.Harmful : EffectVerdict.Helpful;
+        }
+
+        /// <summary>Ein Faktor als ganze Prozent mit Vorzeichen: 1,5 wird "+50%", 0,75 wird "-25%".</summary>
+        public static string Percent(float factor)
+        {
+            var percent = Mathf.RoundToInt((factor - 1f) * 100f);
+            return (percent > 0 ? "+" : percent < 0 ? "-" : string.Empty) + Mathf.Abs(percent) + "%";
         }
     }
 }

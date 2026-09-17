@@ -362,18 +362,19 @@ namespace Shatterspire
             Header(Loc.T("RELIC LOADOUT"),
                 config.Relics.Count + "/3 " + Loc.T("EQUIPPED  ·  CARRIED INTO EVERY CLIMB"), accent);
             var relics = (RelicId[])Enum.GetValues(typeof(RelicId));
-            // Vier Spalten: mit fuenfzehn Relikten liefe ein Raster aus drei Spalten unten aus dem Bild.
-            const int columns = 4;
+            // Fuenf Spalten und fuenf Reihen: mit fuenfundzwanzig Relikten liefen vier Spalten in den
+            // FERTIG-Knopf. Die Karten sind dafuer schmaler; der Name ist kleiner als vorher.
+            const int columns = 5;
             for (var i = 0; i < relics.Length; i++)
             {
                 var relic = relics[i];
                 var selected = config.Relics.Contains(relic);
                 var label = (selected ? "◆  " : "◇  ") + Loc.T(RelicCatalog.Name(relic))
-                            + "\n<size=16>" + Loc.T(RelicCatalog.Description(relic)) + "</size>";
+                            + "\n<size=15>" + Loc.T(RelicCatalog.Description(relic)) + "</size>";
                 Button(screen.transform, label,
-                    new Vector2(-585 + (i % columns) * 390, 170 - (i / columns) * 132),
-                    new Vector2(364, 112), new Vector2(0.5f, 0.5f),
-                    selected ? accent : new Color(0.32f, 0.42f, 0.54f), () => ToggleRelic(relic), selected);
+                    new Vector2(-620 + (i % columns) * 310, 206 - (i / columns) * 116),
+                    new Vector2(292, 104), new Vector2(0.5f, 0.5f),
+                    selected ? accent : new Color(0.32f, 0.42f, 0.54f), () => ToggleRelic(relic), selected, 19);
                 // Zifferntasten nur fuer die ersten neun - mehr Ziffern gibt es nicht.
                 if (i < 9) shortcuts[KeyCode.Alpha1 + i] = () => ToggleRelic(relic);
             }

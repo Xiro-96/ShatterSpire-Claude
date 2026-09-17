@@ -13,7 +13,7 @@ namespace Shatterspire
     /// Verbesserung, Haendler, Route - und die automatische Vorfuehrung muss wissen, in welchem
     /// sie steht, statt Knopfnummern zu raten.
     /// </summary>
-    public enum ModalKind { None, Perk, Shop, Routes, Ascension, RunEnd }
+    public enum ModalKind { None, Perk, Shop, Routes, Ascension, RunEnd, Pause, Abandon }
 
     public sealed class PrototypeHUD : MonoBehaviour
     {
@@ -178,6 +178,7 @@ namespace Shatterspire
             championAccent.raycastTarget = false;
 
             CreateChampionPanel(root.transform);
+            CreatePauseButton(root.transform);
             var hpBack = CreateImage(root.transform, "HP", new Color(0.05f, 0.035f, 0.03f, 0.92f),
                 new Vector2(112, -62), new Vector2(268, 23), new Vector2(0, 1));
             ApplyRounded(hpBack);
@@ -255,6 +256,7 @@ namespace Shatterspire
 
         private void Update()
         {
+            if (Input.GetKeyDown(KeyCode.Escape)) HandleEscape();
             HandleModalInput();
             RefreshScore();
             if (hpChip)
@@ -1217,8 +1219,12 @@ namespace Shatterspire
                 };
                 var anomalyId = FloorModifierCatalog.Offer(runSeed, nextRoom, kind);
                 var anomaly = FloorModifierCatalog.For(anomalyId);
+                // Der Name in der Farbe der Anomalie, darunter je Zeile eine Wirkung - rot, gruen oder gold.
+                var anomalyName = anomaly.IsCalm
+                    ? Loc.T(anomaly.Name)
+                    : $"<color=#{ColorUtility.ToHtmlStringRGB(anomaly.Accent)}>{Loc.T("ANOMALY")}: {Loc.T(anomaly.Name)}</color>";
                 var button = CreateButton(modal.transform,
-                    $"[{i + 1}]  {heading}\n{blurb}\n\n{Loc.T("ANOMALY")}\n{Loc.T(anomaly.Name)}\n{FloorModifierCatalog.Effects(anomaly)}",
+                    $"[{i + 1}]  {heading}\n{blurb}\n\n{anomalyName}\n{FloorModifierCatalog.Effects(anomaly)}",
                     new Vector2((i - (options.Length - 1) * 0.5f) * 390f, -20f), new Vector2(340f, 360f), color);
                 button.onClick.AddListener(() =>
                 {
@@ -1384,6 +1390,112 @@ namespace Shatterspire
             var home = CreateButton(modal.transform, Loc.T("MAIN MENU"), new Vector2(-225, -225), new Vector2(360, 96), new Color(0.46f, 0.38f, 0.7f));
             home.onClick.AddListener(RestartScene);
             modalButtons.Add(home);
+        }
+
+        // ── Pause ───────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Wird gerufen, wenn der Spieler den Aufstieg ueber die Pause verlaesst. Setzt der RunDirector:
+        /// nur er kann den Lauf so abschliessen, dass Splitter und Erfahrung richtig verbucht werden.
+        /// </summary>
+        public Action AbandonRequested;
+
+        /// <summary>Anteil der Splitter, der beim Verlassen bleibt - derselbe wie bei einer Niederlage.</summary>
+        public float AbandonShareKept = 0.65f;
+
+        private void CreatePauseButton(Transform parent)
+        {
+            // Oben neben dem Heldenfeld, in Daumenreichweite und weit weg von den Aktionsknoepfen.
+            var button = CreateButton(parent, "II", new Vector2(0, 0), new Vector2(64, 64), new Color(0.55f, 0.62f, 0.72f));
+            var rect = (RectTransform)button.transform;
+            rect.anchorMin = rect.anchorMax = new Vector2(0, 1);
+            rect.pivot = new Vector2(0, 1);
+            rect.anchoredPosition = new Vector2(412, -22);
+            button.onClick.AddListener(ShowPause);
+        }
+
+        /// <summary>Esc schliesst, was offen ist, oder oeffnet die Pause - aber nie ueber einer Wahl.</summary>
+        private void HandleEscape()
+        {
+            switch (openModal)
+            {
+                case ModalKind.None when !modal:
+                    ShowPause();
+                    break;
+                case ModalKind.Pause:
+                    ClosePause();
+                    break;
+                case ModalKind.Abandon:
+                    ShowPause();
+                    break;
+            }
+        }
+
+        public void ShowPause()
+        {
+            // Ueber einer Upgrade-, Routen- oder Endwahl oeffnet die Pause nicht: diese Fenster halten
+            // das Spiel selbst an, und zwei Fenster uebereinander liessen sich nicht sauber schliessen.
+            if (modal && openModal != ModalKind.Abandon) return;
+            if (modal) Destroy(modal);
+            Time.timeScale = 0f;
+            openModal = ModalKind.Pause;
+            modal = CreateModal(Loc.T("PAUSED"), Loc.T("THE CLIMB WAITS FOR YOU"));
+            var resume = CreateButton(modal.transform, "[1]  " + Loc.T("RESUME"), new Vector2(-210, -40),
+                new Vector2(360, 110), new Color(0.1f, 0.86f, 0.72f));
+            resume.onClick.AddListener(() =>
+            {
+                Sfx.Play2D(Sound.UiConfirm);
+                ClosePause();
+            });
+            modalButtons.Add(resume);
+            var leave = CreateButton(modal.transform, "[2]  " + Loc.T("MAIN MENU"), new Vector2(210, -40),
+                new Vector2(360, 110), new Color(0.46f, 0.38f, 0.7f));
+            leave.onClick.AddListener(() =>
+            {
+                Sfx.Play2D(Sound.UiClick);
+                ShowAbandonConfirm();
+            });
+            modalButtons.Add(leave);
+        }
+
+        /// <summary>
+        /// Vor dem Verlassen steht die Folge im Bild. Ohne diese Rueckfrage waere "ins Menue und neu"
+        /// ein Weg, einem schlechten Lauf auszuweichen - und ein versehentlicher Tipp kostete den Lauf.
+        /// </summary>
+        private void ShowAbandonConfirm()
+        {
+            if (modal) Destroy(modal);
+            Time.timeScale = 0f;
+            openModal = ModalKind.Abandon;
+            var kept = Mathf.RoundToInt(AbandonShareKept * 100f);
+            modal = CreateModal(Loc.T("LEAVE THE CLIMB?"),
+                $"{Loc.T("THE CLIMB ENDS AS A DEFEAT")}  ·  {Loc.T("YOU KEEP")} {kept}% {Loc.T("OF YOUR SHARDS")}");
+            var back = CreateButton(modal.transform, "[1]  " + Loc.T("BACK"), new Vector2(-210, -40),
+                new Vector2(360, 110), new Color(0.1f, 0.86f, 0.72f));
+            back.onClick.AddListener(() =>
+            {
+                Sfx.Play2D(Sound.UiClick);
+                ShowPause();
+            });
+            modalButtons.Add(back);
+            var confirm = CreateButton(modal.transform, "[2]  " + Loc.T("LEAVE"), new Vector2(210, -40),
+                new Vector2(360, 110), new Color(0.9f, 0.3f, 0.3f));
+            confirm.onClick.AddListener(() =>
+            {
+                Sfx.Play2D(Sound.UiConfirm);
+                if (AbandonRequested != null) AbandonRequested();
+                else RestartScene();
+            });
+            modalButtons.Add(confirm);
+        }
+
+        private void ClosePause()
+        {
+            if (modal) Destroy(modal);
+            modal = null;
+            openModal = ModalKind.None;
+            modalButtons.Clear();
+            Time.timeScale = 1f;
         }
 
         private void RestartRun()

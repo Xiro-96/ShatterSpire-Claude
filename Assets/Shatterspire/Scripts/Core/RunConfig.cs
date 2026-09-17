@@ -18,7 +18,10 @@ namespace Shatterspire
     {
         WindstepSigil, HuntersMark, DawnSeed, EmberLens, ArcBattery, FortunePrism,
         IronHeart, SwiftBoots, VengeanceCoil, SiphonStone, FocusCrystal, SurgeCore,
-        TwinCharge, GuardPlate, GoldVein
+        TwinCharge, GuardPlate, GoldVein,
+        // Die zehn mit eigenem Verb, siehe RelicRules.
+        LastBreath, SplinterBurst, Adrenaline, BloodPact, StormBell,
+        SparkWard, PhantomEdge, SteadyHeart, Overflow, WarBanner
     }
 
     [Serializable]
@@ -205,6 +208,16 @@ namespace Shatterspire
             RelicId.SurgeCore => "SURGE CORE",
             RelicId.TwinCharge => "TWIN CHARGE",
             RelicId.GuardPlate => "GUARD PLATE",
+            RelicId.LastBreath => "LAST BREATH",
+            RelicId.SplinterBurst => "SPLINTER BURST",
+            RelicId.Adrenaline => "ADRENALINE",
+            RelicId.BloodPact => "BLOOD PACT",
+            RelicId.StormBell => "STORM BELL",
+            RelicId.SparkWard => "SPARK WARD",
+            RelicId.PhantomEdge => "PHANTOM EDGE",
+            RelicId.SteadyHeart => "STEADY HEART",
+            RelicId.Overflow => "OVERFLOW",
+            RelicId.WarBanner => "WAR BANNER",
             _ => "GOLD VEIN"
         };
 
@@ -224,6 +237,16 @@ namespace Shatterspire
             RelicId.SurgeCore => "Ultimate charges 20% faster",
             RelicId.TwinCharge => "Light attacks 10% faster",
             RelicId.GuardPlate => "Take 10% less damage",
+            RelicId.LastBreath => "Survive one lethal hit per climb",
+            RelicId.SplinterBurst => "Fallen enemies burst and hurt others",
+            RelicId.Adrenaline => "Nearby kills: +25% speed for 2 s",
+            RelicId.BloodPact => "+25% damage, -25% maximum health",
+            RelicId.StormBell => "Every 5th light attack calls lightning",
+            RelicId.SparkWard => "Dashing blocks the next hit",
+            RelicId.PhantomEdge => "Your dash cuts enemies in its path",
+            RelicId.SteadyHeart => "Perfect heavy attacks heal 8%",
+            RelicId.Overflow => "Your skill fills half the heavy meter",
+            RelicId.WarBanner => "+5% damage per floor, up to +40%",
             _ => "+30% gold from enemies"
         };
     }
