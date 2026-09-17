@@ -66,6 +66,18 @@ namespace Shatterspire
             GameEvents.EntityDied += OnEntityDied;
             GameEvents.RaiseKnockoutChanged(0, MaximumKnockouts, 0f, false);
             StartRoom(RoomKind.Combat, FloorModifierId.None);
+            if (build && HeroPrestige.HasStartUpgrade(build.PrestigeStep) && !CaptureDemo.Requested)
+                StartCoroutine(OfferStartUpgrade());
+        }
+
+        /// <summary>
+        /// Adept-Rang: jeder Aufstieg beginnt mit einer Upgrade-Wahl. Ein Bild spaeter, damit der HUD
+        /// seinen Helden schon kennt.
+        /// </summary>
+        private IEnumerator OfferStartUpgrade()
+        {
+            yield return null;
+            if (!ended && hud) hud.ShowFloorUpgrade(() => { }, "START UPGRADE");
         }
 
         private void OnDestroy()
@@ -333,7 +345,7 @@ namespace Shatterspire
             GameEvents.RaiseRunEnded(victory, earned);
             if (!showSummary) return;
             hud.ShowRunEnd(victory, earned, record.Save, roomIndex, result, record.Score, record.RankPoints,
-                record.UnlockedPath);
+                record.UnlockedPath, record.Badges);
         }
 
         private void OnEntityDied(Health value)

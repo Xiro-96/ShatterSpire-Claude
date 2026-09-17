@@ -79,7 +79,8 @@ namespace Shatterspire
         /// </summary>
         private static readonly HashSet<string> ProperNames = new()
         {
-            "AEGIS", "HAMMER", "ELITE", "BOSS", "ULTIMATE", "BRAX", "REX", "ORION", "KORR", "XIRO"
+            "AEGIS", "HAMMER", "ELITE", "BOSS", "ULTIMATE", "BRAX", "REX", "ORION", "KORR", "XIRO",
+            "PRESTIGE", "CHAMPION"
         };
 
         public static bool IsProperName(string text) => text != null && ProperNames.Contains(text);
@@ -537,6 +538,21 @@ namespace Shatterspire
             { "TWIN VERDICT", "ZWEITES URTEIL" },
             { "A second Verdict falls a moment after the first.", "Ein zweites Urteil fällt kurz nach dem ersten." },
             { "Wrath lasts 9 instead of 7 seconds.", "Die Zornige Vergeltung hält 9 statt 7 Sekunden." },
+
+            // ── Prestige ──
+            { "PRESTIGE", "PRESTIGE" },
+            { "BADGES", "ABZEICHEN" },
+            { "CHAMPION", "CHAMPION" },
+            { "NEXT STEP", "NÄCHSTE STUFE" },
+            { "FULL PRESTIGE", "VOLLES PRESTIGE" },
+            { "NO PRESTIGE YET", "NOCH KEIN PRESTIGE" },
+            { "NOT ENOUGH", "NICHT GENUG" },
+            { "FORGE", "SCHMIED" },
+            { "START UPGRADE", "START-UPGRADE" },
+            { "Every climb starts with an upgrade", "Jeder Aufstieg beginnt mit einem Upgrade" },
+            { "Ultimate from floor 2", "Ultimate ab Etage 2" },
+            { "Upgrade choices show 4 cards", "Upgrade-Wahl mit 4 Karten" },
+            { "Ultimate starts at 80% power", "Ultimate startet mit 80 % Stärke" },
 
             // ── Relikte mit eigenem Verb ──
             { "LAST BREATH", "LETZTER ATEM" },

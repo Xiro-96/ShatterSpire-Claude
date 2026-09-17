@@ -27,11 +27,15 @@ namespace Shatterspire
         /// <summary>Zuwachs je weiterer Etage. Volle Staerke also fuenf Etagen nach der Freischaltung.</summary>
         public const float PowerPerFloor = 0.08f;
 
-        public static bool IsUnlocked(int floor) => floor >= UnlockFloor;
+        /// <param name="unlockFloor">Ab welcher Etage - das Prestige des Helden kann sie vorziehen.</param>
+        public static bool IsUnlocked(int floor, int unlockFloor = UnlockFloor) => floor >= unlockFloor;
 
         /// <summary>Wirkungsanteil auf dieser Etage - 0 vor der Freischaltung, hoechstens 1.</summary>
-        public static float Power(int floor)
-            => IsUnlocked(floor) ? Mathf.Min(1f, StartPower + (floor - UnlockFloor) * PowerPerFloor) : 0f;
+        /// <param name="startPower">Staerke bei der Freischaltung - das Prestige kann sie anheben.</param>
+        public static float Power(int floor, int unlockFloor = UnlockFloor, float startPower = StartPower)
+            => IsUnlocked(floor, unlockFloor)
+                ? Mathf.Min(1f, startPower + (floor - unlockFloor) * PowerPerFloor)
+                : 0f;
 
         /// <summary>Die erste Etage, auf der die Ultimate mit voller Staerke wirkt.</summary>
         public static int FullPowerFloor

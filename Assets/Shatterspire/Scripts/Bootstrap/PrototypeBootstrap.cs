@@ -163,15 +163,15 @@ namespace Shatterspire
 
             var meta = MetaSaveSystem.Load();
             build.ConfigureRun(config.Hero, config, meta);
-            // Heldenstufe: der Aufschlag gilt nur fuer diesen Helden und nur auf sein Grundleben,
+            // Prestige: der Aufschlag gilt nur fuer diesen Helden und nur auf sein Grundleben,
             // nicht auf die gemeinsamen Meta-Upgrades - sonst multiplizierten sich zwei Systeme.
-            var heroLevel = MetaSaveSystem.HeroLevel(meta, config.Hero);
-            var baseHealth = HeroCatalog.BaseHealth(config.Hero) * (1f + HeroProgress.HealthBonus(heroLevel));
+            var prestige = MetaSaveSystem.PrestigeStep(meta, config.Hero);
+            var baseHealth = HeroCatalog.BaseHealth(config.Hero) * (1f + HeroPrestige.HealthBonus(prestige));
             health.Configure(TeamId.Player, baseHealth + meta.vitalityLevel * 5f);
-            if (heroLevel > 1)
-                Debug.Log($"SHATTERSPIRE Heldenstufe: {config.Hero} auf {heroLevel}, "
-                          + $"+{HeroProgress.HealthBonus(heroLevel):P0} Leben, "
-                          + $"+{HeroProgress.DamageBonus(heroLevel):P0} Schaden.");
+            if (prestige > 0)
+                Debug.Log($"SHATTERSPIRE Prestige: {config.Hero} auf Schritt {prestige}, "
+                          + $"+{HeroPrestige.HealthBonus(prestige):P0} Leben, "
+                          + $"+{HeroPrestige.DamageBonus(prestige):P0} Schaden.");
             return root;
         }
 

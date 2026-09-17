@@ -96,10 +96,16 @@ namespace Shatterspire
         private bool captureUltimate;
 
         /// <summary>Ist die Ultimate auf dieser Etage schon verdient? Siehe UltimateProgression.</summary>
-        public bool UltimateUnlocked => captureUltimate || UltimateProgression.IsUnlocked(currentFloor);
+        public bool UltimateUnlocked => captureUltimate || UltimateProgression.IsUnlocked(currentFloor, UltimateUnlockFloor);
+
+        /// <summary>Ab welcher Etage die Ultimate da ist - ein Veteran bekommt sie eine Etage frueher.</summary>
+        public int UltimateUnlockFloor => HeroPrestige.UltimateUnlockFloor(build ? build.PrestigeStep : 0);
 
         /// <summary>Wie stark die Ultimate gerade wirkt, 0 bis 1.</summary>
-        public float UltimatePower => captureUltimate ? 1f : UltimateProgression.Power(currentFloor);
+        public float UltimatePower => captureUltimate
+            ? 1f
+            : UltimateProgression.Power(currentFloor, UltimateUnlockFloor,
+                HeroPrestige.UltimateStartPower(build ? build.PrestigeStep : 0));
 
         /// <summary>Wird bei jedem Etagenwechsel gerufen.</summary>
         public void SetFloor(int floor)

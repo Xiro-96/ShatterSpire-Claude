@@ -633,7 +633,7 @@ namespace Shatterspire
                 // Gesperrt: kein Fuellstand, der nie steigt, sondern die Etage, ab der es sie gibt.
                 ultimateButton.Progress.fillAmount = 0f;
                 ultimateButton.Cooldown.fillAmount = 1f;
-                ultimateButton.Center.text = Loc.T("FLOOR") + " " + UltimateProgression.UnlockFloor;
+                ultimateButton.Center.text = Loc.T("FLOOR") + " " + weapon.UltimateUnlockFloor;
                 ultimateButton.Status.text = Loc.T("LOCKED");
                 ultimateWasUnlocked = false;
             }
@@ -709,7 +709,7 @@ namespace Shatterspire
         {
             if (!modal || modalButtons.Count == 0) return;
 
-            for (var i = 0; i < Mathf.Min(3, modalButtons.Count); i++)
+            for (var i = 0; i < Mathf.Min(4, modalButtons.Count); i++)
             {
                 var alphaKey = (KeyCode)((int)KeyCode.Alpha1 + i);
                 var keypadKey = (KeyCode)((int)KeyCode.Keypad1 + i);
@@ -1021,12 +1021,16 @@ namespace Shatterspire
         /// auch mit null Gold. Er ist jetzt ein Stand im Aufzugsraum, an dem man vorbeikommt:
         /// eine Entscheidung statt einer Unterbrechung.
         /// </summary>
-        public void ShowFloorUpgrade(Action afterSelection)
+        /// <param name="heading">Ueberschrift statt "Etage geschafft" - etwa fuer die Wahl zu Laufbeginn.</param>
+        public void ShowFloorUpgrade(Action afterSelection, string heading = null)
         {
             postPerkCallback = afterSelection;
             selectingLevelPerk = false;
+            perkHeading = heading;
             ShowPerkChoice();
         }
+
+        private string perkHeading;
 
         /// <summary>
         /// Oeffnet den Haendler von aussen - vom Stand im Aufzugsraum. Gibt false zurueck, wenn
@@ -1123,6 +1127,7 @@ namespace Shatterspire
         {
             if (modal) return;
             selectingLevelPerk = true;
+            perkHeading = null;
             ShowPerkChoice();
         }
 
@@ -1132,12 +1137,14 @@ namespace Shatterspire
             Time.timeScale = 0f;
             openModal = ModalKind.Perk;
             modal = CreateModal(
-                $"{Loc.T(selectingLevelPerk ? "LEVEL UP" : "FLOOR CLEARED")} · {Loc.T("CHOOSE AN UPGRADE")}",
+                $"{Loc.T(perkHeading ?? (selectingLevelPerk ? "LEVEL UP" : "FLOOR CLEARED"))} · {Loc.T("CHOOSE AN UPGRADE")}",
                 Loc.T("EVERY UPGRADE CHANGES ONE OF YOUR ACTIONS"));
             var hero = runConfig.Hero;
             // Das Upgrade wirkt ab der naechsten Etage - dort muss die Ultimate schon da sein.
-            var choices = PerkCatalog.RollThree(hero, new HashSet<PerkId>(build.Perks), perkRandom,
-                currentFloor, build, UltimateProgression.IsUnlocked(currentFloor + 1));
+            // Wie viele Karten, sagt das Prestige: ein Meister waehlt aus vier.
+            var choices = PerkCatalog.RollChoices(hero, new HashSet<PerkId>(build.Perks), perkRandom,
+                currentFloor, build, weapon.UltimateUnlockFloor <= currentFloor + 1,
+                HeroPrestige.UpgradeChoices(build.PrestigeStep));
             for (var i = 0; i < choices.Count; i++)
             {
                 var perk = choices[i];
@@ -1153,7 +1160,7 @@ namespace Shatterspire
                             + (string.IsNullOrEmpty(meaning) ? string.Empty : "  " + meaning);
                 var button = CreateButton(modal.transform,
                     $"[{i + 1}]  {PerkCatalog.SlotLabel(perk.Slot, hero)}\n{title}\n\n{Loc.T(perk.Description)}\n\n{rarity}",
-                    new Vector2(-390f + i * 390f, -20f), new Vector2(340f, 420f), perk.Color);
+                    new Vector2((i - (choices.Count - 1) * 0.5f) * 390f, -20f), new Vector2(340f, 420f), perk.Color);
                 button.onClick.AddListener(() =>
                 {
                     Sfx.Play2D(Sound.UiConfirm);
@@ -1179,6 +1186,7 @@ namespace Shatterspire
                 return;
             }
             selectingLevelPerk = false;
+            perkHeading = null;
             var callback = postPerkCallback;
             postPerkCallback = null;
             callback?.Invoke();
@@ -1304,7 +1312,7 @@ namespace Shatterspire
         }
 
         public void ShowRunEnd(bool victory, int earned, MetaSaveData save, int roomsCleared,
-            ClimbResult result, int score, int rankPoints, RunMode? unlockedPath = null)
+            ClimbResult result, int score, int rankPoints, RunMode? unlockedPath = null, int badges = 0)
         {
             if (modal) Destroy(modal);
             if (Camera.main)
@@ -1381,14 +1389,14 @@ namespace Shatterspire
                 26, TextAnchor.MiddleCenter, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.one);
             // Was der Lauf dem gespielten Helden gebracht hat. Steht neben der Kasse, weil es
             // dieselbe Frage beantwortet: was bleibt davon.
-            var heroExperience = MetaSaveSystem.HeroExperience(save, runConfig.Hero);
-            var heroLevel = HeroProgress.LevelFor(heroExperience);
-            var gained = HeroProgress.ExperienceFor(result);
+            var prestige = MetaSaveSystem.PrestigeStep(save, runConfig.Hero);
+            var rank = Loc.T(HeroPrestige.RankName(prestige))
+                       + (HeroPrestige.SubStep(prestige) > 0 ? " " + HeroPrestige.SubStep(prestige) : string.Empty);
             CreateText(walletPanel.transform,
-                $"{HeroCatalog.Name(runConfig.Hero)}  ·  {Loc.T("HERO LEVEL")} {heroLevel}"
-                + $"  ·  {Loc.T(HeroProgress.Title(heroLevel))}  ·  +{gained:N0} {Loc.T("XP")}",
+                $"{HeroCatalog.Name(runConfig.Hero)}  ·  {rank}  ·  +{badges} {Loc.T("BADGES")}"
+                + $"  ·  {Loc.T("YOU HAVE")} {MetaSaveSystem.Badges(save, runConfig.Hero)}",
                 20, TextAnchor.MiddleCenter, new Vector2(0, -34), new Vector2(1010, 28),
-                new Vector2(0.5f, 0.5f)).color = HeroProgress.TitleColor(heroLevel);
+                new Vector2(0.5f, 0.5f)).color = HeroPrestige.RankColor(prestige);
             var restart = CreateButton(modal.transform, Loc.T("CLIMB AGAIN"), new Vector2(225, -225), new Vector2(360, 96), new Color(0.1f, 0.86f, 0.72f));
             restart.onClick.AddListener(RestartRun);
             modalButtons.Add(restart);

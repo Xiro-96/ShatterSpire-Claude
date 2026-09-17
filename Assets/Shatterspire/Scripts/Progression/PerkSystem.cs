@@ -258,7 +258,13 @@ namespace Shatterspire
         /// </param>
         public static List<PerkDefinition> RollThree(HeroClassId hero, ICollection<PerkId> owned,
             System.Random random, int floor, PlayerBuild build, bool ultimateUnlocked = true)
+            => RollChoices(hero, owned, random, floor, build, ultimateUnlocked, 3);
+
+        /// <param name="count">Wie viele Karten - drei, ein Meister bekommt vier.</param>
+        public static List<PerkDefinition> RollChoices(HeroClassId hero, ICollection<PerkId> owned,
+            System.Random random, int floor, PlayerBuild build, bool ultimateUnlocked, int count)
         {
+            count = Mathf.Max(1, count);
             random ??= new System.Random();
             var available = All.Where(perk => perk.AvailableFor(hero)
                                               && (ultimateUnlocked || perk.Slot != ActionSlot.Ultimate)).ToList();
@@ -270,22 +276,22 @@ namespace Shatterspire
                 return build.Rank(perk.Id) >= perk.MaximumRank;
             }
             var fresh = Shuffle(available.Where(perk => !Exhausted(perk)).ToList(), random, floor, build);
-            var result = new List<PerkDefinition>(3);
+            var result = new List<PerkDefinition>(count);
 
             foreach (var perk in fresh)
             {
-                if (result.Count >= 3) break;
+                if (result.Count >= count) break;
                 if (result.Any(chosen => chosen.Slot == perk.Slot)) continue;
                 result.Add(perk);
             }
             foreach (var perk in fresh)
             {
-                if (result.Count >= 3) break;
+                if (result.Count >= count) break;
                 if (!result.Contains(perk)) result.Add(perk);
             }
             foreach (var perk in Shuffle(available, random, floor, build))
             {
-                if (result.Count >= 3) break;
+                if (result.Count >= count) break;
                 if (!result.Contains(perk)) result.Add(perk);
             }
             return result;
@@ -387,6 +393,9 @@ namespace Shatterspire
         public bool HasPhantomEdge { get; private set; }
         public bool HasSteadyHeart { get; private set; }
         public bool HasOverflow { get; private set; }
+
+        /// <summary>Prestige-Schritt des Helden in diesem Lauf. Siehe HeroPrestige.</summary>
+        public int PrestigeStep { get; private set; }
 
         /// <summary>Die Etage, auf der gekaempft wird. Das Kriegsbanner waechst mit ihr.</summary>
         public void SetClimbFloor(int floor) => climbFloor = Mathf.Max(1, floor);
@@ -509,7 +518,11 @@ namespace Shatterspire
             HeroClass = hero;
             // Die Stufe dieses Helden. Multiplikativ neben den gemeinsamen Meta-Upgrades: das eine
             // kommt vom Spieler, das andere vom Helden, und beides soll sich zaehlen lassen.
-            storedDamageMultiplier *= 1f + HeroProgress.DamageBonus(MetaSaveSystem.HeroLevel(meta, hero));
+            // Prestige dieses Helden, beim Schmied gekauft. Multiplikativ neben den gemeinsamen
+            // Meta-Upgrades: das eine gehoert dem Helden, das andere dem Spieler.
+            PrestigeStep = MetaSaveSystem.PrestigeStep(meta, hero);
+            storedDamageMultiplier *= 1f + HeroPrestige.DamageBonus(PrestigeStep);
+            ExtraDashCharges += HeroPrestige.ExtraDashCharges(PrestigeStep);
             storedDamageMultiplier *= 1f + Mathf.Clamp(meta?.mightLevel ?? 0, 0, 10) * 0.04f;
             storedMoveSpeedMultiplier *= 1f + Mathf.Clamp(meta?.agilityLevel ?? 0, 0, 10) * 0.02f;
             if (config == null) return;

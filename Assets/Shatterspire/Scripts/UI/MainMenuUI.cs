@@ -183,38 +183,34 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// Stufe, Rang und Fortschritt dieses Helden.
-        ///
-        /// Der dauerhafte Fortschritt war bisher gemeinsam: wer den Waechter spielte, machte damit
-        /// auch den Jaeger staerker. Hier steht, was dieser eine Held bisher erreicht hat - und was
-        /// ihm bis zur naechsten Stufe fehlt.
+        /// Prestige dieses Helden in der Lobby: Rang, was er bringt, und was der naechste Schritt beim
+        /// Schmied kostet. Vorher stand hier eine Stufe, die von selbst stieg - jetzt steht hier, was
+        /// man sich als Naechstes kaufen kann.
         /// </summary>
         private void BuildHeroLevel(HeroClassId hero)
         {
-            var experience = MetaSaveSystem.HeroExperience(MetaSaveSystem.Load(), hero);
-            var level = HeroProgress.LevelFor(experience);
-            var titleColor = HeroProgress.TitleColor(level);
+            var save = MetaSaveSystem.Load();
+            var step = MetaSaveSystem.PrestigeStep(save, hero);
+            var color = HeroPrestige.RankColor(step);
 
             var line = Text(screen.transform,
-                $"{Loc.T("HERO LEVEL")} {level}  ·  {Loc.T(HeroProgress.Title(level))}",
+                step > 0 ? RankLabel(step) + "  ·  " + PrestigeBonus(step) : RankLabel(step),
                 20, TextAnchor.UpperLeft, new Vector2(58, -378), new Vector2(560, 28), new Vector2(0, 1));
-            line.color = titleColor;
+            line.color = color;
             line.fontStyle = FontStyle.Bold;
 
-            var barBack = CreateImage(screen.transform, "Hero Level Bar", new Color(0.06f, 0.09f, 0.14f, 0.95f),
+            var barBack = CreateImage(screen.transform, "Prestige Bar", new Color(0.06f, 0.09f, 0.14f, 0.95f),
                 new Vector2(58, -404), new Vector2(320, 12), new Vector2(0, 1));
             barBack.raycastTarget = false;
-            var fill = CreateImage(barBack.transform, "Hero Level Fill", titleColor,
-                Vector2.zero, new Vector2(320f * HeroProgress.ProgressInLevel(experience), 12), new Vector2(0, 1));
+            var fill = CreateImage(barBack.transform, "Prestige Fill", color,
+                Vector2.zero, new Vector2(320f * step / HeroPrestige.MaximumStep, 12), new Vector2(0, 1));
             fill.raycastTarget = false;
 
-            var remaining = HeroProgress.ToNextLevel(experience);
-            var hint = level >= HeroProgress.MaximumLevel
-                ? Loc.T("HIGHEST HERO LEVEL")
-                : $"{remaining:N0} {Loc.T("TO NEXT LEVEL")}";
-            if (level > 1)
-                hint += $"   ·   +{HeroProgress.HealthBonus(level):P0} {Loc.T("HP")}"
-                        + $"   +{HeroProgress.DamageBonus(level):P0} {Loc.T("DAMAGE")}";
+            var badges = MetaSaveSystem.Badges(save, hero);
+            var hint = step >= HeroPrestige.MaximumStep
+                ? Loc.T("FULL PRESTIGE")
+                : $"{Loc.T("FORGE")}: {HeroPrestige.ShardCost(step)} {Loc.T("SHARDS")}  ·  "
+                  + $"{HeroPrestige.BadgeCost(step)} {Loc.T("BADGES")}  ·  {Loc.T("YOU HAVE")} {badges}";
             Text(screen.transform, hint, 16, TextAnchor.UpperLeft, new Vector2(58, -420),
                 new Vector2(560, 24), new Vector2(0, 1)).color = new Color(0.62f, 0.72f, 0.84f);
         }
@@ -403,7 +399,15 @@ namespace Shatterspire
             BeginScreen(true);
             backAction = ShowLobby;
             var save = MetaSaveSystem.Load();
-            Header(Loc.T("META FORGE"), Loc.T("SHARDS") + "  " + save.shards.ToString("N0") + "  ·  " + Loc.T("PERMANENT, CAPPED BONUSES"), new Color(1f, 0.55f, 0.08f));
+            var hero = config.Hero;
+            Header(Loc.T("META FORGE"),
+                Loc.T("SHARDS") + "  " + save.shards.ToString("N0") + "  ·  " + HeroCatalog.Name(hero) + "  "
+                + MetaSaveSystem.Badges(save, hero) + " " + Loc.T("BADGES"),
+                new Color(1f, 0.55f, 0.08f));
+            BuildPrestigeCard(save, hero);
+
+            // Die drei gemeinsamen Aufwertungen gelten fuer jeden Helden. Sie ruecken nach unten und
+            // werden flacher - oben steht jetzt, was nur diesem Helden gehoert.
             var upgrades = new[] { MetaUpgradeId.Vitality, MetaUpgradeId.Might, MetaUpgradeId.Agility };
             var names = new[] { "VITAL CORE", "TEMPERED EDGE", "WIND GLYPH" };
             var effects = new[] { "+5 MAX HP / LEVEL", "+4% DAMAGE / LEVEL", "+2% MOVE SPEED / LEVEL" };
@@ -414,16 +418,68 @@ namespace Shatterspire
                 var level = MetaSaveSystem.UpgradeLevel(save, id);
                 var cost = MetaSaveSystem.UpgradeCost(save, id);
                 Action buy = () => { MetaSaveSystem.Purchase(id); ShowForge(); };
-                Button(screen.transform, Loc.T(names[i]) + "\n\n<size=19>" + Loc.T(effects[i]) + "\n\n"
+                Button(screen.transform, Loc.T(names[i]) + "\n<size=18>" + Loc.T(effects[i]) + "\n\n"
                     + Loc.T("LEVEL") + " " + level + " / 10\n"
                     + (level >= 10 ? Loc.T("MAXIMUM") : Loc.T("UPGRADE") + "  " + cost + " " + Loc.T("SHARDS")) + "</size>",
-                    new Vector2(-510 + i * 510, 0), new Vector2(430, 400), new Vector2(0.5f, 0.5f), colors[i], buy);
+                    new Vector2(-510 + i * 510, -120), new Vector2(430, 250), new Vector2(0.5f, 0.5f), colors[i], buy);
                 shortcuts[KeyCode.Alpha1 + i] = buy;
             }
             Button(screen.transform, "BACK TO LOBBY", new Vector2(0, -330), new Vector2(360, 88), new Vector2(0.5f, 0.5f),
                 new Color(0.34f, 0.42f, 0.52f), ShowLobby);
             shortcuts[KeyCode.F] = ShowLobby;
         }
+
+        /// <summary>
+        /// Das Prestige des gewaehlten Helden: wo er steht, was der naechste Schritt kostet, und was
+        /// der naechste volle Rang freischaltet. Wie in R.I.S.E. bezahlt mit Splittern und den
+        /// Abzeichen dieses Helden - die gibt es nur an den Boss-Etagen, und nur fuer ihn.
+        /// </summary>
+        private void BuildPrestigeCard(MetaSaveData save, HeroClassId hero)
+        {
+            var step = MetaSaveSystem.PrestigeStep(save, hero);
+            var maxed = step >= HeroPrestige.MaximumStep;
+            var affordable = MetaSaveSystem.CanBuyPrestige(save, hero);
+            var label = new System.Text.StringBuilder();
+            label.Append(Loc.T("PRESTIGE")).Append("  ·  ").Append(HeroCatalog.Name(hero)).Append("  ·  ")
+                .Append(RankLabel(step)).Append("\n<size=19>")
+                .Append(PrestigeBonus(step)).Append("</size>\n<size=19>");
+            if (maxed)
+            {
+                label.Append(Loc.T("FULL PRESTIGE"));
+            }
+            else
+            {
+                label.Append(Loc.T("NEXT STEP")).Append("  ·  ")
+                    .Append(HeroPrestige.ShardCost(step)).Append(' ').Append(Loc.T("SHARDS")).Append("  ·  ")
+                    .Append(HeroPrestige.BadgeCost(step)).Append(' ').Append(Loc.T("BADGES"));
+                if (!affordable) label.Append("  ·  ").Append(Loc.T("NOT ENOUGH"));
+            }
+            label.Append("</size>");
+            var next = HeroPrestige.NextUnlockStep(step);
+            if (next > 0)
+                label.Append("\n<size=17>").Append(RankLabel(next)).Append(":  ")
+                    .Append(Loc.T(HeroPrestige.UnlockAt(next))).Append("</size>");
+
+            Action buy = () =>
+            {
+                if (MetaSaveSystem.PurchasePrestige(hero)) ShowForge();
+            };
+            Button(screen.transform, label.ToString(), new Vector2(0, 170), new Vector2(1450, 200),
+                new Vector2(0.5f, 0.5f), HeroPrestige.RankColor(step), buy, affordable, 24);
+            shortcuts[KeyCode.Alpha4] = buy;
+            shortcuts[KeyCode.P] = buy;
+        }
+
+        /// <summary>"VETERAN 3" - Rang und Stufe darin. Der frische Held ist nur "NOVICE".</summary>
+        private static string RankLabel(int step)
+            => Loc.T(HeroPrestige.RankName(step))
+               + (HeroPrestige.SubStep(step) > 0 ? " " + HeroPrestige.SubStep(step) : string.Empty);
+
+        private static string PrestigeBonus(int step)
+            => step <= 0
+                ? Loc.T("NO PRESTIGE YET")
+                : $"+{Mathf.RoundToInt(HeroPrestige.HealthBonus(step) * 100f)}% {Loc.T("HP")}  ·  "
+                  + $"+{Mathf.RoundToInt(HeroPrestige.DamageBonus(step) * 100f)}% {Loc.T("DAMAGE")}";
 
         private void BeginRun()
         {
