@@ -12,6 +12,11 @@ namespace Shatterspire
         bool HeavyPressed { get; }
         bool HeavyReleased { get; }
         bool DashPressed { get; }
+        /// <summary>
+        /// Niemand richtet von Hand, aber es wird angegriffen: die Waffe soll selbst ein Ziel
+        /// waehlen. Die Richtung in AimPoint ist dann nur ein Hinweis, keine Absicht.
+        /// </summary>
+        bool AutoAim { get; }
         /// <summary>Die Faehigkeit wird gehalten und damit gezielt.</summary>
         bool SkillHeld { get; }
         /// <summary>Die Faehigkeit wurde losgelassen - jetzt loest sie aus.</summary>
@@ -32,6 +37,7 @@ namespace Shatterspire
         public bool HeavyPressed { get; private set; }
         public bool HeavyReleased { get; private set; }
         public bool DashPressed { get; private set; }
+        public bool AutoAim { get; private set; }
         public bool SkillHeld { get; private set; }
         public bool SkillReleased { get; private set; }
         public bool UltimateHeld { get; private set; }
@@ -103,14 +109,6 @@ namespace Shatterspire
         /// </summary>
         public static bool AimAssist = true;
         /// <summary>
-        /// Bis zu diesem Winkel darf die Zielhilfe eine von Hand gewaehlte Richtung verschieben.
-        /// Stand auf 16 Grad. Das war zu wenig: wer mit dem Daumen grob in die richtige Ecke zeigt,
-        /// liegt schnell 25 Grad daneben, und dann ging der Schuss ins Leere.
-        /// </summary>
-        private const float AimAssistDegrees = 30f;
-        /// <summary>Wie weit das Selbstzielen sucht, wenn niemand von Hand richtet.</summary>
-        private const float AutoAimRange = 18f;
-        /// <summary>
         /// Ab dieser Auslenkung gilt der Zielstick als bewusst gerichtet.
         ///
         /// Vorher zaehlte jede Auslenkung ueber der Totzone von 0,14 als Zielen. Auf dem Telefon
@@ -151,6 +149,7 @@ namespace Shatterspire
             UltimateReleased = Input.GetKeyUp(KeyCode.R) || MobileInput.ConsumeUltimateReleased()
                                || Consume(ref scriptedUltimateFrames);
 
+            AutoAim = false;
             if (worldCamera && !Application.isMobilePlatform && Input.touchCount == 0)
             {
                 var ray = worldCamera.ScreenPointToRay(Input.mousePosition);
@@ -191,16 +190,16 @@ namespace Shatterspire
             if (stick.sqrMagnitude > 0.0004f)
             {
                 aimDirection = new Vector3(stick.x, 0f, stick.y).normalized;
-                return AimAssist ? SnapToTarget(aimDirection, AimAssistDegrees) : aimDirection;
+                return aimDirection;
             }
 
-            if (Attacking)
+            // Angriff ohne Richten: die Waffe waehlt das Ziel. Frueher tat das die Eingabe selbst,
+            // mit eigenen Regeln - und die Waffe waehlte danach noch einmal, mit anderen. Koerper,
+            // Linie und Schuss zeigten dadurch auf drei verschiedene Stellen.
+            if (Attacking && AimAssist)
             {
-                // Volles Selbstzielen, ohne Winkelgrenze: hier hat niemand eine Richtung gemeint,
-                // die man verfehlen koennte.
-                var snapped = SnapToTarget(aimDirection, 180f);
-                aimDirection = snapped;
-                return snapped;
+                AutoAim = true;
+                return aimDirection;
             }
 
             if (Move.sqrMagnitude > 0.02f) aimDirection = new Vector3(Move.x, 0f, Move.y).normalized;
@@ -216,18 +215,13 @@ namespace Shatterspire
                                   || MobileInput.UltimateHeld || MobileInput.Heavy || ScriptedAttack;
 
         /// <summary>
-        /// Zieht eine Richtung auf den besten Gegner, aber hoechstens um <paramref name="degrees"/>.
-        /// Ohne Gegner bleibt die Richtung, wie sie war.
+        /// Uebernimmt die Richtung, die die Waffe tatsaechlich schiesst. So setzt ein spaeteres
+        /// Selbstzielen dort an, wo der letzte Schuss hinging, statt bei einer alten Stickrichtung.
         /// </summary>
-        private Vector3 SnapToTarget(Vector3 direction, float degrees)
+        public void Follow(Vector3 direction)
         {
-            var target = Targeting.FindBestAutoAim(transform.position, direction, AutoAimRange, TeamId.Enemy);
-            if (!target) return direction;
-            var toTarget = target.transform.position - transform.position;
-            toTarget.y = 0f;
-            if (toTarget.sqrMagnitude < 0.04f) return direction;
-            toTarget.Normalize();
-            return Vector3.Angle(direction, toTarget) <= degrees ? toTarget : direction;
+            direction.y = 0f;
+            if (direction.sqrMagnitude > 0.01f) aimDirection = direction.normalized;
         }
     }
 

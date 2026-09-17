@@ -42,7 +42,51 @@ namespace Shatterspire
             return predicted;
         }
 
-        public static Health FindBestAutoAim(Vector3 point, Vector3 forward, float radius, TeamId team)
+        /// <summary>
+        /// Wie gut sich ein Gegner als Ziel des Selbstzielens eignet - kleiner ist besser.
+        ///
+        /// Steht als eigene Funktion, weil zwei Stellen dieselbe Frage stellen: welches Ziel ist das
+        /// beste, und ist ein neues deutlich besser als das bisherige. Zwei getrennte Rechnungen
+        /// haetten frueher oder spaeter zwei verschiedene Antworten gegeben.
+        /// </summary>
+        /// <param name="facingWeight">
+        /// Aufschlag je Grad Abweichung von <paramref name="forward"/>. Beim reinen Selbstzielen
+        /// klein: wer rueckwaerts vor einem Gegner flieht, soll ihn treffen und nicht einen, der
+        /// zufaellig in Laufrichtung steht.
+        /// </param>
+        public static float AutoAimScore(Vector3 point, Vector3 forward, Health candidate,
+            float facingWeight = 0.055f)
+        {
+            var delta = candidate.transform.position - point;
+            delta.y = 0f;
+            var distance = delta.magnitude;
+            forward.y = 0f;
+            var facingPenalty = delta.sqrMagnitude > 0.01f && forward.sqrMagnitude > 0.01f
+                ? Vector3.Angle(forward, delta) * facingWeight
+                : 0f;
+            var agent = candidate.GetComponent<EnemyAgent>();
+            var priority = agent && EnemyKinds.IsBoss(agent.Kind) ? -7f
+                : agent && agent.Kind == EnemyKind.Elite ? -3.5f
+                // Armbruster zuerst: er ist das Ziel, das aus der Entfernung wehtut.
+                : agent && agent.Kind == EnemyKind.Marksman ? -2.4f
+                // Der Schildtraeger steht vorn und faengt sonst jede Zielhilfe ab, obwohl
+                // Treffer auf seine Deckung fast nichts bringen.
+                : agent && agent.Kind == EnemyKind.Shieldbearer ? 2.6f : 0f;
+            return distance + facingPenalty + priority;
+        }
+
+        /// <summary>Ist dieser Gegner ueberhaupt ein Ziel? Tot, verbuendet oder noch im Auftauchen: nein.</summary>
+        public static bool IsTargetable(Health candidate, TeamId team)
+        {
+            if (!candidate || !candidate.IsAlive || candidate.Team != team) return false;
+            var agent = candidate.GetComponent<EnemyAgent>();
+            // Wer noch auftaucht, ist kein Ziel - vorher waehlte das Selbstzielen ihn trotzdem, die
+            // Zielhilfe der Waffe verwarf ihn, und der Schuss ging ins Leere.
+            return !(agent && agent.IsArriving);
+        }
+
+        public static Health FindBestAutoAim(Vector3 point, Vector3 forward, float radius, TeamId team,
+            float facingWeight = 0.055f)
         {
             Health best = null;
             var bestScore = float.MaxValue;
@@ -50,21 +94,11 @@ namespace Shatterspire
             for (var i = 0; i < active.Count; i++)
             {
                 var candidate = active[i];
-                if (!candidate || !candidate.IsAlive || candidate.Team != team) continue;
+                if (!IsTargetable(candidate, team)) continue;
                 var delta = candidate.transform.position - point;
                 delta.y = 0f;
-                var distance = delta.magnitude;
-                if (distance > radius) continue;
-                var facingPenalty = delta.sqrMagnitude > 0.01f ? Vector3.Angle(forward, delta) * 0.055f : 0f;
-                var agent = candidate.GetComponent<EnemyAgent>();
-                var priority = agent && EnemyKinds.IsBoss(agent.Kind) ? -7f
-                    : agent && agent.Kind == EnemyKind.Elite ? -3.5f
-                    // Armbruster zuerst: er ist das Ziel, das aus der Entfernung wehtut.
-                    : agent && agent.Kind == EnemyKind.Marksman ? -2.4f
-                    // Der Schildtraeger steht vorn und faengt sonst jede Zielhilfe ab, obwohl
-                    // Treffer auf seine Deckung fast nichts bringen.
-                    : agent && agent.Kind == EnemyKind.Shieldbearer ? 2.6f : 0f;
-                var score = distance + facingPenalty + priority;
+                if (delta.magnitude > radius) continue;
+                var score = AutoAimScore(point, forward, candidate, facingWeight);
                 if (score >= bestScore) continue;
                 bestScore = score;
                 best = candidate;

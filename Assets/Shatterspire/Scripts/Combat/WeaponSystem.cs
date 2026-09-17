@@ -133,8 +133,8 @@ namespace Shatterspire
         private void Update()
         {
             if (!health.IsAlive || Time.timeScale <= 0f) return;
+            ResolveAim();
             UpdateHeavyAttack();
-            UpdateTargetLock();
             // Angriffswunsch kurz merken: ein schneller Tipp auf dem Telefon fiel bisher unter den
             // Tisch, wenn er in die Abklingzeit fiel. Jetzt loest er aus, sobald sie endet.
             if (input.AttackHeld) attackRequestedAt = Time.time;
@@ -231,7 +231,7 @@ namespace Shatterspire
             }
             if (!chargingHeavy) return;
             heavyCharge = Mathf.Min(HeavyChargeSeconds, heavyCharge + Time.deltaTime);
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(FlatAimDirection()), 28f * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(aimDirection), 28f * Time.deltaTime);
             PublishHeavyState();
             if (input.HeavyReleased || heavyCharge >= HeavyChargeSeconds) ReleaseHeavyAttack();
         }
@@ -245,6 +245,9 @@ namespace Shatterspire
             lightComboStep = lightComboStep % 3 + 1;
             var finisher = lightComboStep == 3;
             var direction = AcquireAttackDirection();
+            // Die Figur steht im Moment des Schusses genau in Schussrichtung - sonst sitzt die
+            // Muendung noch am alten Winkel, und Pfeil und Linie laufen nebeneinander her.
+            FaceNow(direction);
 
             if (heroClass == HeroClassId.Guardian)
             {
@@ -898,7 +901,7 @@ namespace Shatterspire
                 for (var pulse = 0; pulse < pulses; pulse++)
                 {
                     if (lingering)
-                        center = Vector3.MoveTowards(center, transform.position + FlatAimDirection() * 5.5f, 1.8f);
+                        center = Vector3.MoveTowards(center, transform.position + aimDirection * 5.5f, 1.8f);
                     Strike(center, 4.2f, BaseDamage * 1.15f * build.DamageMultiplier, type);
                     PrototypeVfx.SpawnShockwave(center, 4.5f, HeroCatalog.Accent(heroClass));
                     yield return new WaitForSeconds(0.22f);
@@ -1082,7 +1085,7 @@ namespace Shatterspire
                 for (var i = 0; i < 5; i++)
                     FireProjectile(Quaternion.Euler(0f, Mathf.Lerp(-24f, 24f, i / 4f), 0f) * aim, BaseDamage * 0.8f,
                         false, build.Pierces, build.Ricochets, 0.95f, 0f, 0f);
-                PrototypeVfx.SpawnMuzzle(MuzzlePosition(), aim);
+                PrototypeVfx.SpawnMuzzle(ShotOrigin(aim), aim);
             }
             if (heroClass == HeroClassId.Bomber && build.Has(PerkId.BomberSmokeStep))
                 TimedBomb.Throw(origin + Vector3.up * 0.5f, origin, 0.1f, 0.7f, 2.4f,
@@ -1230,7 +1233,7 @@ namespace Shatterspire
             for (var i = 0; i < count; i++)
             {
                 var spread = count == 1 ? 0f : Mathf.Lerp(-4f, 4f, i / (float)(count - 1));
-                Projectile.Spawn(MuzzlePosition(), Quaternion.Euler(0f, spread, 0f) * direction, new Projectile.Payload
+                Projectile.Spawn(ShotOrigin(direction), Quaternion.Euler(0f, spread, 0f) * direction, new Projectile.Payload
                 {
                     Owner = gameObject,
                     TargetTeam = TeamId.Enemy,
@@ -1254,7 +1257,7 @@ namespace Shatterspire
         /// <summary>Muendungsblitz plus Bewegung: Rex schiesst, Orion wirft einen Zauber.</summary>
         private void PulseShot(float strength)
         {
-            PrototypeVfx.SpawnMuzzle(MuzzlePosition(), transform.forward);
+            PrototypeVfx.SpawnMuzzle(ShotOrigin(aimDirection), aimDirection);
             motion?.PlayMotion(heroClass == HeroClassId.Arcanist ? AttackMotion.Cast : AttackMotion.Shot, strength);
         }
 
@@ -1271,37 +1274,148 @@ namespace Shatterspire
         /// <summary>Geschwindigkeit der Geschosse. Muss zu Projectile.Spawn passen.</summary>
         private const float ProjectileSpeed = 22f;
 
-        private Vector3 AcquireAttackDirection()
+        /// <summary>Die in diesem Bild entschiedene Richtung. Siehe ResolveAim.</summary>
+        private Vector3 AcquireAttackDirection() => aimDirection;
+
+        // ── Zielrichtung ────────────────────────────────────────────────────
+
+        /// <summary>Wie weit das Selbstzielen sucht.</summary>
+        private const float AutoAimRange = 18f;
+
+        /// <summary>
+        /// Gewicht der Blickrichtung beim Selbstzielen. Klein, damit Rueckwaertslaufen den Gegner
+        /// hinter einem trifft; 180 Grad Abweichung kosten so nur gut zwei Einheiten.
+        /// </summary>
+        private const float AutoAimFacingWeight = 0.012f;
+
+        /// <summary>Um so viel muss ein neues Ziel beim Selbstzielen besser sein, damit gewechselt wird.</summary>
+        private const float AutoSwitchMargin = 2f;
+
+        /// <summary>Um so viele Grad naeher an der Stickrichtung muss ein neues Ziel beim Richten liegen.</summary>
+        private const float ManualSwitchDegrees = 6f;
+
+        /// <summary>So lange nach dem letzten Angriff schaut die Figur noch in Schussrichtung.</summary>
+        private const float EngageHoldSeconds = 0.4f;
+
+        private Vector3 aimDirection = Vector3.forward;
+        private float engagedUntil;
+
+        /// <summary>
+        /// Die eine Richtung, in die in diesem Bild geschossen wird. Koerper, Zielanzeige und Schuss
+        /// lesen alle diesen Wert.
+        ///
+        /// Vorher gab es drei: der Koerper folgte der Eingabe, die mit eigenen Regeln ein Ziel
+        /// suchte, ohne Vorhalten; die Linie folgte der Waffe, die danach noch einmal suchte, mit
+        /// anderen Regeln und mit Vorhalten; und der Pfeil startete an einer Muendung, die am
+        /// nachhaengenden Koerper sass. Drei Stellen, drei Richtungen - "Linie und Schuss sind nicht
+        /// synchron".
+        /// </summary>
+        public Vector3 AimDirection => aimDirection;
+
+        /// <summary>Soll die Figur gerade zur Schussrichtung schauen statt in Laufrichtung?</summary>
+        public bool AimEngaged => Time.time < engagedUntil;
+
+        /// <summary>
+        /// Entscheidet Ziel und Richtung fuer dieses Bild. Genau einmal je Bild, am Anfang von Update.
+        /// </summary>
+        private void ResolveAim()
         {
-            UpdateTargetLock();
-            if (lockedTarget)
-            {
-                var aimAt = lockedTarget.transform.position;
-                // Auf ein laufendes Ziel muss vorgehalten werden, sonst geht der Pfeil hinterher.
-                // Nur fuer Geschosse: ein Hieb trifft dort, wo der Gegner jetzt steht.
-                if (heroClass is HeroClassId.Ranger or HeroClassId.Arcanist)
-                {
-                    var agent = lockedTarget.GetComponent<EnemyAgent>();
-                    if (agent) aimAt = Targeting.PredictIntercept(transform.position, aimAt,
-                        agent.Velocity, ProjectileSpeed);
-                }
-                var direction = aimAt - transform.position;
-                direction.y = 0f;
-                if (direction.sqrMagnitude > 0.05f) return direction.normalized;
-            }
-            return FlatAimDirection();
+            var manual = FlatAimDirection();
+            var auto = input.AutoAim;
+            lockedTarget = ChooseTarget(manual, auto);
+            targetIndicator?.SetTarget(lockedTarget);
+            aimDirection = lockedTarget ? DirectionTo(lockedTarget) : manual;
+
+            if (input.AttackHeld || input.SkillHeld || input.UltimateHeld || chargingHeavy)
+                engagedUntil = Time.time + EngageHoldSeconds;
+            // Die Eingabe merkt sich, wohin wirklich geschossen wird. Verliert das Selbstzielen sein
+            // Ziel, geht es von dort weiter und nicht von einer alten Stickrichtung.
+            if (auto) input.Follow(aimDirection);
         }
 
         /// <summary>
-        /// Zielhilfe nur in einem schmalen Kegel um die Zielrichtung. Angriffe gehen dorthin, wohin
-        /// gezielt wird; ein Gegner knapp neben der Linie wird noch getroffen, einer seitlich oder
-        /// hinter dem Spieler nie. Siehe Targeting.FindAimAssistTarget.
+        /// Waehlt das Ziel - und behaelt das bisherige, solange kein deutlich besseres da ist. Ohne
+        /// dieses Gedaechtnis sprang das Ziel zwischen zwei fast gleich guten Gegnern bei jedem Bild
+        /// hin und her, und mit ihm die Linie.
         /// </summary>
-        private void UpdateTargetLock()
+        private Health ChooseTarget(Vector3 manual, bool auto)
         {
-            lockedTarget = Targeting.FindAimAssistTarget(transform.position, FlatAimDirection(),
-                AimAssistRange, AimAssistAngle, TeamId.Enemy);
-            targetIndicator?.SetTarget(lockedTarget);
+            var best = auto
+                ? Targeting.FindBestAutoAim(transform.position, aimDirection, AutoAimRange, TeamId.Enemy,
+                    AutoAimFacingWeight)
+                : Targeting.FindAimAssistTarget(transform.position, manual, AimAssistRange, AimAssistAngle,
+                    TeamId.Enemy);
+            var current = lockedTarget;
+            if (!current || !StillLockable(current, manual, auto)) return best;
+            if (!best || best == current) return current;
+            if (auto)
+            {
+                var currentScore = Targeting.AutoAimScore(transform.position, aimDirection, current, AutoAimFacingWeight);
+                var bestScore = Targeting.AutoAimScore(transform.position, aimDirection, best, AutoAimFacingWeight);
+                return bestScore + AutoSwitchMargin < currentScore ? best : current;
+            }
+            return AngleTo(best, manual) + ManualSwitchDegrees < AngleTo(current, manual) ? best : current;
+        }
+
+        private bool StillLockable(Health target, Vector3 manual, bool auto)
+        {
+            if (!Targeting.IsTargetable(target, TeamId.Enemy)) return false;
+            var distance = FlatOffset(target).magnitude;
+            if (auto) return distance <= AutoAimRange + 1.5f;
+            return distance <= AimAssistRange + 1f && AngleTo(target, manual) <= AimAssistAngle + ManualSwitchDegrees;
+        }
+
+        private Vector3 FlatOffset(Health target)
+        {
+            var offset = target.transform.position - transform.position;
+            offset.y = 0f;
+            return offset;
+        }
+
+        private float AngleTo(Health target, Vector3 direction) => Vector3.Angle(direction, FlatOffset(target));
+
+        /// <summary>Richtung auf ein Ziel - fuer Geschosse mit Vorhalten, fuer Hiebe auf die heutige Stelle.</summary>
+        private Vector3 DirectionTo(Health target)
+        {
+            var aimAt = target.transform.position;
+            if (heroClass is HeroClassId.Ranger or HeroClassId.Arcanist)
+            {
+                var agent = target.GetComponent<EnemyAgent>();
+                if (agent) aimAt = Targeting.PredictIntercept(ShotOrigin(FlatOffset(target)), aimAt,
+                    agent.Velocity, ProjectileSpeed);
+            }
+            var direction = aimAt - transform.position;
+            direction.y = 0f;
+            return direction.sqrMagnitude > 0.05f ? direction.normalized : aimDirection;
+        }
+
+        /// <summary>Dreht die Figur ohne Verzoegerung in Schussrichtung - im Moment des Schusses.</summary>
+        private void FaceNow(Vector3 direction)
+        {
+            direction.y = 0f;
+            if (direction.sqrMagnitude < 0.01f) return;
+            transform.rotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+            engagedUntil = Time.time + EngageHoldSeconds;
+        }
+
+        /// <summary>
+        /// Wo ein Geschoss startet: in Hoehe und Abstand der Muendung, aber auf der Schussrichtung
+        /// statt auf der Blickrichtung. So beginnt der Pfeil auf der angezeigten Linie, auch wenn die
+        /// Muendung seitlich an der Figur sitzt.
+        /// </summary>
+        private Vector3 ShotOrigin(Vector3 direction)
+        {
+            var height = 1.05f;
+            var reach = 0.8f;
+            if (muzzle)
+            {
+                var local = muzzle.position - transform.position;
+                height = local.y;
+                reach = new Vector3(local.x, 0f, local.z).magnitude;
+            }
+            direction.y = 0f;
+            var flat = direction.sqrMagnitude > 0.01f ? direction.normalized : transform.forward;
+            return transform.position + Vector3.up * height + flat * reach;
         }
 
         private DamageType ResolveDamageType(DamageType fallback)

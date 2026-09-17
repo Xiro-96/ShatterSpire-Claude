@@ -70,7 +70,9 @@ namespace Shatterspire
         {
             if (!collider) return;
             collider.enabled = false;
-            Object.Destroy(collider);
+            // Ausserhalb des Spiels ist Destroy verboten - Werkzeuge und Tests bauen dieselben Teile.
+            if (Application.isPlaying) Object.Destroy(collider);
+            else Object.DestroyImmediate(collider);
         }
 
         /// <summary>Creates a tiny procedural soft disc or ring for ground decals.</summary>

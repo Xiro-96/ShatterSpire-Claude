@@ -31,6 +31,7 @@ namespace Shatterspire
         private Coroutine lunge;
         private FloorNavigation navigation;
         private HeroClassId heroClass;
+        private WeaponSystem weaponSystem;
         public int DashCharges => dashCharges;
         public float DashRechargeNormalized => dashCharges >= MaxCharges ? 1f : 1f - Mathf.Clamp01((nextRecharge - Time.time) / RechargeSeconds);
         public int MaxDashCharges => MaxCharges;
@@ -81,6 +82,7 @@ namespace Shatterspire
         {
             motor = GetComponent<CharacterController>();
             input = GetComponent<PlayerInputRouter>();
+            weaponSystem = GetComponent<WeaponSystem>();
             build = GetComponent<PlayerBuild>();
             health = GetComponent<Health>();
             dashCharges = MaxCharges;
@@ -120,12 +122,16 @@ namespace Shatterspire
                 acceleration = Vector3.zero;
             }
             if (velocity.sqrMagnitude > 0f) motor.Move(velocity * Time.deltaTime);
-            var aim = input.AimPoint - transform.position;
+            // Im Kampf schaut die Figur dorthin, wohin die Waffe schiesst - dieselbe Richtung, die
+            // auch die Linie zeigt. Ausserhalb des Kampfes dorthin, wohin gezielt oder gelaufen wird.
+            // Vorher folgte der Koerper immer der Eingabe, und die entschied das Ziel anders als die
+            // Waffe: die Figur sah auf einen Gegner und schoss auf einen anderen.
+            var engaged = weaponSystem && weaponSystem.AimEngaged;
+            var aim = engaged ? weaponSystem.AimDirection : input.AimPoint - transform.position;
             aim.y = 0f;
-            // Schneller drehen als vorher: mit Zielstick soll die Figur der Eingabe folgen und nicht
-            // hinterherschwenken. 22 pro Sekunde war bei schnellen Richtungswechseln sichtbar traege.
-            if (aim.sqrMagnitude > 0.1f)
-                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(aim), 30f * Time.deltaTime);
+            if (aim.sqrMagnitude > 0.01f)
+                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(aim),
+                    (engaged ? 45f : 30f) * Time.deltaTime);
         }
 
         /// <summary>

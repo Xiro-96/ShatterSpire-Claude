@@ -132,15 +132,19 @@ namespace Shatterspire
             if (showBand)
             {
                 var width = Mathf.Max(0.35f, aim.Width) * 2f;
-                band.localRotation = Quaternion.Euler(90f, yaw, 0f);
-                // Die Bahn beginnt an der Figur und reicht bis zur Reichweite; der Mittelpunkt liegt
-                // deshalb auf halber Strecke.
-                band.localPosition = Quaternion.Euler(0f, yaw, 0f) * new Vector3(0f, 0.04f, aim.Range * 0.5f);
-                band.localScale = new Vector3(width, aim.Range, 1f);
+                // In Weltkoordinaten, nicht lokal. Die Anzeige haengt an der Figur, und die Figur
+                // dreht sich: ein lokaler Winkel wurde deshalb um ihre Blickrichtung mitgedreht. Wer
+                // nach Osten schaute und nach Osten zielte, bekam eine Linie nach Sueden - Linie und
+                // Schuss liefen auseinander, sobald die Figur nicht zufaellig nach Norden stand.
+                var along = Quaternion.Euler(0f, yaw, 0f);
+                var origin = transform.position;
+                band.rotation = Quaternion.Euler(90f, yaw, 0f);
+                band.position = origin + along * new Vector3(0f, 0.04f, aim.Range * 0.5f);
+                band.localScale = Unscaled(new Vector3(width, aim.Range, 1f));
 
-                head.localRotation = Quaternion.Euler(90f, yaw, 0f);
-                head.localPosition = Quaternion.Euler(0f, yaw, 0f) * new Vector3(0f, 0.05f, aim.Range);
-                head.localScale = new Vector3(width * 1.15f, Mathf.Min(1.2f, aim.Range * 0.18f), 1f);
+                head.rotation = Quaternion.Euler(90f, yaw, 0f);
+                head.position = origin + along * new Vector3(0f, 0.05f, aim.Range);
+                head.localScale = Unscaled(new Vector3(width * 1.15f, Mathf.Min(1.2f, aim.Range * 0.18f), 1f));
             }
 
             if (showCircle)
@@ -150,15 +154,24 @@ namespace Shatterspire
                     : target;
                 ring.position = new Vector3(centre.x, transform.position.y + 0.05f, centre.z);
                 ring.rotation = Quaternion.Euler(90f, 0f, 0f);
-                ring.localScale = Vector3.one * Mathf.Max(0.5f, aim.Width) * 2f;
+                ring.localScale = Unscaled(Vector3.one * Mathf.Max(0.5f, aim.Width) * 2f);
             }
 
             // Ein kleiner Ring um die Figur: er sagt, dass gerade gezielt wird, auch wenn die Bahn
             // gerade hinter einer Wand endet.
-            ownerRing.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            ownerRing.localPosition = new Vector3(0f, 0.04f, 0f);
-            ownerRing.localScale = Vector3.one * 1.9f;
+            ownerRing.rotation = Quaternion.Euler(90f, 0f, 0f);
+            ownerRing.position = transform.position + Vector3.up * 0.04f;
+            ownerRing.localScale = Unscaled(Vector3.one * 1.9f);
         }
+
+        /// <summary>
+        /// Rechnet eine gewuenschte Weltgroesse in eine lokale Skalierung um. Ohne das wuerde eine
+        /// skalierte Figur ihre Zielanzeige mitskalieren, und die Reichweite stimmte nicht mehr.
+        /// Gilt fuer gleichmaessige Skalierung - die Figuren werden nur so skaliert; eine
+        /// ungleichmaessige liesse sich unter einer drehenden Figur gar nicht sauber ausgleichen.
+        /// </summary>
+        private Vector3 Unscaled(Vector3 world)
+            => world / Mathf.Max(0.0001f, Mathf.Abs(transform.lossyScale.x));
 
         public void Hide()
         {
