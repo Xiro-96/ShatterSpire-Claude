@@ -313,7 +313,15 @@ namespace Shatterspire
             }
             chargeRing?.Show(HeavyChargeNormalized, open);
             PublishHeavyState();
-            if (input.HeavyReleased || heavyCharge >= HeavyChargeSeconds) ReleaseHeavyAttack();
+            // Loslassen zaehlt erst, wenn es sich lohnen kann.
+            //
+            // Auf dem Telefon ist ein Tipp Druck und Loslassen in einem Bild. Damit ging der schwere
+            // Angriff bei Ladung 0 los: der schwaechste Schlag, den es gibt, und der volle Balken
+            // dahin. Von aussen sah das aus, als sei er "von selbst" gekommen - es gab weder
+            // Ladebalken noch Fenster zu sehen. Wer jetzt tippt, laedt durch und loest am Ende der
+            // Ladung aus; wer haelt, sucht sich seinen Moment.
+            if ((input.HeavyReleased && ActionBalance.CanRelease(HeavyChargeNormalized))
+                || heavyCharge >= HeavyChargeSeconds) ReleaseHeavyAttack();
         }
 
         // ── LIGHT ───────────────────────────────────────────────────────────
@@ -811,7 +819,8 @@ namespace Shatterspire
             if (!lockedTarget || !lockedTarget.IsAlive) return;
             var offset = lockedTarget.transform.position - transform.position;
             offset.y = 0f;
-            var step = MeleeApproach.StepDistance(offset.magnitude, windup);
+            var run = HeroCatalog.BaseSpeed(heroClass) * build.MoveSpeedMultiplier;
+            var step = MeleeApproach.StepDistance(offset.magnitude, windup, heroClass, run);
             if (step > 0f) controller?.Lunge(direction, step, windup);
         }
 
@@ -1727,8 +1736,32 @@ namespace Shatterspire
     /// </summary>
     public static class MeleeApproach
     {
-        /// <summary>Abstand, auf den der Schritt heranfuehrt. Darunter wird nicht mehr nachgesetzt.</summary>
+        /// <summary>
+        /// Abstand, auf den der Schritt heranfuehrt, wenn nichts ueber den Helden bekannt ist.
+        /// </summary>
         public const float IdealGap = 1.5f;
+
+        /// <summary>
+        /// Anteil der eigenen Reichweite, auf den herangetreten wird.
+        ///
+        /// Knapp innerhalb, nicht an der Grenze: wer genau am Rand seiner Reichweite stehen bleibt,
+        /// verfehlt beim ersten Schritt des Gegners.
+        /// </summary>
+        public const float EngageShare = 0.7f;
+
+        /// <summary>
+        /// Wie nah dieser Held herangeht, bevor er nicht mehr nachsetzt.
+        ///
+        /// Stand fuer alle auf 1,5. Solange XIRO 2,60 weit reichte, hiess das "bis knapp in die
+        /// Reichweite". Mit 3,40 Reichweite hiess dieselbe Zahl "renne bis tief unter deine eigene
+        /// Klinge" - er trat bei jedem Hieb heran, obwohl er laengst traf. Genau das sah aus wie ein
+        /// Dash auf den Gegner zu.
+        /// </summary>
+        public static float IdealGapFor(HeroClassId hero)
+        {
+            var reach = ActionBalance.MeleeReach(hero);
+            return reach <= 0f ? IdealGap : Mathf.Max(1.2f, reach * EngageShare);
+        }
 
         /// <summary>Obergrenze eines einzelnen Schritts.</summary>
         public const float MaxStep = 1.7f;
@@ -1741,9 +1774,12 @@ namespace Shatterspire
         public const float MaxEngage = 4.2f;
 
         /// <summary>
-        /// Hoechstes Tempo des Schritts. Der zweite Teil desselben Fehlers: 1,7 Einheiten in den
-        /// 0,13 s Ausholzeit eines Hiebs sind 13 Einheiten je Sekunde - doppeltes Lauftempo, und
-        /// damit ein Dash. Der Schritt ist eine Gewichtsverlagerung, kein Satz.
+        /// Hoechstes Tempo des Schritts, wenn das Lauftempo des Helden nicht bekannt ist.
+        ///
+        /// Stand als einzige Zahl fuer alle auf 6,5 - und war damit fuer XIRO (4,9 Lauftempo) um ein
+        /// Drittel schneller als Laufen. Ein Schritt, der schneller ist als Rennen, ist ein Dash,
+        /// egal wie kurz er ist. Der Schritt ist eine Gewichtsverlagerung und darf das Lauftempo des
+        /// Helden nie ueberschreiten.
         /// </summary>
         public const float MaxStepSpeed = 6.5f;
 
@@ -1787,5 +1823,16 @@ namespace Shatterspire
         /// </summary>
         public static float StepDistance(float distanceToTarget, float seconds)
             => Mathf.Min(StepDistance(distanceToTarget), MaxStepSpeed * Mathf.Max(0.01f, seconds));
+
+        /// <summary>
+        /// Der Schritt, wie ihn das Spiel wirklich nimmt: er haelt an der Reichweite dieses Helden an
+        /// und ist nie schneller als sein Laufen.
+        /// </summary>
+        public static float StepDistance(float distanceToTarget, float seconds, HeroClassId hero, float runSpeed)
+        {
+            if (distanceToTarget > MaxEngage) return 0f;
+            var wanted = Mathf.Clamp(distanceToTarget - IdealGapFor(hero), 0f, MaxStep);
+            return Mathf.Min(wanted, Mathf.Max(0.5f, runSpeed) * Mathf.Max(0.01f, seconds));
+        }
     }
 }

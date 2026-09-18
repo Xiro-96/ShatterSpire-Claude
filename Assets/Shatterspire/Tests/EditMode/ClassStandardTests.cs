@@ -64,7 +64,7 @@ namespace Shatterspire.Tests
             foreach (var hero in Melee)
             {
                 var speed = ActionBalance.CombatSpeed(HeroCatalog.BaseSpeed(hero), BoundShare(hero));
-                var contact = ActionBalance.ContactSeconds(ActionBalance.MeleeReach(hero), speed,
+                var contact = ActionBalance.ContactSeconds(hero, ActionBalance.MeleeReach(hero), speed,
                     ActionBalance.RunnerSpeed);
                 Assert.GreaterOrEqual(contact, ActionBalance.MinimumContactSeconds,
                     $"{HeroCatalog.Name(hero)} bleibt nur {contact:0.00} s an einem Crawler "

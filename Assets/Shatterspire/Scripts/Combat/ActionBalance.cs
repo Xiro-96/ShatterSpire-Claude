@@ -81,6 +81,15 @@ namespace Shatterspire
             _ => Mathf.Lerp(LooseMinimum, LooseMaximum, Mathf.Clamp01(normalized))
         };
 
+        /// <summary>
+        /// Darf bei diesem Ladestand schon losgelassen werden?
+        ///
+        /// Vor dem Fenster bringt Loslassen nichts - es kostet nur den vollen Balken. Ein Tipp auf
+        /// dem Telefon ist aber Druck und Loslassen in einem Bild, und genau das passierte dabei.
+        /// Wer zu frueh loslaesst, laedt weiter und loest am Ende der Ladung aus.
+        /// </summary>
+        public static bool CanRelease(float normalized) => normalized >= PerfectStart - GoodMargin;
+
         /// <summary>Wie lange das Fenster offen steht, in Sekunden.</summary>
         public static float WindowSeconds => (PerfectEnd - PerfectStart) * HeavyChargeSeconds;
 
@@ -134,10 +143,10 @@ namespace Shatterspire
         /// langsam sein - dann muss er weit reichen. Er darf kurz reichen - dann muss er schnell
         /// sein. Beides kurz ist unspielbar, und genau das war XIRO.
         /// </summary>
-        public static float ContactSeconds(float reach, float combatSpeed, float enemySpeed)
+        public static float ContactSeconds(HeroClassId hero, float reach, float combatSpeed, float enemySpeed)
         {
             var deficit = enemySpeed - combatSpeed;
-            var margin = reach - MeleeApproach.IdealGap;
+            var margin = reach - MeleeApproach.IdealGapFor(hero);
             if (margin <= 0f) return 0f;
             return deficit <= 0.01f ? float.PositiveInfinity : margin / deficit;
         }
