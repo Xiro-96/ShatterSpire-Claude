@@ -9,7 +9,13 @@ namespace Shatterspire
     /// Ultimate auf R, die sich im Kampf laedt. Upgrades veraendern gezielt eine dieser Aktionen; die
     /// Abfragen stehen jeweils dort, wo die Aktion ausgefuehrt wird.
     /// </summary>
-    [RequireComponent(typeof(PlayerInputRouter), typeof(PlayerBuild), typeof(Health))]
+    /// <remarks>
+    /// Die Eingabe kommt ueber <see cref="IPlayerInputSource"/>, nicht von der Tastatur: an dieser
+    /// Stelle steht beim Spieler der Router, bei einem Mitglied der Gruppe der Bot - und spaeter
+    /// ein Mitspieler aus dem Netz. Deshalb steht hier keine RequireComponent-Zeile fuer die
+    /// Eingabe; eine Schnittstelle laesst sich so nicht fordern.
+    /// </remarks>
+    [RequireComponent(typeof(PlayerBuild), typeof(Health))]
     public sealed class WeaponSystem : MonoBehaviour
     {
         private const float HeavyMeterMaximum = 100f;
@@ -42,7 +48,7 @@ namespace Shatterspire
 
         private float ultimateLockedUntil;
         private readonly List<Health> strikeTargets = new();
-        private PlayerInputRouter input;
+        private IPlayerInputSource input;
         private PlayerBuild build;
         private Health health;
         private PlayerController controller;
@@ -120,11 +126,24 @@ namespace Shatterspire
         public string SkillName => HeroCatalog.SkillName(heroClass);
         public string UltimateName => HeroCatalog.UltimateName(heroClass);
 
+        /// <summary>
+        /// Zeigt dieser Held seine Zielanzeige am Boden und den Ring um sein Ziel?
+        ///
+        /// Nur der Held an diesem Geraet tut das. Bei drei Helden mit Ringen und Linien waere der
+        /// Boden voll, und keiner der Kreise waere noch der eigene. Muss vor
+        /// <see cref="ConfigureClass"/> gesetzt werden - dort entstehen die Anzeigen.
+        /// </summary>
+        public void SetIndicatorsEnabled(bool value) => indicatorsEnabled = value;
+
+        private bool indicatorsEnabled = true;
+
         public void ConfigureClass(HeroClassId value)
         {
             heroClass = value;
+            if (!indicatorsEnabled) return;
             // Erst hier steht die Klasse fest, und damit die Farbe der Anzeige.
             if (!aimIndicator) aimIndicator = AimIndicator.Attach(transform, HeroCatalog.Accent(heroClass));
+            if (!targetIndicator) targetIndicator = gameObject.AddComponent<TargetLockIndicator>();
         }
 
         private AimIndicator aimIndicator;
@@ -137,13 +156,15 @@ namespace Shatterspire
 
         private void Awake()
         {
-            input = GetComponent<PlayerInputRouter>();
+            input = GetComponent<IPlayerInputSource>();
+            if (input == null)
+                Debug.LogError($"SHATTERSPIRE: {name} hat keine Eingabe. Ein Held braucht einen "
+                               + "PlayerInputRouter oder ein BotInput, und zwar vor der Waffe.");
             build = GetComponent<PlayerBuild>();
             health = GetComponent<Health>();
             killStreak = GetComponent<KillStreak>();
             controller = GetComponent<PlayerController>();
             motion = GetComponent<StylizedCharacterMotion>();
-            targetIndicator = gameObject.AddComponent<TargetLockIndicator>();
             health.Damaged += OnDamaged;
             GameEvents.EntityDied += OnEntityDied;
             PublishHeavyState();

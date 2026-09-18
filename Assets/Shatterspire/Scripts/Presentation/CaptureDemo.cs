@@ -114,7 +114,7 @@ namespace Shatterspire
         {
             yield return new WaitForSecondsRealtime(2.5f);
             // Bots ausblenden, eigene Kamera flach und nah: Arme, Hammer und Drehung sollen erkennbar sein.
-            foreach (var bot in FindObjectsByType<CompanionBot>(FindObjectsSortMode.None)) bot.gameObject.SetActive(false);
+            foreach (var bot in FindObjectsByType<BotInput>(FindObjectsSortMode.None)) bot.gameObject.SetActive(false);
             if (view && view.TryGetComponent<CameraController>(out var follow)) follow.enabled = false;
             framing = true;
             input.ScriptedAim = new Vector3(0.75f, 0f, -1f);

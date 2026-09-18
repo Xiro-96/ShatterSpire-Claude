@@ -62,10 +62,17 @@ namespace Shatterspire
         ///
         /// Vorher war Etage 1 der absolute Tiefpunkt: ein frischer Rex schoss einen Crawler in gut
         /// einer Sekunde um, und der Anfang fuehlte sich leicht an. Die Staerke soll aus dem Lauf
-        /// kommen - Upgrades, Heldenstufen, Schmied - und nicht von vornherein da sein.
+        /// kommen - Upgrades, Prestige, Schmied - und nicht von vornherein da sein.
+        ///
+        /// Beide Werte sind mit dem Umbau auf echte Mitglieder der Gruppe gestiegen, und zwar
+        /// gerechnet, nicht geschaetzt (siehe <see cref="PartyBalance"/>):
+        /// Leben um das 1,30-fache, weil die Gruppe jetzt das 1,30-fache an Schaden austeilt und ein
+        /// Kampf sonst schneller vorbei waere als heute. Schaden um das 1,5-fache, weil sich die
+        /// Gegner auf drei Ziele verteilen statt auf eines - mit stehender Gruppe faengt der Spieler
+        /// noch rund 60 % der heutigen Bedrohung ab, allein dagegen das Anderthalbfache.
         /// </summary>
-        public const float BaseHealthScale = 1.35f;
-        public const float BaseDamageScale = 1.2f;
+        public const float BaseHealthScale = 1.75f;
+        public const float BaseDamageScale = 1.8f;
 
         /// <summary>
         /// Wie viel zaeher die Gegner auf einem Pfad sind. Vorher unterschieden sich die Pfade nur in

@@ -113,9 +113,6 @@ namespace Shatterspire
         /// <summary>Raumart, wie sie im Kopf der Etage steht.</summary>
         public static string Of(RoomKind kind) => T(kind.ToString().ToUpperInvariant());
 
-        /// <summary>Rolle eines Bots in der Team-Leiste.</summary>
-        public static string Of(CompanionRole role) => T(role.ToString().ToUpperInvariant());
-
         private static readonly Dictionary<string, string> German = new()
         {
             // ── Etage und Ziele ─────────────────────────────────────────
@@ -169,6 +166,7 @@ namespace Shatterspire
             { "FRONTLINE", "FRONT" },
             { "COVERING", "DECKT" },
             { "FLANKING", "FLANKE" },
+            { "REGROUPING", "SAMMELT SICH" },
             { "GUARDIAN", "WÄCHTER" },
             { "SUPPORT", "UNTERSTÜTZUNG" },
             { "RANGER", "JÄGER" },

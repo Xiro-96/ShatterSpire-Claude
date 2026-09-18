@@ -126,6 +126,10 @@ namespace Shatterspire
         private static void EnsureRig()
         {
             if (sources != null && sources[0]) return;
+            // Ausserhalb des laufenden Spiels gibt es keinen Ton. DontDestroyOnLoad wirft im Editor
+            // eine Ausnahme, und die riss bisher jeden Test mit, der einen Helden sterben liess -
+            // der Tod eines Helden spielt einen Klang.
+            if (!Application.isPlaying) return;
             var root = new GameObject("SHATTERSPIRE Sound");
             Object.DontDestroyOnLoad(root);
             sources = new AudioSource[Voices];

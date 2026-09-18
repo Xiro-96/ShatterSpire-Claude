@@ -270,11 +270,12 @@ namespace Shatterspire
 
         private void BuildPartyPlates(HeroClassId hero, Color accent)
         {
-            var team = PrototypeBootstrap.OfflineTeamFor(hero);
+            var team = PartyMember.OfflineTeamFor(hero);
             plates = new RectTransform[1 + team.Length];
             plates[0] = Plate("YOU", HeroCatalog.Name(hero), accent);
             for (var i = 0; i < team.Length; i++)
-                plates[i + 1] = Plate("BOT", team[i].Name + "  " + Loc.Of(team[i].Role), team[i].Accent);
+                plates[i + 1] = Plate("BOT", HeroCatalog.Name(team[i].Hero) + "  "
+                    + Loc.T(HeroCatalog.Role(team[i].Hero)), HeroCatalog.Accent(team[i].Hero));
             UpdatePlates();
         }
 
@@ -672,12 +673,15 @@ namespace Shatterspire
 
             actors.Add(Actor(HeroCatalog.Name(selected) + " · Lobby", HeroSpot, 180f, HeroCatalog.Accent(selected), 2.3f, 0.85f,
                 root => AuthoredArt.TryBuildHero(root, selected, out _)));
-            var team = PrototypeBootstrap.OfflineTeamFor(selected);
+            var team = PartyMember.OfflineTeamFor(selected);
             for (var i = 0; i < team.Length; i++)
             {
                 var member = team[i];
-                actors.Add(Actor(member.Name + " · Lobby Bot", BotSpots[i], i == 0 ? 160f : 200f, member.Accent, 1.6f, 0.45f,
-                    root => AuthoredArt.TryBuildCompanion(root, member.Role, member.Accent, out _)));
+                // Die Lobby zeigt jetzt dieselben Helden, die gleich mitklettern - mit ihren Waffen
+                // und ihrer Ruestung, nicht die drei allgemeinen Figuren von frueher.
+                actors.Add(Actor(HeroCatalog.Name(member.Hero) + " · Lobby Bot", BotSpots[i],
+                    i == 0 ? 160f : 200f, HeroCatalog.Accent(member.Hero), 1.6f, 0.45f,
+                    root => AuthoredArt.TryBuildHero(root, member.Hero, out _)));
             }
             if (changed) PrototypeVfx.SpawnExplosion(transform.TransformPoint(HeroSpot) + Vector3.up * 0.6f, 1.5f, HeroCatalog.Accent(selected));
         }

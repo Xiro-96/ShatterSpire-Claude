@@ -23,8 +23,26 @@ namespace Shatterspire
         bool SkillReleased { get; }
         bool UltimateHeld { get; }
         bool UltimateReleased { get; }
+
+        /// <summary>
+        /// Richtet dieser Held gerade selbst, oder waehlt die Waffe das Ziel? Die Waffe braucht die
+        /// Antwort, um eine gehaltene Absicht nicht zu ueberschreiben.
+        /// </summary>
+        bool ManualAim { get; }
+
+        /// <summary>
+        /// Die Waffe meldet zurueck, wohin sie tatsaechlich geschossen hat. Ein spaeteres
+        /// Selbstzielen setzt dort an, statt bei einer alten Stickrichtung.
+        /// </summary>
+        void Follow(Vector3 direction);
     }
 
+    /// <summary>
+    /// Die Eingabe des Spielers an diesem Geraet. Maus und Tastatur am PC, Stick und Knoepfe auf dem
+    /// Telefon. Ein Held wird nicht von dieser Klasse gesteuert, sondern von der Schnittstelle
+    /// darueber - deshalb kann an derselben Stelle auch ein Bot stehen, und spaeter ein Mitspieler
+    /// aus dem Netz.
+    /// </summary>
     [DisallowMultipleComponent]
     public sealed class PlayerInputRouter : MonoBehaviour, IPlayerInputSource
     {

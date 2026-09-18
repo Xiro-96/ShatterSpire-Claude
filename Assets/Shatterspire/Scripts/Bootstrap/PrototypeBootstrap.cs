@@ -121,8 +121,9 @@ namespace Shatterspire
 
         private static void BuildRun(RunConfig config)
         {
-            var player = CreatePlayer(config);
-            var team = CreateOfflineTeam(player.transform, config.Hero);
+            var meta = MetaSaveSystem.Load();
+            var player = CreateHero(config.Hero, config, meta, local: true, Vector3.zero, PartySlot.Flank);
+            var team = CreateTeam(player.transform, config, meta);
             var runCamera = CreateCamera(player.transform);
             var systems = new GameObject("Game Systems");
             var spawner = systems.AddComponent<EnemySpawner>();
@@ -138,41 +139,100 @@ namespace Shatterspire
             if (CaptureDemo.Requested) systems.AddComponent<CaptureDemo>().Configure(player, runCamera);
         }
 
-        private static GameObject CreatePlayer(RunConfig config)
+        /// <summary>
+        /// Die zwei Mitglieder, die niemand steuert. Sie entstehen aus derselben Bauanleitung wie der
+        /// Held des Spielers - der einzige Unterschied steht in <see cref="CreateHero"/>: woher die
+        /// Knopfdruecke kommen.
+        /// </summary>
+        private static BotInput[] CreateTeam(Transform player, RunConfig config, MetaSaveData meta)
         {
-            var root = new GameObject(HeroCatalog.Name(config.Hero));
-            root.transform.position = Vector3.zero;
+            var roster = PartyMember.OfflineTeamFor(config.Hero);
+            var offsets = new[] { new Vector3(-2.25f, 0f, -1.4f), new Vector3(2.25f, 0f, -1.4f) };
+            var bots = new BotInput[roster.Length];
+            for (var i = 0; i < roster.Length; i++)
+            {
+                var hero = CreateHero(roster[i].Hero, config, meta, local: false,
+                    player.position + offsets[i], roster[i].Slot);
+                var bot = hero.GetComponent<BotInput>();
+                bot.Configure(player, roster[i].Hero, offsets[i].x);
+                bots[i] = bot;
+            }
+            return bots;
+        }
+
+        /// <summary>
+        /// Ein Held. Immer derselbe Bauplan, ob ihn ein Mensch steuert oder nicht.
+        ///
+        /// Frueher gab es hier zwei Bauplaene: einen fuer den Spieler mit Leben, Klasse und Aktionen,
+        /// und einen fuer die Begleiter, die nichts davon hatten. Der Unterschied ist jetzt eine
+        /// einzige Zeile - welche Eingabe an den Helden kommt. Genau dort tritt spaeter der
+        /// Mitspieler aus dem Netz an die Stelle des Bots.
+        /// </summary>
+        private static GameObject CreateHero(HeroClassId hero, RunConfig config, MetaSaveData meta,
+            bool local, Vector3 position, PartySlot slot)
+        {
+            var root = new GameObject(HeroCatalog.Name(hero) + (local ? string.Empty : " (Team)"));
+            root.transform.position = position;
             var motor = root.AddComponent<CharacterController>();
             motor.center = Vector3.up * 0.9f;
             motor.height = 1.8f;
             motor.radius = 0.45f;
-            root.AddComponent<PlayerInputRouter>();
             var build = root.AddComponent<PlayerBuild>();
             var health = root.AddComponent<Health>();
-            root.AddComponent<LevelSystem>();
-            root.AddComponent<RunWallet>();
-            root.AddComponent<KillStreak>();
+            var member = root.AddComponent<PartyMember>();
+            member.Configure(HeroCatalog.Name(hero), HeroCatalog.Accent(hero), hero, slot, local);
+
+            // Die Eingabe muss vor Steuerung und Waffe stehen: beide holen sie sich in ihrem Awake.
+            if (local) root.AddComponent<PlayerInputRouter>();
+            else root.AddComponent<BotInput>();
+
+            if (local)
+            {
+                // Gold, Erfahrung und Trefferserie gehoeren dem Spieler. Ein Mitglied, das eine eigene
+                // Boerse fuehrt, traegt sie am Ende des Aufstiegs mit ins Nichts.
+                root.AddComponent<LevelSystem>();
+                root.AddComponent<RunWallet>();
+                root.AddComponent<KillStreak>();
+            }
+
             var controller = root.AddComponent<PlayerController>();
             var weapon = root.AddComponent<WeaponSystem>();
-
-            controller.ConfigureClass(config.Hero);
-            weapon.ConfigureClass(config.Hero);
-            var built = AuthoredArt.TryBuildHero(root.transform, config.Hero, out var muzzle);
+            controller.ConfigureClass(hero);
+            // Linie am Boden und Ring um das Ziel gibt es nur einmal - fuer den Helden an diesem
+            // Geraet. Drei Kreise auf dem Boden, und keiner davon ist noch der eigene.
+            weapon.SetIndicatorsEnabled(local);
+            weapon.ConfigureClass(hero);
+            var built = AuthoredArt.TryBuildHero(root.transform, hero, out var muzzle);
             if (!built) muzzle = StylizedArt.BuildRex(root.transform);
             weapon.SetMuzzle(muzzle);
+            // Erst nach der Figur: das Fallen braucht die Bewegung, die mit ihr entsteht. Der Held
+            // des Spielers braucht es nicht - sein Tod beendet den Aufstieg.
+            if (!local) root.AddComponent<FallenHero>();
 
-            var meta = MetaSaveSystem.Load();
-            build.ConfigureRun(config.Hero, config, meta);
+            build.ConfigureRun(hero, local ? config : AllyConfig(config), meta);
+            if (!local) build.ScaleAsAlly();
             // Prestige: der Aufschlag gilt nur fuer diesen Helden und nur auf sein Grundleben,
             // nicht auf die gemeinsamen Meta-Upgrades - sonst multiplizierten sich zwei Systeme.
-            var prestige = MetaSaveSystem.PrestigeStep(meta, config.Hero);
-            var baseHealth = HeroCatalog.BaseHealth(config.Hero) * (1f + HeroPrestige.HealthBonus(prestige));
-            health.Configure(TeamId.Player, baseHealth + meta.vitalityLevel * 5f);
-            if (prestige > 0)
-                Debug.Log($"SHATTERSPIRE Prestige: {config.Hero} auf Schritt {prestige}, "
+            var prestige = MetaSaveSystem.PrestigeStep(meta, hero);
+            var baseHealth = HeroCatalog.BaseHealth(hero) * (1f + HeroPrestige.HealthBonus(prestige));
+            health.Configure(TeamId.Player, baseHealth + (meta?.vitalityLevel ?? 0) * 5f);
+            if (local && prestige > 0)
+                Debug.Log($"SHATTERSPIRE Prestige: {hero} auf Schritt {prestige}, "
                           + $"+{HeroPrestige.HealthBonus(prestige):P0} Leben, "
                           + $"+{HeroPrestige.DamageBonus(prestige):P0} Schaden.");
             return root;
+        }
+
+        /// <summary>
+        /// Der Lauf, wie ihn ein Mitglied sieht: dieselbe Etage und derselbe Pfad, aber ohne die
+        /// Relikte des Spielers. Relikte sind gefunden und gehoeren dem, der sie gefunden hat -
+        /// dreimal Blutpakt waere dreimal weniger Leben fuer einen Bonus, den einer traegt.
+        /// </summary>
+        private static RunConfig AllyConfig(RunConfig config)
+        {
+            var copy = config?.Clone() ?? new RunConfig();
+            copy.Relics.Clear();
+            return copy;
         }
 
         private static CameraController CreateCamera(Transform target)
@@ -189,36 +249,5 @@ namespace Shatterspire
             return controller;
         }
 
-        /// <summary>Wer mit dem gewaehlten Helden klettert. Lobby und Aufstieg zeigen dieselbe Party.</summary>
-        public static (CompanionRole Role, string Name, Color Accent)[] OfflineTeamFor(HeroClassId selected)
-        {
-            var guardian = (CompanionRole.Guardian, "BRAX", new Color(1f, 0.54f, 0.12f));
-            var ranger = (CompanionRole.Ranger, "REX", new Color(0.05f, 0.9f, 0.92f));
-            var support = (CompanionRole.Support, "MIRA", new Color(0.28f, 1f, 0.58f));
-            return new (CompanionRole, string, Color)[]
-            {
-                selected != HeroClassId.Guardian ? guardian : ranger,
-                selected != HeroClassId.Arcanist ? support : ranger
-            };
-        }
-
-        private static CompanionBot[] CreateOfflineTeam(Transform player, HeroClassId selected)
-        {
-            var team = OfflineTeamFor(selected);
-            var offsets = new[] { new Vector3(-2.25f, 0f, -1.4f), new Vector3(2.25f, 0f, -1.4f) };
-            var bots = new CompanionBot[team.Length];
-            for (var i = 0; i < team.Length; i++)
-                bots[i] = CreateCompanion(player, offsets[i], team[i].Role, team[i].Accent, team[i].Name);
-            return bots;
-        }
-
-        private static CompanionBot CreateCompanion(Transform player, Vector3 offset, CompanionRole role, Color accent, string label)
-        {
-            var companion = new GameObject(label + " Bot");
-            companion.transform.position = player.position + offset;
-            var bot = companion.AddComponent<CompanionBot>();
-            bot.Configure(player, offset, role, accent, label);
-            return bot;
-        }
     }
 }

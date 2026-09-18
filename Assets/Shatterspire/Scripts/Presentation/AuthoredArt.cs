@@ -7,6 +7,15 @@ using UnityEngine.Rendering;
 namespace Shatterspire
 {
     /// <summary>
+    /// Welcher Koerper aus dem KayKit-Paket einen Helden darstellt: Krieger, Schuetze oder Magier.
+    ///
+    /// Hiess frueher CompanionRole und war die Rolle eines Begleiters. Seit die Begleiter echte
+    /// Helden sind, gibt es diese Rolle nicht mehr - geblieben ist die Frage, welche Figur auf die
+    /// Buehne kommt, und die gehoert hierher und nicht ins Spielgeschehen.
+    /// </summary>
+    public enum HeroBody { Warrior, Archer, Mage }
+
+    /// <summary>
     /// Runtime bridge for authored FBX content. Gameplay code only knows about
     /// roots and colliders, so visual assets can continue to be replaced later.
     /// </summary>
@@ -169,8 +178,8 @@ namespace Shatterspire
         {
             if (hero == HeroClassId.Ranger) return TryBuildRex(root, out muzzle);
             var role = hero == HeroClassId.Guardian || hero == HeroClassId.Paladin
-                ? CompanionRole.Guardian
-                : CompanionRole.Support;
+                ? HeroBody.Warrior
+                : HeroBody.Mage;
             // KORR bekommt die Schleicherfigur: klein, beweglich, mit Beutel. XIRO den Ritter mit
             // Schild - sie ist die einzige mit einem Schild in der Hand, und genau darum geht es
             // bei ihr. Beide sind dadurch auf einen Blick von Brax, Rex und Orion zu unterscheiden.
@@ -186,7 +195,7 @@ namespace Shatterspire
                 HeroClassId.Paladin => "knight_texture",
                 _ => null
             };
-            if (!TryBuildCompanion(root, role, HeroCatalog.Accent(hero), out muzzle,
+            if (!TryBuildBody(root, role, HeroCatalog.Accent(hero), out muzzle,
                     HeroCatalog.BaseSpeed(hero), model3D, texture,
                     oathGear: hero == HeroClassId.Paladin)) return false;
             var model = root.childCount > 0 ? root.GetChild(0) : null;
@@ -240,7 +249,7 @@ namespace Shatterspire
         /// und Schild. XIRO hat die Rolle des Waechters, aber nicht seine Waffe - ein Paladin mit
         /// Kriegshammer waere ein Barbar in Ruestung.
         /// </summary>
-        public static bool TryBuildCompanion(Transform root, CompanionRole role, Color accent,
+        public static bool TryBuildBody(Transform root, HeroBody role, Color accent,
             out Transform muzzle, float topSpeed = 6.5f, string modelName = null, string textureName = null,
             bool oathGear = false)
         {
@@ -251,8 +260,8 @@ namespace Shatterspire
                 ? KayCharacters + modelName
                 : role switch
                 {
-                    CompanionRole.Guardian => KayCharacters + "Barbarian",
-                    CompanionRole.Ranger => KayCharacters + "Ranger",
+                    HeroBody.Warrior => KayCharacters + "Barbarian",
+                    HeroBody.Archer => KayCharacters + "Ranger",
                     _ => KayCharacters + "Mage"
                 };
             var source = LoadModel(resource);
@@ -261,30 +270,30 @@ namespace Shatterspire
             var model = UnityEngine.Object.Instantiate(source, root);
             model.name = role switch
             {
-                CompanionRole.Guardian => "Brax · Forge Guardian",
-                CompanionRole.Ranger => "Rex · Rift Ranger",
+                HeroBody.Warrior => "Brax · Forge Guardian",
+                HeroBody.Archer => "Rex · Rift Ranger",
                 _ => "Mira · Dawn Weaver"
             };
             ResetTransform(model.transform);
-            FitAndPlace(model, root.position, role == CompanionRole.Guardian ? 3.02f : 2.52f, FitAxis.Height);
+            FitAndPlace(model, root.position, role == HeroBody.Warrior ? 3.02f : 2.52f, FitAxis.Height);
             var animator = model.GetComponentInChildren<Animator>();
             Reground(model, root.position);
             ApplyKayKitMaterials(model,
-                KayCharacters + (textureName ?? (role == CompanionRole.Guardian ? "barbarian_texture"
-                    : role == CompanionRole.Ranger ? "ranger_texture" : "mage_texture")),
+                KayCharacters + (textureName ?? (role == HeroBody.Warrior ? "barbarian_texture"
+                    : role == HeroBody.Archer ? "ranger_texture" : "mage_texture")),
                 // XIROs Ruestung faellt ins Goldene. Ein Tonwert auf der vorhandenen Textur, kein
                 // eigenes Bild: die Ruestung soll geweiht aussehen, nicht neu gebaut sein.
                 oathGear ? new Color(1f, 0.88f, 0.58f) : Color.white);
-            StylizeHumanoidProportions(animator, role == CompanionRole.Guardian ? 1.08f : 1.12f, 1.08f);
+            StylizeHumanoidProportions(animator, role == HeroBody.Warrior ? 1.08f : 1.12f, 1.08f);
 
             var motion = root.gameObject.AddComponent<StylizedCharacterMotion>();
             motion.ConfigureAuthored(model.transform, animator, topSpeed);
-            CreateGroundShadow(root, role == CompanionRole.Guardian ? 1.72f : 1.34f);
-            CreateSelectionRing(root, role == CompanionRole.Guardian ? 1.76f : 1.38f, accent);
+            CreateGroundShadow(root, role == HeroBody.Warrior ? 1.72f : 1.34f);
+            CreateSelectionRing(root, role == HeroBody.Warrior ? 1.76f : 1.38f, accent);
 
             if (oathGear) AttachOathGear(animator, model.transform, accent);
-            else if (role == CompanionRole.Guardian) AttachGuardianHammer(animator, model.transform, accent);
-            else if (role == CompanionRole.Ranger) AttachKayKitCrossbows(animator);
+            else if (role == HeroBody.Warrior) AttachGuardianHammer(animator, model.transform, accent);
+            else if (role == HeroBody.Archer) AttachKayKitCrossbows(animator);
             else
             {
                 AttachKayKitStaff(animator, model.transform);
@@ -293,18 +302,18 @@ namespace Shatterspire
 
             // Klingenspur, aber nur fuer die beiden, die wirklich zuschlagen. Der Zweihaender zieht
             // weiter aussen als der Hammer.
-            if (oathGear || role == CompanionRole.Guardian)
+            if (oathGear || role == HeroBody.Warrior)
             {
                 var grip = FindNamedBone(animator ? animator.transform : model.transform, "handslot.r");
                 if (!grip && animator && animator.isHuman) grip = animator.GetBoneTransform(HumanBodyBones.RightHand);
                 motion.AttachBladeTrail(grip, accent, oathGear ? 1.45f : 1.1f);
             }
 
-            muzzle = new GameObject(role == CompanionRole.Guardian ? "Hammer Impact" : "Dawn Focus").transform;
+            muzzle = new GameObject(role == HeroBody.Warrior ? "Hammer Impact" : "Dawn Focus").transform;
             muzzle.SetParent(root, false);
-            muzzle.localPosition = role == CompanionRole.Guardian
+            muzzle.localPosition = role == HeroBody.Warrior
                 ? new Vector3(0f, 0.65f, 1.35f)
-                : role == CompanionRole.Ranger ? new Vector3(0f, 1.05f, 0.92f)
+                : role == HeroBody.Archer ? new Vector3(0f, 1.05f, 0.92f)
                 : new Vector3(0.45f, 1.35f, 0.72f);
             return true;
         }
@@ -1112,7 +1121,7 @@ namespace Shatterspire
             SetRendering(root);
         }
 
-        private static void ApplyCompanionMaterials(GameObject root, CompanionRole role, Color accent)
+        private static void ApplyBodyMaterials(GameObject root, HeroBody role, Color accent)
         {
             foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
             {
@@ -1124,15 +1133,15 @@ namespace Shatterspire
                     var skin = name.Contains("regular") || name.Contains("skin") || name.Contains("base");
                     if (skin)
                     {
-                        var prefix = role == CompanionRole.Support ? "T_Regular_Female" : "T_Regular_Male";
+                        var prefix = role == HeroBody.Mage ? "T_Regular_Female" : "T_Regular_Male";
                         replacements[i] = TexturedMaterial(role + "Skin", HeroTextures + prefix + "_Dark_BaseColor",
                             HeroTextures + prefix + "_Normal", new Color(1f, 0.9f, 0.8f), 0f, 0.34f);
                     }
                     else
                     {
-                        var prefix = role == CompanionRole.Support ? "T_Ranger_3" : "T_Peasant_2";
-                        var normal = role == CompanionRole.Support ? "T_Ranger_Normal" : "T_Peasant_Normal";
-                        var outfitBase = role == CompanionRole.Support
+                        var prefix = role == HeroBody.Mage ? "T_Ranger_3" : "T_Peasant_2";
+                        var normal = role == HeroBody.Mage ? "T_Ranger_Normal" : "T_Peasant_Normal";
+                        var outfitBase = role == HeroBody.Mage
                             ? new Color(0.48f, 0.82f, 0.7f)
                             : new Color(0.58f, 0.45f, 0.27f);
                         var outfitTint = Color.Lerp(outfitBase, accent, 0.14f);

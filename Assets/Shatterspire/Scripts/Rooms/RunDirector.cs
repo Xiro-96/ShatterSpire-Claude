@@ -18,7 +18,7 @@ namespace Shatterspire
         private EnemySpawner spawner;
         private PrototypeHUD hud;
         private CameraController cameraController;
-        private CompanionBot[] companions = Array.Empty<CompanionBot>();
+        private BotInput[] companions = Array.Empty<BotInput>();
         private GameObject floorRoot;
         private FloorNavigation navigation;
         /// <summary>Wegenetz der laufenden Etage. Wird von der automatischen Vorfuehrung gebraucht.</summary>
@@ -40,7 +40,7 @@ namespace Shatterspire
         private PlayerBuild build;
 
         public void Configure(Transform playerTransform, EnemySpawner enemySpawner, PrototypeHUD prototypeHud,
-            RunConfig runConfig, CameraController runCamera = null, CompanionBot[] team = null)
+            RunConfig runConfig, CameraController runCamera = null, BotInput[] team = null)
         {
             player = playerTransform;
             playerHealth = player.GetComponent<Health>();
@@ -54,7 +54,7 @@ namespace Shatterspire
             }
             config = runConfig ?? new RunConfig();
             cameraController = runCamera;
-            companions = team ?? Array.Empty<CompanionBot>();
+            companions = team ?? Array.Empty<BotInput>();
             build = player.GetComponent<PlayerBuild>();
             // Ein Seed je Aufstieg, jede Etage leitet ihren eigenen daraus ab. So ist ein ganzer
             // Aufstieg spaeter reproduzierbar - fuer Fehlersuche und fuer Co-op-Clients.
@@ -107,7 +107,10 @@ namespace Shatterspire
 
             PlaceParty(layout);
             spawner.BeginFloor(navigation, roomIndex, currentAnomaly, runSeed, config.Mode);
-            if (player) player.GetComponent<WeaponSystem>()?.SetFloor(roomIndex);
+            // Die Etage gilt fuer die ganze Gruppe. Stand sie nur beim Spieler, blieben die zwei
+            // anderen fuer immer auf Etage 1 - und ihre Ultimate, die ab Etage 3 aufgeht, kam nie.
+            foreach (var member in PartyMember.Active)
+                if (member) member.GetComponent<WeaponSystem>()?.SetFloor(roomIndex);
             // Zuerst die Anomalie: der Etagenkopf nennt sie in derselben Ansage, also muss sie
             // beim HUD schon angekommen sein.
             GameEvents.RaiseAnomalyChanged(currentAnomaly);
@@ -151,6 +154,11 @@ namespace Shatterspire
                 companions[i].SetNavigation(navigation);
                 var side = i % 2 == 0 ? -1f : 1f;
                 companions[i].Teleport(navigation.ClampToWalkable(spawn + new Vector3(side * 2.4f, 0f, -1.6f), 0.5f));
+                // Gefallene Mitglieder kommen auf der naechsten Etage zurueck, angeschlagen. Der
+                // Verlust kostet die laufende Etage, nicht den Aufstieg - eine Gruppe, die nach dem
+                // ersten Fehler zu zweit weiterklettert, waere bis zum Ende bestraft.
+                var body = companions[i].GetComponent<Health>();
+                if (body && !body.IsAlive) body.Revive(PartyBalance.RejoinHealth);
             }
 
             if (!cameraController) return;

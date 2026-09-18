@@ -513,6 +513,19 @@ namespace Shatterspire
 
         public bool Has(PerkId id) => ranks.ContainsKey(id);
 
+        /// <summary>
+        /// Daempft diesen Helden auf das Mass eines Mitglieds der Gruppe, das niemand steuert.
+        ///
+        /// Greift am gespeicherten Faktor an, nicht am Grundschaden des Helden: so gilt die Daempfung
+        /// fuer alles, was der Held tut - Schlag, Faehigkeit, Ultimate -, und nicht nur fuer die
+        /// Stellen, an denen jemand daran gedacht hat. Siehe <see cref="PartyBalance.AllyDamage"/>.
+        /// </summary>
+        public void ScaleAsAlly()
+        {
+            storedDamageMultiplier *= PartyBalance.AllyDamage;
+            Changed?.Invoke();
+        }
+
         public void ConfigureRun(HeroClassId hero, RunConfig config, MetaSaveData meta)
         {
             HeroClass = hero;

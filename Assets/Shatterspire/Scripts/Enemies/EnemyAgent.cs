@@ -270,10 +270,43 @@ namespace Shatterspire
                 1f - Mathf.Exp(-8f * Time.deltaTime));
         }
 
+        /// <summary>
+        /// Wie oft ein Gegner sein Ziel neu waehlt. Nicht jedes Bild: sonst pendelt er zwischen zwei
+        /// gleich weit entfernten Helden und schlaegt nie zu.
+        /// </summary>
+        private const float RetargetInterval = 1.1f;
+
+        /// <summary>
+        /// Wie viel Vorsprung das bisherige Ziel behaelt, in Metern. Ohne diesen Bonus wechselt ein
+        /// Gegner die Seite, sobald sich zwei Helden aneinander vorbeibewegen.
+        /// </summary>
+        private const float TargetStickiness = 2.5f;
+
+        private float nextRetarget;
+
+        /// <summary>
+        /// Sucht sich den naechsten lebenden Helden.
+        ///
+        /// Vorher stand hier fest der Spieler, von <see cref="Configure"/> an bis zum Tod. Damit
+        /// konnte ein Begleiter gar nicht angegriffen werden - er war unverwundbar, weil ihn niemand
+        /// ansah. Seit alle drei Helden sind, gilt fuer alle dasselbe: wer am naechsten steht, wird
+        /// angegriffen. Faellt einer, verteilt sich seine Last auf die uebrigen.
+        /// </summary>
+        private void Retarget()
+        {
+            if (Time.time < nextRetarget) return;
+            nextRetarget = Time.time + RetargetInterval;
+            var current = target ? target.GetComponent<Health>() : null;
+            var chosen = PartyMember.ClosestAlive(transform.position, current, TargetStickiness);
+            if (chosen) target = chosen.transform;
+        }
+
         private void Update()
         {
             TrackVelocity();
-            if (state == State.Dead || !target) return;
+            if (state == State.Dead) return;
+            Retarget();
+            if (!target) return;
             ApplyKnockback();
             if (kind == EnemyKind.Shieldbearer) UpdateGuardPose();
             if (kind == EnemyKind.ChoirWarden) UpdateChoirWard();

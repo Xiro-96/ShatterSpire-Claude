@@ -131,6 +131,27 @@ namespace Shatterspire
             _ => 11.5f
         };
 
+        /// <summary>
+        /// Auf welche Entfernung dieser Held kaempfen will.
+        ///
+        /// Stand bisher nirgends, weil nur der Spieler kaempfte und der selbst entscheidet, wie nah
+        /// er herangeht. Ein Held, der von einem Bot gefuehrt wird, braucht die Zahl: sie ist der
+        /// Unterschied zwischen einem Wachmann, der zuschlaegt, und einem, der aus zehn Metern mit
+        /// dem Hammer in die Luft haut.
+        /// </summary>
+        public static float EngageRange(HeroClassId hero) => hero switch
+        {
+            HeroClassId.Guardian => 2.3f,
+            HeroClassId.Paladin => 2.5f,
+            HeroClassId.Bomber => 6.5f,
+            HeroClassId.Arcanist => 9f,
+            _ => 11f
+        };
+
+        /// <summary>Kaempft dieser Held auf Schlagweite? Entscheidet, wo er in der Gruppe steht.</summary>
+        public static bool IsMelee(HeroClassId hero)
+            => hero is HeroClassId.Guardian or HeroClassId.Paladin;
+
         public static float SkillCooldown(HeroClassId hero) => hero switch
         {
             HeroClassId.Bomber => 7.5f,

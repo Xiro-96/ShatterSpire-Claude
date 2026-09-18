@@ -42,9 +42,9 @@ namespace Shatterspire
         private ActionButtonView ultimateButton;
         private bool ultimateWasReady;
         private Text heavyStateText;
-        private CompanionBot[] team = Array.Empty<CompanionBot>();
+        private PartyMember[] team = Array.Empty<PartyMember>();
         private Text[] teamStatus;
-        private Image[] teamSupportFill;
+        private Image[] teamHealthFill;
         private bool skillWasReady = true;
         private bool heavyWasReady;
         private bool heavyEverReady;
@@ -87,10 +87,12 @@ namespace Shatterspire
         private bool selectingLevelPerk;
         private readonly System.Random perkRandom = new();
 
-        public void Configure(GameObject player, RunConfig config, CompanionBot[] companions = null)
+        public void Configure(GameObject player, RunConfig config, BotInput[] companions = null)
         {
             runConfig = config ?? new RunConfig();
-            team = companions ?? Array.Empty<CompanionBot>();
+            // Die Leiste zeigt die Mitglieder, nicht ihre Koepfe: ein Mitglied hat einen Namen,
+            // ein Leben und eine Farbe, egal ob ein Bot oder ein Mensch es fuehrt.
+            team = CollectTeam(companions);
             playerTransform = player.transform;
             playerHealth = player.GetComponent<Health>();
             build = player.GetComponent<PlayerBuild>();
@@ -401,40 +403,69 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// Team-Leiste oben rechts: je Bot Wappen, Name, Rolle und was er gerade tut. Lebensbalken gibt es
-        /// bewusst nicht - die Bots nehmen noch keinen Schaden, eine volle Leiste waere Deko ohne Aussage.
+        /// Die Mitglieder der Gruppe, ohne den Helden an diesem Geraet - der hat seine eigene Leiste
+        /// unten links. Kommt aus den Bots, faellt aber auf die Anmeldung zurueck, damit auch ein
+        /// Mitspieler aus dem Netz hier auftaucht, sobald es ihn gibt.
+        /// </summary>
+        private static PartyMember[] CollectTeam(BotInput[] companions)
+        {
+            var found = new List<PartyMember>();
+            if (companions != null)
+                foreach (var bot in companions)
+                {
+                    if (!bot) continue;
+                    var member = bot.GetComponent<PartyMember>();
+                    if (member) found.Add(member);
+                }
+            if (found.Count == 0)
+                foreach (var member in PartyMember.Active)
+                    if (member && !member.IsLocal) found.Add(member);
+            return found.ToArray();
+        }
+
+        /// <summary>
+        /// Team-Leiste oben rechts: je Mitglied Wappen, Name, was es gerade tut - und sein Leben.
+        ///
+        /// Der Lebensbalken stand hier frueher ausdruecklich nicht, mit der Begruendung, die Begleiter
+        /// naehmen keinen Schaden und eine volle Leiste waere Deko. Genau das hat sich geaendert: sie
+        /// sind Helden wie der Spieler, sie fallen, und dann steht er allein da. Das muss man sehen
+        /// koennen, bevor es passiert.
         /// </summary>
         private void CreateTeamFrames(Transform parent)
         {
             teamStatus = new Text[team.Length];
-            teamSupportFill = new Image[team.Length];
+            teamHealthFill = new Image[team.Length];
             for (var i = 0; i < team.Length; i++)
             {
-                var bot = team[i];
-                if (!bot) continue;
+                var member = team[i];
+                if (!member) continue;
                 var frame = CreateImage(parent, "Team Frame", new Color(0.09f, 0.06f, 0.05f, 0.9f),
                     new Vector2(-16, -16 - i * 74), new Vector2(280, 66), new Vector2(1, 1));
                 ApplyRounded(frame);
                 frame.raycastTarget = false;
                 var outline = frame.gameObject.AddComponent<Outline>();
-                outline.effectColor = bot.Accent;
+                outline.effectColor = member.Accent;
                 outline.effectDistance = new Vector2(2f, -2f);
-                var emblem = CreateImage(frame.transform, "Role Emblem", Color.white, new Vector2(8, 0), new Vector2(52, 52), new Vector2(0, 0.5f));
-                emblem.sprite = UiIconFactory.Hero(RoleHero(bot.Role));
+                var emblem = CreateImage(frame.transform, "Hero Emblem", Color.white, new Vector2(8, 0),
+                    new Vector2(52, 52), new Vector2(0, 0.5f));
+                emblem.sprite = UiIconFactory.Hero(member.HeroClass);
                 emblem.preserveAspect = true;
                 emblem.raycastTarget = false;
-                CreateText(frame.transform, bot.DisplayName + "  <size=12>" + Loc.Of(bot.Role) + "</size>", 18,
-                    TextAnchor.UpperLeft, new Vector2(68, -7), new Vector2(200, 24), new Vector2(0, 1)).fontStyle = FontStyle.Bold;
-                teamStatus[i] = CreateText(frame.transform, bot.Status, 13, TextAnchor.UpperLeft, new Vector2(68, -32), new Vector2(200, 18), new Vector2(0, 1));
-                teamStatus[i].color = bot.Accent;
-                if (bot.Role != CompanionRole.Support) continue;
-                var back = CreateImage(frame.transform, "Heal Charge", new Color(0.05f, 0.035f, 0.03f, 0.92f),
-                    new Vector2(68, 8), new Vector2(196, 8), new Vector2(0, 0));
+                CreateText(frame.transform,
+                    member.DisplayName + "  <size=12>" + Loc.T(HeroCatalog.Role(member.HeroClass)) + "</size>", 18,
+                    TextAnchor.UpperLeft, new Vector2(68, -7), new Vector2(200, 24), new Vector2(0, 1))
+                    .fontStyle = FontStyle.Bold;
+                teamStatus[i] = CreateText(frame.transform, Loc.T(member.Status), 13, TextAnchor.UpperLeft,
+                    new Vector2(68, -30), new Vector2(200, 18), new Vector2(0, 1));
+                teamStatus[i].color = member.Accent;
+
+                var back = CreateImage(frame.transform, "Team Health", new Color(0.05f, 0.035f, 0.03f, 0.92f),
+                    new Vector2(68, 8), new Vector2(196, 9), new Vector2(0, 0));
                 ApplyRounded(back);
-                var fill = CreateFill(back.transform, bot.Accent);
+                var fill = CreateFill(back.transform, member.Accent);
                 ((RectTransform)fill.transform).offsetMin = new Vector2(1, 1);
                 ((RectTransform)fill.transform).offsetMax = new Vector2(-1, -1);
-                teamSupportFill[i] = fill;
+                teamHealthFill[i] = fill;
             }
             knockoutText = CreateText(parent, string.Empty, 16, TextAnchor.UpperRight,
                 new Vector2(-20, -24 - team.Length * 74), new Vector2(300, 26), new Vector2(1, 1));
@@ -446,18 +477,17 @@ namespace Shatterspire
             if (teamStatus == null) return;
             for (var i = 0; i < team.Length; i++)
             {
-                if (!team[i]) continue;
-                if (teamStatus[i]) teamStatus[i].text = Loc.T(team[i].Status);
-                if (teamSupportFill[i]) teamSupportFill[i].fillAmount = team[i].SupportReadyNormalized;
+                var member = team[i];
+                if (!member) continue;
+                if (teamStatus[i]) teamStatus[i].text = Loc.T(member.Status);
+                if (!teamHealthFill[i]) continue;
+                var normalized = member.Health ? member.Health.Normalized : 0f;
+                teamHealthFill[i].fillAmount = normalized;
+                // Gefallen: der Balken wird grau, damit ein leerer Balken nicht wie wenig Leben aussieht.
+                teamHealthFill[i].color = normalized <= 0f ? new Color(0.45f, 0.18f, 0.18f) : member.Accent;
             }
         }
 
-        private static HeroClassId RoleHero(CompanionRole role) => role switch
-        {
-            CompanionRole.Guardian => HeroClassId.Guardian,
-            CompanionRole.Support => HeroClassId.Arcanist,
-            _ => HeroClassId.Ranger
-        };
 
         /// <summary>
         /// Zwei schwebende Sticks: links laufen, rechts zielen und dabei schiessen. Jede Haelfte ist

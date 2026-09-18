@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Shatterspire
 {
-    [RequireComponent(typeof(CharacterController), typeof(PlayerInputRouter), typeof(PlayerBuild))]
+    [RequireComponent(typeof(CharacterController), typeof(PlayerBuild))]
     public sealed class PlayerController : MonoBehaviour
     {
         private const float RollSpeed = 16f;
@@ -16,7 +16,7 @@ namespace Shatterspire
         private const float AccelerationSeconds = 0.075f;
         private const float BrakingSeconds = 0.125f;
         private CharacterController motor;
-        private PlayerInputRouter input;
+        private IPlayerInputSource input;
         private PlayerBuild build;
         private Health health;
         private int dashCharges;
@@ -81,7 +81,12 @@ namespace Shatterspire
         private void Awake()
         {
             motor = GetComponent<CharacterController>();
-            input = GetComponent<PlayerInputRouter>();
+            input = GetComponent<IPlayerInputSource>();
+            // Eine Schnittstelle laesst sich nicht mit RequireComponent fordern. Statt einer Flut von
+            // Nullverweisen im Spiel soll hier eine Zeile stehen, die den Grund nennt.
+            if (input == null)
+                Debug.LogError($"SHATTERSPIRE: {name} hat keine Eingabe. Ein Held braucht einen "
+                               + "PlayerInputRouter oder ein BotInput, und zwar vor der Steuerung.");
             weaponSystem = GetComponent<WeaponSystem>();
             build = GetComponent<PlayerBuild>();
             health = GetComponent<Health>();
