@@ -16,7 +16,9 @@ namespace Shatterspire
         PlungeRise, PlungeImpact, RiftOpen, FocusEnter, FocusExtend, FocusEnd,
         LiftRise, LiftArrive, Heartbeat, StreakStep, Pickup, BombThrow, BombLand, ChainDetonate,
         // Die zwei Raeume vom 13.09.
-        VaultOpen, AltarToll
+        VaultOpen, AltarToll,
+        // Der perfekte Moment vom 18.09.: das Fenster geht auf, und was daraus wurde.
+        HeavyWindow, HeavyGood, HeavyPerfect
     }
 
     /// <summary>
@@ -90,6 +92,11 @@ namespace Shatterspire
             Sound.FocusEnd => 0.4f,
             Sound.VaultOpen => 0.7f,
             Sound.AltarToll => 0.85f,
+            // Laut genug, um im Gefecht anzukommen - der Ton ist die einzige Ansage, die der
+            // Daumen auf dem Knopf nicht verdecken kann.
+            Sound.HeavyWindow => 0.75f,
+            Sound.HeavyGood => 0.6f,
+            Sound.HeavyPerfect => 0.9f,
             _ => 0.65f
         };
 
@@ -102,6 +109,9 @@ namespace Shatterspire
             // Die Ultimate-Klaenge sollen jedes Mal gleich klingen: sie sind ein Ereignis, kein Treffer.
             Sound.PlungeImpact or Sound.RiftOpen or Sound.FocusEnter or Sound.FocusEnd => 0.01f,
             Sound.LiftRise or Sound.LiftArrive => 0f,
+            // Der perfekte Moment muss jedes Mal gleich klingen. Wer ihn am Ton lernt, lernt
+            // nichts, wenn der Ton wandert.
+            Sound.HeavyWindow or Sound.HeavyGood or Sound.HeavyPerfect => 0f,
             _ => 0.055f
         };
 
@@ -131,7 +141,10 @@ namespace Shatterspire
         /// </summary>
         private static float RoomFor(Sound sound) => sound switch
         {
+            // Ohne Raum: die drei Timing-Ansagen kommen aus der Oberflaeche, nicht aus dem Turm.
+            // Eine Steinfahne wuerde genau das verschmieren, was sie ansagen sollen.
             Sound.UiClick or Sound.UiConfirm or Sound.Ambience => 0f,
+            Sound.HeavyWindow or Sound.HeavyGood or Sound.HeavyPerfect => 0f,
             Sound.Footstep => 0.2f,
             Sound.Explosion or Sound.GuardBreak or Sound.UltimateRise => 0.42f,
             Sound.PlungeImpact => 0.5f,
@@ -152,6 +165,10 @@ namespace Shatterspire
         private static float LengthOf(Sound sound) => sound switch
         {
             Sound.UiClick => 0.1f,
+            // Kurz und trocken: der Ton sagt "jetzt" und darf das Fenster nicht ueberdauern.
+            Sound.HeavyWindow => 0.14f,
+            Sound.HeavyGood => 0.26f,
+            Sound.HeavyPerfect => 0.5f,
             Sound.Footstep => 0.24f,
             Sound.HitLight => 0.28f,
             Sound.Shot or Sound.Release => 0.3f,
@@ -360,6 +377,25 @@ namespace Shatterspire
                 case Sound.HeavyReady:
                     AddBell(buffer, ref noise, 0f, 523f, 0.55f, 0.8f);
                     AddBell(buffer, ref noise, 0.07f, 784f, 0.5f, 0.7f);
+                    break;
+                // Das Fenster geht auf: ein einzelner heller Anschlag, hoch genug, um durch
+                // Kampfgetuemmel zu kommen, und kurz genug, um nicht selbst Getuemmel zu sein.
+                case Sound.HeavyWindow:
+                    AddBell(buffer, ref noise, 0f, 1568f, 0.1f, 0.55f);
+                    AddTone(buffer, 0f, 0.05f, 2350f, 2350f, Wave.Sine, 0.18f, 0.002f, 0.045f);
+                    break;
+                // Knapp daneben: derselbe Anschlag, tiefer und ohne Nachklang. Man hoert, dass es
+                // etwas war - und dass es nicht das Beste war.
+                case Sound.HeavyGood:
+                    AddBell(buffer, ref noise, 0f, 784f, 0.2f, 0.6f);
+                    AddBell(buffer, ref noise, 0.04f, 1046f, 0.16f, 0.35f);
+                    break;
+                // Getroffen: ein Akkord nach oben statt eines einzelnen Tons.
+                case Sound.HeavyPerfect:
+                    AddBell(buffer, ref noise, 0f, 1046f, 0.4f, 0.75f);
+                    AddBell(buffer, ref noise, 0.045f, 1568f, 0.36f, 0.6f);
+                    AddBell(buffer, ref noise, 0.09f, 2093f, 0.3f, 0.45f);
+                    Strike(buffer, ref noise, 0f, 0.004f, 7200f, 0.5f);
                     break;
                 case Sound.UltimateRise:
                     // Aufstieg mit Einschlag: erst Luft und Spannung, dann trifft es.

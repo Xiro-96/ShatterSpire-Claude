@@ -27,7 +27,7 @@ namespace Shatterspire
         public static event Action<Vector3, string, bool> ObjectiveTargetChanged;
         public static event Action<int, int, bool> EncounterChanged;
         public static event Action<int, int> WaveChanged;
-        public static event Action<float, float, bool, bool> HeavyAttackChanged;
+        public static event Action<float, float, bool, HeavyTiming> HeavyAttackChanged;
         public static event Action<int, int, float, bool> KnockoutChanged;
         public static event Action<bool, int> RunEnded;
 
@@ -49,8 +49,12 @@ namespace Shatterspire
             => EncounterChanged?.Invoke(remaining, total, boss);
         public static void RaiseWaveChanged(int current, int total)
             => WaveChanged?.Invoke(current, total);
-        public static void RaiseHeavyAttackChanged(float meter, float charge, bool charging, bool perfect)
-            => HeavyAttackChanged?.Invoke(meter, charge, charging, perfect);
+        /// <summary>
+        /// Zustand des schweren Angriffs. Traegt die Stufe des Moments, nicht nur "perfekt ja/nein" -
+        /// die Anzeige soll auch zeigen, dass man knapp daneben war.
+        /// </summary>
+        public static void RaiseHeavyAttackChanged(float meter, float charge, bool charging, HeavyTiming timing)
+            => HeavyAttackChanged?.Invoke(meter, charge, charging, timing);
         public static void RaiseKnockoutChanged(int skulls, int maximum, float reviveProgress, bool downed)
             => KnockoutChanged?.Invoke(skulls, maximum, reviveProgress, downed);
         public static void RaiseRunEnded(bool victory, int shards) => RunEnded?.Invoke(victory, shards);

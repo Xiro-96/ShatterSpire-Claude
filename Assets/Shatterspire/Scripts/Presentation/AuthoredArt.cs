@@ -1905,9 +1905,17 @@ namespace Shatterspire
         /// fallen und nicht beim Tastendruck - sonst sieht es aus, als wuerde nur so getan.
         /// </summary>
         public float StrikeSecondsFor(AttackMotion kind)
+            => StrikeSecondsOf(kind, HasCombatClip(kind));
+
+        /// <summary>
+        /// Dieselbe Rechnung ohne laufenden Graphen. Die Kampfbalance haengt an dieser Zahl - sie ist
+        /// die Ausholzeit, und daraus folgt, wie lange ein Hieb den Helden bindet. Tests muessen sie
+        /// nachrechnen koennen, ohne ein Rig zu laden.
+        /// </summary>
+        public static float StrikeSecondsOf(AttackMotion kind, bool combat = true)
         {
-            var duration = DurationFor(kind);
-            if (!HasCombatClip(kind)) return duration * 0.4f;
+            var duration = DurationFor(kind, combat);
+            if (!combat) return duration * 0.4f;
             var window = WindowFor(kind);
             var span = Mathf.Max(0.01f, window.To - window.From);
             return duration * Mathf.Clamp01((window.Strike - window.From) / span);

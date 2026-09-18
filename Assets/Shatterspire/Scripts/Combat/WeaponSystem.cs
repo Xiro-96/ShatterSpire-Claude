@@ -19,9 +19,7 @@ namespace Shatterspire
     public sealed class WeaponSystem : MonoBehaviour
     {
         private const float HeavyMeterMaximum = 100f;
-        private const float HeavyChargeSeconds = 1.2f;
-        private const float PerfectStart = 0.5f;
-        private const float PerfectEnd = 0.76f;
+        private const float HeavyChargeSeconds = ActionBalance.HeavyChargeSeconds;
         // Zielhilfe nur knapp neben der Ziellinie. Alles ausserhalb trifft nur, wer dorthin zielt.
         /// <summary>
         /// Kegel, in dem die Waffe ein Ziel erfasst. Stand auf 12 Grad und war damit enger als die
@@ -47,6 +45,12 @@ namespace Shatterspire
         private const float UltimateLockoutSeconds = 14f;
 
         private float ultimateLockedUntil;
+
+        /// <summary>Ob der Ton fuer das offene Fenster in dieser Ladung schon gelaufen ist.</summary>
+        private bool windowAnnounced;
+
+        /// <summary>Der Ring am Boden, der die Ladung zeigt. Nur beim Helden an diesem Geraet.</summary>
+        private HeavyChargeRing chargeRing;
         private readonly List<Health> strikeTargets = new();
         private IPlayerInputSource input;
         private PlayerBuild build;
@@ -91,7 +95,11 @@ namespace Shatterspire
         public float HeavyChargeNormalized => Mathf.Clamp01(heavyCharge / HeavyChargeSeconds);
         public bool HeavyReady => heavyMeter >= HeavyMeterMaximum;
         public bool ChargingHeavy => chargingHeavy;
-        public bool HeavyPerfect => chargingHeavy && HeavyChargeNormalized >= PerfectStart && HeavyChargeNormalized <= PerfectEnd;
+        /// <summary>Wie gut der Moment gerade ist, solange geladen wird. Sonst <see cref="HeavyTiming.Loose"/>.</summary>
+        public HeavyTiming HeavyTimingNow
+            => chargingHeavy ? ActionBalance.Judge(HeavyChargeNormalized) : HeavyTiming.Loose;
+
+        public bool HeavyPerfect => HeavyTimingNow == HeavyTiming.Perfect;
         public float UltimateNormalized => ultimateCharge;
         public bool UltimateReady => UltimateUnlocked && ultimateCharge >= 1f;
 
@@ -144,6 +152,7 @@ namespace Shatterspire
             // Erst hier steht die Klasse fest, und damit die Farbe der Anzeige.
             if (!aimIndicator) aimIndicator = AimIndicator.Attach(transform, HeroCatalog.Accent(heroClass));
             if (!targetIndicator) targetIndicator = gameObject.AddComponent<TargetLockIndicator>();
+            if (!chargeRing) chargeRing = HeavyChargeRing.Attach(transform);
         }
 
         private AimIndicator aimIndicator;
@@ -210,7 +219,8 @@ namespace Shatterspire
         public void NotifyLightHit()
         {
             if (chargingHeavy || HeavyReady) return;
-            heavyMeter = Mathf.Min(HeavyMeterMaximum, heavyMeter + 17f * build.HeavyChargeMultiplier);
+            heavyMeter = Mathf.Min(HeavyMeterMaximum,
+                heavyMeter + ActionBalance.HeavyFillPerHit(heroClass) * build.HeavyChargeMultiplier);
             if (HeavyReady)
             {
                 PrototypeVfx.SpawnHeavyReady(transform.position);
@@ -287,11 +297,21 @@ namespace Shatterspire
             {
                 chargingHeavy = true;
                 heavyCharge = 0f;
+                windowAnnounced = false;
                 PublishHeavyState();
             }
             if (!chargingHeavy) return;
             heavyCharge = Mathf.Min(HeavyChargeSeconds, heavyCharge + Time.deltaTime);
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(aimDirection), 28f * Time.deltaTime);
+            // Das Fenster sagt an, dass es offen ist. Auf dem Telefon liegt der Daumen auf dem Knopf
+            // und verdeckt jeden Ring darunter - ein Ton ist der einzige Weg, der immer ankommt.
+            var open = ActionBalance.Judge(HeavyChargeNormalized) == HeavyTiming.Perfect;
+            if (open && !windowAnnounced)
+            {
+                windowAnnounced = true;
+                if (indicatorsEnabled) Sfx.Play2D(Sound.HeavyWindow, 0.9f);
+            }
+            chargeRing?.Show(HeavyChargeNormalized, open);
             PublishHeavyState();
             if (input.HeavyReleased || heavyCharge >= HeavyChargeSeconds) ReleaseHeavyAttack();
         }
@@ -374,9 +394,10 @@ namespace Shatterspire
 
             if (lightComboStep == 1)
             {
-                nextShot = Time.time + 0.38f / build.AttackSpeedMultiplier;
+                var gap = 0.38f / build.AttackSpeedMultiplier;
+                nextShot = Time.time + gap;
                 motion?.PlayMotion(AttackMotion.Swing, 0.9f);
-                CommitMelee(AttackMotion.Swing, direction);
+                CommitMelee(AttackMotion.Swing, direction, gap);
                 StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Swing, 0.15f), () =>
                 {
                     var point = transform.position + direction * 1.25f;
@@ -389,13 +410,16 @@ namespace Shatterspire
 
             if (lightComboStep == 2)
             {
-                nextShot = Time.time + 0.46f / build.AttackSpeedMultiplier;
+                var gap = 0.46f / build.AttackSpeedMultiplier;
+                nextShot = Time.time + gap;
                 motion?.PlayMotion(AttackMotion.Smash, 1.1f);
-                CommitMelee(AttackMotion.Smash, direction);
+                CommitMelee(AttackMotion.Smash, direction, gap);
                 StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Smash, 0.2f), () =>
                 {
-                    var point = transform.position + direction * 1.55f;
-                    Strike(point, 1.7f + reach, hit * 1.4f, type, 7f, flash: false, weaponImpact: true, heavyImpact: true);
+                    const float offset = 1.55f;
+                    var point = transform.position + direction * offset;
+                    Strike(point, ActionBalance.MeleeReach(heroClass) - offset + reach, hit * 1.4f, type, 7f,
+                        flash: false, weaponImpact: true, heavyImpact: true);
                     if (build.ProjectileCount > 1)
                         Strike(point + direction * 1.25f, 1.3f, hit * 0.8f, type, flash: false, weaponImpact: true);
                     controller?.CombatStep(direction, 0.25f);
@@ -404,9 +428,10 @@ namespace Shatterspire
                 return;
             }
 
-            nextShot = Time.time + 0.64f / build.AttackSpeedMultiplier;
+            var spinGap = 0.64f / build.AttackSpeedMultiplier;
+            nextShot = Time.time + spinGap;
             motion?.PlayMotion(AttackMotion.Spin, 1.3f);
-            CommitMelee(AttackMotion.Spin, direction);
+            CommitMelee(AttackMotion.Spin, direction, spinGap);
             StartCoroutine(MeleeImpact(StrikeDelay(AttackMotion.Spin, 0.17f), () =>
             {
                 var radius = 2.6f + reach;
@@ -559,22 +584,39 @@ namespace Shatterspire
         /// etwas zurueck. Die drei anderen Helden machen im Moment des Tastendrucks Schaden - sie
         /// macht Schaden und Boden gut.
         /// </summary>
+        /// <summary>
+        /// XIROs Licht-Angriff: zwei Hiebe und ein Sweep, dann laeuft eine Front nach vorn.
+        ///
+        /// Die Reichweite war der Grund, warum er sich schlecht angefuehlt hat. Sie stand auf 1,25
+        /// plus 1,35 Radius, also 2,6 Einheiten - die kuerzeste im Spiel, kuerzer als der
+        /// Kriegshammer mit 3,25. Ein Zweihaender, der kuerzer reicht als ein Hammer, ist einfach
+        /// falsch; zusammen mit dem langsamsten Lauftempo des Spiels hiess das, dass jeder Crawler
+        /// nach drei Hieben aus seiner Reichweite gelaufen war.
+        ///
+        /// Der dritte Hieb ist jetzt ein Sweep um ihn herum statt eines Punktes vor ihm. Der Schaden
+        /// bleibt derselbe - die Klinge geht nur dorthin, wo man sie sieht.
+        /// </summary>
         private void OathbladeCombo(Vector3 direction, bool finisher)
         {
             var type = ResolveDamageType(DamageType.Physical);
             var accent = HeroCatalog.Accent(heroClass);
-            var reach = 1.35f + build.Pierces * 0.3f;
             var hit = BaseDamage * build.DamageMultiplier * (finisher ? 1.4f : lightComboStep == 2 ? 1.12f : 1f);
             comboExpiresAt = Time.time + 1.05f;
-            nextShot = Time.time + (finisher ? 0.42f : 0.3f) / build.AttackSpeedMultiplier;
-            motion?.PlayMotion(finisher ? AttackMotion.Smash : AttackMotion.Swing, finisher ? 1.15f : 0.85f);
-            CommitMelee(finisher ? AttackMotion.Smash : AttackMotion.Swing, direction);
-            StartCoroutine(MeleeImpact(StrikeDelay(finisher ? AttackMotion.Smash : AttackMotion.Swing,
-                finisher ? 0.18f : 0.13f), () =>
+            var gap = (finisher ? 0.42f : 0.3f) / build.AttackSpeedMultiplier;
+            nextShot = Time.time + gap;
+            var kind = finisher ? AttackMotion.Smash : AttackMotion.Swing;
+            motion?.PlayMotion(kind, finisher ? 1.15f : 0.85f);
+            CommitMelee(kind, direction, gap);
+            StartCoroutine(MeleeImpact(StrikeDelay(kind, finisher ? 0.18f : 0.13f), () =>
             {
-                var point = transform.position + direction * 1.25f;
-                Strike(point, reach, hit, type, flash: false, weaponImpact: true, heavyImpact: finisher);
+                // Der Sweep liegt naeher am Koerper und deckt dafuer auch die Seiten ab; die zwei
+                // Hiebe davor reichen weit nach vorn. Beide enden bei 3,4 Einheiten.
+                var offset = finisher ? 0.9f : 1.9f;
+                var radius = ActionBalance.MeleeReach(heroClass) - offset + build.Pierces * 0.3f;
+                var point = transform.position + direction * offset;
+                Strike(point, radius, hit, type, flash: false, weaponImpact: true, heavyImpact: finisher);
                 if (!finisher) return;
+                PrototypeVfx.SpawnShockwave(point, radius + 0.4f, accent);
                 ConsecrationWave(direction, accent, type);
             }));
             if (finisher) controller?.CombatStep(direction, 0.18f);
@@ -650,7 +692,9 @@ namespace Shatterspire
                 ? new Vector3(lockedTarget.transform.position.x, transform.position.y, lockedTarget.transform.position.z)
                 : ThrowTarget(direction, VerdictRange);
             var radius = perfect ? 3.4f : 2.6f;
-            var damage = BaseDamage * Mathf.Lerp(2.2f, 4.2f, normalized)
+            // Dieselbe Stufenrechnung wie bei den anderen vier. Vorher lief hier eine eigene Kurve,
+            // und ein perfekter Moment brachte XIRO nur einen groesseren Kreis, keinen Aufschlag.
+            var damage = BaseDamage * ActionBalance.Multiplier(normalized)
                          * build.HeavyDamageMultiplier * build.DamageMultiplier;
 
             // Die Klinge geht hoch und faellt - das Urteil kommt mit ihr herunter.
@@ -702,6 +746,17 @@ namespace Shatterspire
             yield return new WaitForSeconds(StrikeDelay(AttackMotion.Smash, 0.28f));
             if (!health.IsAlive) yield break;
 
+            // Die Welle kommt aus der Klinge - also wird die Richtung in dem Bild festgelegt, in dem
+            // der Hieb durchzieht, und der Koerper dreht sich dazu.
+            //
+            // Vorher stand sie beim Tastendruck fest, 0,22 s vorher. In der Zwischenzeit drehte sich
+            // die Figur weiter: am PC der Maus nach, auf dem Telefon einem neu gewaehlten Ziel. Man
+            // sah XIRO in eine Richtung schlagen und die Welle in eine andere laufen - "Aschewelle
+            // fliegt sonst wo hin". Jetzt koennen die zwei nicht mehr auseinanderfallen, weil es nur
+            // noch eine Richtung gibt.
+            direction = AcquireAttackDirection();
+            FaceNow(direction);
+
             var reach = build.Has(PerkId.PaladinWideGround) ? 16f : 11f;
             var waveDamage = BaseDamage * 2.6f * build.DamageMultiplier;
             // Der Hieb selbst trifft, was direkt vor ihm steht - die Welle den Rest der Bahn.
@@ -744,14 +799,15 @@ namespace Shatterspire
         /// der Gegner ist trotzdem einen halben Meter zu weit weg. Erst der Schritt macht daraus
         /// Wucht statt Bremse.
         /// </summary>
-        private void CommitMelee(AttackMotion kind, Vector3 direction)
+        /// <summary>
+        /// Bindet den Helden fuer die Dauer des Hiebs und laesst ihn ins Ziel nachsetzen.
+        /// <paramref name="gap"/> ist die Zeit bis zum naechsten Hieb - daran haengt, wie lange die
+        /// Bindung halten darf.
+        /// </summary>
+        private void CommitMelee(AttackMotion kind, Vector3 direction, float gap)
         {
             var windup = StrikeDelay(kind, 0.15f);
-            // Gedeckelt: XIRO schlaegt alle 0,3 s zu. Ohne Deckel waere er beim Nachschlagen
-            // dauerhaft gebunden und das Gewicht wuerde zur Fessel.
-            controller?.BindDuringAttack(
-                Mathf.Min(windup + MeleeApproach.HoldAfterStrike, MeleeApproach.MaxBoundSeconds),
-                MeleeApproach.BoundSpeed);
+            controller?.BindDuringAttack(MeleeApproach.BoundSeconds(windup, gap), MeleeApproach.BoundSpeed);
             if (!lockedTarget || !lockedTarget.IsAlive) return;
             var offset = lockedTarget.transform.position - transform.position;
             offset.y = 0f;
@@ -895,7 +951,12 @@ namespace Shatterspire
         private void ReleaseHeavyAttack()
         {
             var normalized = HeavyChargeNormalized;
-            var perfect = normalized >= PerfectStart && normalized <= PerfectEnd;
+            var timing = ActionBalance.Judge(normalized);
+            var perfect = timing == HeavyTiming.Perfect;
+            chargeRing?.Hide();
+            // Der Klang sagt, welche Stufe es war - noch bevor die Zahl am Gegner steht.
+            if (indicatorsEnabled && timing != HeavyTiming.Loose)
+                Sfx.Play2D(perfect ? Sound.HeavyPerfect : Sound.HeavyGood, perfect ? 1f : 0.7f);
             if (perfect && build.HasSteadyHeart) health.Heal(health.Maximum * RelicRules.SteadyHeartHeal);
             if (heroClass == HeroClassId.Paladin)
             {
@@ -919,7 +980,7 @@ namespace Shatterspire
                 CameraController.Impulse(perfect ? 0.16f : 0.08f);
                 return;
             }
-            var multiplier = (perfect ? 4.5f : Mathf.Lerp(2f, 3.4f, normalized)) * build.HeavyDamageMultiplier;
+            var multiplier = ActionBalance.Multiplier(normalized) * build.HeavyDamageMultiplier;
             var direction = AcquireAttackDirection();
             var echo = perfect && build.Has(PerkId.PerfectEcho);
 
@@ -1607,7 +1668,8 @@ namespace Shatterspire
         }
 
         private void PublishHeavyState()
-            => GameEvents.RaiseHeavyAttackChanged(HeavyMeterNormalized, HeavyChargeNormalized, chargingHeavy, HeavyPerfect);
+            => GameEvents.RaiseHeavyAttackChanged(HeavyMeterNormalized, HeavyChargeNormalized, chargingHeavy,
+                HeavyTimingNow);
     }
 
     public sealed class TargetLockIndicator : MonoBehaviour
@@ -1693,6 +1755,28 @@ namespace Shatterspire
 
         /// <summary>Obergrenze der Bindung, damit zwischen zwei Hieben Platz bleibt.</summary>
         public const float MaxBoundSeconds = 0.3f;
+
+        /// <summary>
+        /// Hoechster Anteil der Zeit bis zum naechsten Hieb, den die Bindung belegen darf.
+        ///
+        /// Vorher war die Bindung eine absolute Zahl: Ausholzeit plus 0,08 s, gedeckelt auf 0,3 s.
+        /// Damit war ein Held mit kurzen Pausen zwischen den Hieben anteilig laenger festgenagelt
+        /// als einer mit langen. Gemessen: BRAX 51 % der Zeit gebunden, XIRO 70 % - und XIRO ist
+        /// ausserdem der langsamste Held im Spiel. Er kam auf 2,51 Einheiten je Sekunde, ein Crawler
+        /// laeuft 3,50. Wer angreift, konnte seinem Ziel nicht folgen.
+        ///
+        /// Als Anteil gerechnet trifft die Bindung alle gleich: wer schneller schlaegt, ist kuerzer
+        /// gebunden.
+        /// </summary>
+        public const float MaxBoundShare = 0.55f;
+
+        /// <summary>
+        /// Wie lange ein Hieb den Helden bindet. <paramref name="gapToNextSwing"/> ist die Zeit bis
+        /// zum naechsten moeglichen Hieb.
+        /// </summary>
+        public static float BoundSeconds(float windup, float gapToNextSwing)
+            => Mathf.Min(Mathf.Min(windup + HoldAfterStrike, MaxBoundSeconds),
+                Mathf.Max(0.05f, gapToNextSwing) * MaxBoundShare);
 
         public static float StepDistance(float distanceToTarget)
             => distanceToTarget > MaxEngage ? 0f : Mathf.Clamp(distanceToTarget - IdealGap, 0f, MaxStep);

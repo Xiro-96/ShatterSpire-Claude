@@ -106,7 +106,7 @@ namespace Shatterspire
             BuildCanvas();
             Subscribe();
             RefreshHealth(playerHealth);
-            RefreshHeavy(weapon.HeavyMeterNormalized, weapon.HeavyChargeNormalized, weapon.ChargingHeavy, weapon.HeavyPerfect);
+            RefreshHeavy(weapon.HeavyMeterNormalized, weapon.HeavyChargeNormalized, weapon.ChargingHeavy, weapon.HeavyTimingNow);
             if (levelSystem) RefreshExperience(levelSystem.Level, levelSystem.CurrentXp, levelSystem.RequiredXp);
         }
 
@@ -283,6 +283,7 @@ namespace Shatterspire
             if (!controller || !weapon) return;
             UpdateActionCluster();
             UpdateTeamFrames();
+            UpdateHeavyFlash();
             UpdateObjectiveNavigation();
         }
 
@@ -566,9 +567,15 @@ namespace Shatterspire
                 new Vector2(0, ultimateButton.Size * 0.5f + 14f), new Vector2(200, 20), new Vector2(0.5f, 0.5f));
             ultimateButton.Status.color = new Color(1f, 0.82f, 0.2f);
 
-            // Goldenes Fenster fuer den perfekten Heavy: 50 bis 76 % der Ladung.
-            heavyButton.PerfectZone = CreateRing(heavyButton.Root, "Perfect Zone", heavyButton.Size + 28f, new Color(1f, 0.8f, 0.12f, 0.6f), 0.26f);
-            heavyButton.PerfectZone.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -180f);
+            // Das goldene Fenster liegt auf demselben Ring wie die Fuellung, nur darunter. Vorher
+            // lag es 28 px weiter aussen: man musste zwei Ringe mit verschiedenem Radius
+            // vergleichen, um zu sehen, ob die Fuellung schon im Fenster ist. Jetzt laeuft die
+            // weisse Fuellung ueber den goldenen Bogen hinweg, und der Vergleich entfaellt.
+            heavyButton.PerfectZone = CreateRing(heavyButton.Root, "Perfect Zone", heavyButton.Size + 12f,
+                new Color(1f, 0.8f, 0.12f, 0.75f), ActionBalance.PerfectEnd - ActionBalance.PerfectStart, 0.16f);
+            heavyButton.PerfectZone.rectTransform.localRotation =
+                Quaternion.Euler(0f, 0f, -360f * ActionBalance.PerfectStart);
+            heavyButton.PerfectZone.transform.SetAsFirstSibling();
             heavyButton.PerfectZone.gameObject.SetActive(false);
             heavyStateText = CreateText(parent, string.Empty, 17, TextAnchor.LowerCenter, Vector2.zero, new Vector2(320, 24), new Vector2(1, 0));
             heavyStateText.rectTransform.pivot = new Vector2(0.5f, 0f);
@@ -916,10 +923,11 @@ namespace Shatterspire
             navigationText.text = $"{arrow}  {objectiveTargetLabel}  ·  {Mathf.CeilToInt(distance)} m";
         }
 
-        private void RefreshHeavy(float meter, float charge, bool charging, bool perfect)
+        private void RefreshHeavy(float meter, float charge, bool charging, HeavyTiming timing)
         {
             if (heavyButton == null) return;
             var ready = meter >= 0.999f;
+            var perfect = timing == HeavyTiming.Perfect;
             heavyButton.Progress.fillAmount = charging ? charge : meter;
             heavyButton.Progress.color = perfect ? new Color(1f, 0.82f, 0.12f)
                 : charging ? Color.white
@@ -930,14 +938,54 @@ namespace Shatterspire
                 heavyButton.Punch();
                 heavyEverReady = true;
             }
+            // Ein Stoss in dem Bild, in dem das Fenster aufgeht. Am PC sieht man ihn, auf dem
+            // Telefon spuert man den Ton - beides sagt dasselbe.
+            if (perfect && !heavyWasPerfect) heavyButton.Punch();
+            heavyWasPerfect = perfect;
             heavyWasReady = ready;
+            // Beim Loslassen kurz hinschreiben, welche Stufe es war. Ohne das bleibt die mittlere
+            // Stufe unsichtbar: man bekommt mehr Schaden und erfaehrt nie, wofuer.
+            if (!charging && heavyWasCharging && heavyLastTiming != HeavyTiming.Loose)
+            {
+                heavyFlash = heavyLastTiming;
+                heavyFlashUntil = Time.time + 0.9f;
+            }
+            if (charging) heavyLastTiming = timing;
+            heavyWasCharging = charging;
             if (!heavyStateText) return;
+            if (Time.time < heavyFlashUntil) return;
             // Der Erklaertext steht nur, bis der Heavy zum ersten Mal voll war. Danach reicht der Ring.
             heavyStateText.text = perfect ? Loc.T(Application.isMobilePlatform ? "PERFECT!  RELEASE" : "PERFECT!  RELEASE RMB")
                 : charging ? Loc.T("RELEASE IN GOLD")
                 : ready ? Loc.T(weapon.HeavyName) + " " + Loc.T("READY")
                 : heavyEverReady ? string.Empty : Loc.T("LIGHT HITS CHARGE HEAVY");
             heavyStateText.color = perfect ? new Color(1f, 0.82f, 0.14f) : new Color(1f, 0.95f, 0.86f);
+        }
+
+        private bool heavyWasPerfect;
+        private bool heavyWasCharging;
+        private HeavyTiming heavyLastTiming;
+        private HeavyTiming heavyFlash;
+        private float heavyFlashUntil;
+
+        /// <summary>
+        /// Haelt die Ansage des Moments einen Augenblick stehen. Laeuft je Bild, weil das
+        /// Zustandsereignis des schweren Angriffs nach dem Loslassen nicht mehr feuert.
+        /// </summary>
+        private void UpdateHeavyFlash()
+        {
+            if (!heavyStateText || heavyFlashUntil <= 0f) return;
+            if (Time.time < heavyFlashUntil)
+            {
+                heavyStateText.text = Loc.T(heavyFlash == HeavyTiming.Perfect ? "PERFECT HIT" : "ALMOST PERFECT");
+                heavyStateText.color = heavyFlash == HeavyTiming.Perfect
+                    ? new Color(1f, 0.82f, 0.14f)
+                    : new Color(0.72f, 0.86f, 1f);
+                return;
+            }
+            heavyFlashUntil = 0f;
+            RefreshHeavy(weapon.HeavyMeterNormalized, weapon.HeavyChargeNormalized, weapon.ChargingHeavy,
+                weapon.HeavyTimingNow);
         }
 
         private void RefreshKnockout(int skulls, int maximum, float reviveProgress, bool downed)

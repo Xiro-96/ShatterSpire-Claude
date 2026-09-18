@@ -152,6 +152,8 @@ namespace Shatterspire
             { "RELEASE IN GOLD", "IM GOLDENEN FENSTER LOSLASSEN" },
             { "PERFECT!  RELEASE", "PERFEKT!  LOSLASSEN" },
             { "PERFECT!  RELEASE RMB", "PERFEKT!  RECHTE MAUSTASTE LOSLASSEN" },
+            { "PERFECT HIT", "PERFEKT GETROFFEN" },
+            { "ALMOST PERFECT", "FAST PERFEKT" },
             { "NO UPGRADES YET", "NOCH KEINE VERBESSERUNGEN" },
             // Kurz gehalten: das Feld ist 258 px breit, der laengere Satz wurde abgeschnitten.
             { "UPGRADES SHOWN ON YOUR ACTIONS", "AN DEINEN AKTIONEN" },

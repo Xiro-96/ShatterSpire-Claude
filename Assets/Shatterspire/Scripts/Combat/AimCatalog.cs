@@ -16,8 +16,13 @@ namespace Shatterspire
         {
             ActionSlot.Light => hero switch
             {
-                HeroClassId.Guardian => new AimDescription(AimShape.Wedge, 2.8f, 1.35f + pierces * 0.28f),
-                HeroClassId.Paladin => new AimDescription(AimShape.Wedge, 2.7f, 1.35f + pierces * 0.3f),
+                // Die Laenge kommt aus der Norm, nicht aus einer Zahl daneben. Sie stand hier auf
+                // 2,8 und 2,7, waehrend die Schlaege 3,25 und 2,60 weit reichten - der Keil am Boden
+                // log in beide Richtungen. Jetzt gibt es eine Quelle fuer beides.
+                HeroClassId.Guardian => new AimDescription(AimShape.Wedge,
+                    ActionBalance.MeleeReach(hero), 1.35f + pierces * 0.28f),
+                HeroClassId.Paladin => new AimDescription(AimShape.Wedge,
+                    ActionBalance.MeleeReach(hero), 1.5f + pierces * 0.3f),
                 HeroClassId.Bomber => new AimDescription(AimShape.Circle, 6.5f + pierces * 0.8f, 2.2f),
                 _ => new AimDescription(AimShape.Line, shotRange, 0.4f)
             },

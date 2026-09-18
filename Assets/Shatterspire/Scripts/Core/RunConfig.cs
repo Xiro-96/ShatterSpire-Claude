@@ -141,8 +141,11 @@ namespace Shatterspire
         /// </summary>
         public static float EngageRange(HeroClassId hero) => hero switch
         {
-            HeroClassId.Guardian => 2.3f,
-            HeroClassId.Paladin => 2.5f,
+            // Etwas innerhalb der Schlagweite (ActionBalance.MeleeReach): wer genau an seiner
+            // Grenze steht, trifft beim ersten Schritt des Gegners schon nicht mehr. Ein Test haelt
+            // fest, dass die Zahl hier kleiner bleibt als die Reichweite.
+            HeroClassId.Guardian => 2.6f,
+            HeroClassId.Paladin => 2.7f,
             HeroClassId.Bomber => 6.5f,
             HeroClassId.Arcanist => 9f,
             _ => 11f
