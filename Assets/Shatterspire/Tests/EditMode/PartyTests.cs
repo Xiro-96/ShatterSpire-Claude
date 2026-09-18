@@ -226,6 +226,51 @@ namespace Shatterspire.Tests
                 "Allein soll es deutlich haerter sein - sonst kostet der Verlust der Gruppe nichts.");
         }
 
+        // ── Aufheben ────────────────────────────────────────────────────────
+
+        [Test]
+        public void RevivingTakesTheFullTime()
+        {
+            var progress = 0f;
+            var steps = 0;
+            while (progress < FallenHero.ReviveSeconds && steps < 1000)
+            {
+                progress = FallenHero.Advance(progress, helper: true, 1f / 60f);
+                steps++;
+            }
+            Assert.AreEqual(FallenHero.ReviveSeconds, progress, 0.001f);
+            Assert.AreEqual(FallenHero.ReviveSeconds * 60f, steps, 2f,
+                "Aufheben soll genau so lange dauern, wie es angekuendigt ist.");
+        }
+
+        [Test]
+        public void WalkingAwayCostsHalfTheProgressPerSecond()
+        {
+            var progress = FallenHero.ReviveSeconds;
+            for (var i = 0; i < 60; i++) progress = FallenHero.Advance(progress, helper: false, 1f / 60f);
+
+            Assert.AreEqual(FallenHero.ReviveSeconds - FallenHero.DecayFactor, progress, 0.02f,
+                "Wer weggeht, verliert - aber nicht alles. Sonst waere jeder Treffer waehrenddessen "
+                + "das Ende des Versuchs.");
+        }
+
+        [Test]
+        public void ReviveProgressNeverLeavesItsRange()
+        {
+            Assert.AreEqual(0f, FallenHero.Advance(0f, helper: false, 5f), 0.0001f);
+            Assert.AreEqual(FallenHero.ReviveSeconds,
+                FallenHero.Advance(FallenHero.ReviveSeconds, helper: true, 5f), 0.0001f);
+        }
+
+        [Test]
+        public void PickedUpIsWorseThanTheNextFloor()
+        {
+            Assert.Greater(FallenHero.ReviveHealth, 0f, "Aufheben muss sich lohnen.");
+            Assert.Less(FallenHero.ReviveHealth, PartyBalance.RejoinHealth,
+                "Mitten im Kampf aufgehoben zu werden soll weniger bringen als der Aufzug zur "
+                + "naechsten Etage - sonst waere das Fallenlassen die bessere Wahl.");
+        }
+
         [Test]
         public void FallenMembersReturnHurt()
         {

@@ -47,6 +47,9 @@ namespace Shatterspire
         /// <summary>Wie schnell der Bot reagiert. Ohne das trifft er auf das Bild genau - und wirkt tot.</summary>
         private const float ReactionSeconds = 0.18f;
 
+        /// <summary>Wie weit ein Mitglied laeuft, um jemanden aufzuheben.</summary>
+        private const float HelpRange = 16f;
+
         private Transform leader;
         private PartyMember member;
         private PlayerController controller;
@@ -134,6 +137,17 @@ namespace Shatterspire
             var regrouping = FlatDistance(transform.position, leader.position) > RegroupDistance;
             var threat = regrouping ? null : target;
             var distance = threat ? FlatDistance(transform.position, threat.transform.position) : float.MaxValue;
+
+            // Einen Gefallenen aufzuheben geht vor allem anderen - aber nur, wenn gerade nichts
+            // unmittelbar auf einen selbst einschlaegt. Sonst liegen am Ende beide da.
+            var fallen = FallenToHelp(distance);
+            if (fallen)
+            {
+                Steer(fallen.transform.position);
+                Aim(threat);
+                if (member) member.Status = "REVIVING";
+                return;
+            }
 
             Steer(DesiredPosition(threat));
             Aim(threat);
@@ -354,6 +368,32 @@ namespace Shatterspire
             DashPressed = true;
             nextDash = Time.time + 4.5f;
             return true;
+        }
+
+        /// <summary>
+        /// Der naechste gefallene Mitstreiter, zu dem es sich zu laufen lohnt. Nah genug, dass die
+        /// Gruppe nicht auseinanderfaellt, und nicht mitten im eigenen Handgemenge - es sei denn, man
+        /// steht ohnehin schon fast daneben.
+        /// </summary>
+        private FallenHero FallenToHelp(float threatDistance)
+        {
+            FallenHero best = null;
+            var bestDistance = HelpRange;
+            var members = PartyMember.Active;
+            for (var i = 0; i < members.Count; i++)
+            {
+                var other = members[i];
+                if (!other || other == member || other.IsAlive) continue;
+                var down = other.GetComponent<FallenHero>();
+                if (!down || !down.IsDown) continue;
+                var offset = FlatDistance(transform.position, other.transform.position);
+                if (offset > bestDistance) continue;
+                // Mitten im Kampf nur, wenn es fast ohne Umweg geht.
+                if (threatDistance < 5f && offset > 4f) continue;
+                bestDistance = offset;
+                best = down;
+            }
+            return best;
         }
 
         private Health ChooseTarget()

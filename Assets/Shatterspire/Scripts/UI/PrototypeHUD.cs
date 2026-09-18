@@ -481,10 +481,19 @@ namespace Shatterspire
                 if (!member) continue;
                 if (teamStatus[i]) teamStatus[i].text = Loc.T(member.Status);
                 if (!teamHealthFill[i]) continue;
-                var normalized = member.Health ? member.Health.Normalized : 0f;
-                teamHealthFill[i].fillAmount = normalized;
-                // Gefallen: der Balken wird grau, damit ein leerer Balken nicht wie wenig Leben aussieht.
-                teamHealthFill[i].color = normalized <= 0f ? new Color(0.45f, 0.18f, 0.18f) : member.Accent;
+                var down = member.GetComponent<FallenHero>();
+                if (down && down.IsDown)
+                {
+                    // Am Boden zeigt derselbe Balken, wie weit das Aufheben ist. Ein leerer Balken
+                    // saehe aus wie wenig Leben; ein steigender sagt, dass gerade jemand hilft.
+                    teamHealthFill[i].fillAmount = Mathf.Max(0.04f, down.ReviveProgress);
+                    teamHealthFill[i].color = down.BeingRevived
+                        ? Color.Lerp(new Color(0.85f, 0.2f, 0.22f), member.Accent, down.ReviveProgress)
+                        : new Color(0.5f, 0.18f, 0.2f);
+                    continue;
+                }
+                teamHealthFill[i].fillAmount = member.Health ? member.Health.Normalized : 0f;
+                teamHealthFill[i].color = member.Accent;
             }
         }
 

@@ -167,6 +167,8 @@ namespace Shatterspire
             { "COVERING", "DECKT" },
             { "FLANKING", "FLANKE" },
             { "REGROUPING", "SAMMELT SICH" },
+            { "REVIVING", "HILFT AUF" },
+            { "BEING REVIVED", "WIRD AUFGEHOBEN" },
             { "GUARDIAN", "WÄCHTER" },
             { "SUPPORT", "UNTERSTÜTZUNG" },
             { "RANGER", "JÄGER" },
