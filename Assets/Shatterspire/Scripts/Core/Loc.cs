@@ -153,6 +153,8 @@ namespace Shatterspire
             { "PERFECT!  RELEASE", "PERFEKT!  LOSLASSEN" },
             { "PERFECT!  RELEASE RMB", "PERFEKT!  RECHTE MAUSTASTE LOSLASSEN" },
             { "PERFECT HIT", "PERFEKT GETROFFEN" },
+            { "RELEASE NOW", "JETZT LOSLASSEN" },
+            { "HOLD, THEN RELEASE IN GOLD", "HALTEN, DANN IM GOLD LOSLASSEN" },
             { "ALMOST PERFECT", "FAST PERFEKT" },
             { "NO UPGRADES YET", "NOCH KEINE VERBESSERUNGEN" },
             // Kurz gehalten: das Feld ist 258 px breit, der laengere Satz wurde abgeschnitten.

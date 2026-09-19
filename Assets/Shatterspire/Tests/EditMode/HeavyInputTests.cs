@@ -96,30 +96,64 @@ namespace Shatterspire.Tests
             MobileInput.SetHeavy(false);
             Frame();
 
-            Assert.IsTrue(weapon.ChargingHeavy,
-                "Ein Tipp hat den schweren Angriff sofort ausgeloest. Auf dem Telefon ist jeder "
-                + "Tipp Druck und Loslassen in einem Bild - so verpufft der volle Balken bei "
-                + "Ladung 0, ohne dass man je einen Ladebalken sieht.");
-            Assert.Less(weapon.HeavyChargeNormalized, ActionBalance.PerfectStart,
-                "Nach einem Tipp steht die Ladung noch am Anfang.");
+            Assert.AreEqual(1f, weapon.HeavyMeterNormalized, 0.001f,
+                "Ein Tipp hat den schweren Angriff bei Ladung 0 ausgeloest. Auf dem Telefon ist "
+                + "jeder Tipp Druck und Loslassen in einem Bild - so verpufft der volle Balken, "
+                + "ohne dass man je einen Ladebalken sieht.");
         }
 
         [Test]
-        public void ATapKeepsChargingUntilTheChargeIsFull()
+        public void ATapCancelsAndCostsNothing()
         {
             MobileInput.SetHeavy(true);
             MobileInput.SetHeavy(false);
             Frame();
+
+            Assert.IsFalse(weapon.ChargingHeavy,
+                "Ein Tipp soll abbrechen, nicht weiterladen. Wer durchlaedt, loest am Ende aus - und "
+                + "genau das sieht aus wie 'wird automatisch eingesetzt'.");
+            Assert.AreEqual(1f, weapon.HeavyMeterNormalized, 0.001f,
+                "Ein versehentlicher Tipp darf den Balken nicht kosten.");
+        }
+
+        [Test]
+        public void TheChargeNeverFiresByItself()
+        {
+            MobileInput.SetHeavy(true);
+            Frame();
             Assert.IsTrue(weapon.ChargingHeavy);
 
-            // Mitten in der Ladung laeuft sie noch, am Ende loest sie aus.
-            Charged(0.8f);
-            Frame();
-            Assert.IsTrue(weapon.ChargingHeavy, "Vor dem Ende darf sie nicht weg sein.");
+            // Weit ueber das Fenster hinaus und bis ans Ende der Ladung: solange der Knopf gehalten
+            // wird, passiert nichts. Das ist der Kern der Meldung.
+            for (var normalized = 0.5f; normalized <= 1f; normalized += 0.1f)
+            {
+                Charged(normalized);
+                Frame();
+                Assert.IsTrue(weapon.ChargingHeavy,
+                    $"Bei Ladung {normalized:0.0} hat der schwere Angriff von selbst ausgeloest, "
+                    + "ohne dass jemand losgelassen hat.");
+            }
 
             Charged(1f);
+            for (var i = 0; i < 5; i++) Frame();
+            Assert.IsTrue(weapon.ChargingHeavy, "Volle Ladung wartet, sie schlaegt nicht zu.");
+            Assert.AreEqual(1f, weapon.HeavyMeterNormalized, 0.001f,
+                "Solange nichts ausgeloest hat, bleibt der Balken voll.");
+        }
+
+        [Test]
+        public void HoldingPastTheWindowStillFiresOnRelease()
+        {
+            MobileInput.SetHeavy(true);
             Frame();
-            Assert.IsFalse(weapon.ChargingHeavy, "Bei voller Ladung loest sie von selbst aus.");
+            Charged(1f);
+            Frame();
+            Assert.IsTrue(weapon.ChargingHeavy);
+
+            MobileInput.SetHeavy(false);
+            Frame();
+            Assert.IsFalse(weapon.ChargingHeavy,
+                "Wer zu lange haelt, verliert den Aufschlag - aber sein Schlag muss kommen.");
         }
 
         // ── Halten und im Fenster loslassen ────────────────────────────────
@@ -142,7 +176,7 @@ namespace Shatterspire.Tests
         }
 
         [Test]
-        public void ReleasingTooEarlyIsIgnoredAndTheChargeGoesOn()
+        public void ReleasingTooEarlyCancelsWithoutFiring()
         {
             MobileInput.SetHeavy(true);
             Frame();
@@ -151,20 +185,14 @@ namespace Shatterspire.Tests
             MobileInput.SetHeavy(false);
             Frame();
 
-            Assert.IsTrue(weapon.ChargingHeavy,
-                "Zu frueh loslassen darf den Balken nicht verpulvern - es bringt nichts und kostet "
-                + "alles.");
+            Assert.IsFalse(weapon.ChargingHeavy, "Zu frueh loslassen bricht ab.");
+            Assert.AreEqual(1f, weapon.HeavyMeterNormalized, 0.001f,
+                "Abbrechen kostet nichts - sonst ist jeder Fehlgriff eine Strafe.");
+            Assert.Greater(weapon.LastHeavyCancel, 0f,
+                "Der Abbruch muss gemeldet werden, damit das HUD den Griff erklaeren kann.");
         }
 
-        [Test]
-        public void TheMeterIsSpentOnlyWhenTheAttackActuallyFires()
-        {
-            MobileInput.SetHeavy(true);
-            MobileInput.SetHeavy(false);
-            Frame();
-            Assert.AreEqual(1f, weapon.HeavyMeterNormalized, 0.001f,
-                "Der Balken gehoert erst dem Schlag, wenn er faellt.");
-        }
+
 
         // ── Der Schritt ins Ziel ist kein Dash ─────────────────────────────
 

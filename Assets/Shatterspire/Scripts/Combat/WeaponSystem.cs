@@ -49,6 +49,14 @@ namespace Shatterspire
         /// <summary>Ob der Ton fuer das offene Fenster in dieser Ladung schon gelaufen ist.</summary>
         private bool windowAnnounced;
 
+        private float chargeStartedAt;
+
+        /// <summary>
+        /// Wann zuletzt eine Ladung abgebrochen wurde, weil zu frueh losgelassen wurde. Das HUD
+        /// erklaert dann kurz den Griff - ein Knopf, der nichts tut, ist sonst nur verwirrend.
+        /// </summary>
+        public float LastHeavyCancel { get; private set; } = -99f;
+
         /// <summary>Der Ring am Boden, der die Ladung zeigt. Nur beim Helden an diesem Geraet.</summary>
         private HeavyChargeRing chargeRing;
         private readonly List<Health> strikeTargets = new();
@@ -298,6 +306,7 @@ namespace Shatterspire
                 chargingHeavy = true;
                 heavyCharge = 0f;
                 windowAnnounced = false;
+                chargeStartedAt = Time.time;
                 PublishHeavyState();
             }
             if (!chargingHeavy) return;
@@ -313,15 +322,27 @@ namespace Shatterspire
             }
             chargeRing?.Show(HeavyChargeNormalized, open);
             PublishHeavyState();
-            // Loslassen zaehlt erst, wenn es sich lohnen kann.
+
+            // Der schwere Angriff loest NIE von selbst aus. Nur das Loslassen loest ihn aus.
             //
-            // Auf dem Telefon ist ein Tipp Druck und Loslassen in einem Bild. Damit ging der schwere
-            // Angriff bei Ladung 0 los: der schwaechste Schlag, den es gibt, und der volle Balken
-            // dahin. Von aussen sah das aus, als sei er "von selbst" gekommen - es gab weder
-            // Ladebalken noch Fenster zu sehen. Wer jetzt tippt, laedt durch und loest am Ende der
-            // Ladung aus; wer haelt, sucht sich seinen Moment.
-            if ((input.HeavyReleased && ActionBalance.CanRelease(HeavyChargeNormalized))
-                || heavyCharge >= HeavyChargeSeconds) ReleaseHeavyAttack();
+            // Zweimal falsch repariert, beide Male am selben Punkt vorbei. Erst loeste ein Tipp ihn
+            // sofort bei Ladung 0 aus - Druck und Loslassen sind auf dem Telefon ein Bild. Dann lud
+            // ein Tipp durch und loeste am Ende der Ladung aus, also 1,2 s spaeter, ohne dass jemand
+            // etwas tat. Beides liest sich von aussen gleich: "wird automatisch eingesetzt".
+            //
+            // Gemeinsame Ursache war, dass volle Ladung selbst ausloeste. Wer den Knopf einmal
+            // beruehrt hatte, konnte den Schlag nicht mehr aufhalten. Jetzt wartet die volle Ladung,
+            // und ein zu frueh losgelassener Knopf bricht ab und gibt den Balken zurueck: ein
+            // versehentlicher Tipp kostet nichts und loest nichts aus.
+            if (input.HeavyReleased)
+            {
+                if (ActionBalance.CanRelease(HeavyChargeNormalized)) ReleaseHeavyAttack();
+                else CancelHeavyCharge();
+                return;
+            }
+            // Notbremse fuer ein verlorenes Loslassen - etwa wenn der Finger die Flaeche verlaesst.
+            // Sie bricht ab, sie schlaegt nicht zu: nichts darf ohne Loslassen ausloesen.
+            if (Time.time - chargeStartedAt > HeavyChargeSeconds * 2.5f) CancelHeavyCharge();
         }
 
         // ── LIGHT ───────────────────────────────────────────────────────────
@@ -956,6 +977,19 @@ namespace Shatterspire
         }
 
         // ── HEAVY ───────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Bricht die Ladung ab und laesst den Balken stehen. Ein Tipp daneben darf nichts kosten -
+        /// und er darf vor allem nichts ausloesen.
+        /// </summary>
+        private void CancelHeavyCharge()
+        {
+            chargingHeavy = false;
+            heavyCharge = 0f;
+            LastHeavyCancel = Time.time;
+            chargeRing?.Hide();
+            PublishHeavyState();
+        }
 
         private void ReleaseHeavyAttack()
         {

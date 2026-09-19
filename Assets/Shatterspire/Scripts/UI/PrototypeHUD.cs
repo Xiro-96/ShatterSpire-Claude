@@ -956,6 +956,10 @@ namespace Shatterspire
             if (Time.time < heavyFlashUntil) return;
             // Der Erklaertext steht nur, bis der Heavy zum ersten Mal voll war. Danach reicht der Ring.
             heavyStateText.text = perfect ? Loc.T(Application.isMobilePlatform ? "PERFECT!  RELEASE" : "PERFECT!  RELEASE RMB")
+                // Hinter dem Fenster wartet die Ladung, sie loest nicht mehr von selbst aus. Wer das
+                // nicht liest, haelt ewig und wundert sich, warum nichts passiert.
+                : charging && timing == HeavyTiming.Loose && charge > ActionBalance.PerfectEnd
+                    ? Loc.T("RELEASE NOW")
                 : charging ? Loc.T("RELEASE IN GOLD")
                 : ready ? Loc.T(weapon.HeavyName) + " " + Loc.T("READY")
                 : heavyEverReady ? string.Empty : Loc.T("LIGHT HITS CHARGE HEAVY");
@@ -974,6 +978,14 @@ namespace Shatterspire
         /// </summary>
         private void UpdateHeavyFlash()
         {
+            // Abgebrochen, weil zu frueh losgelassen: den Griff erklaeren. Ein Knopf, der nichts
+            // tut, ist schlimmer als einer, der etwas Falsches tut - man lernt nichts daraus.
+            if (heavyStateText && Time.time - weapon.LastHeavyCancel < 1.4f)
+            {
+                heavyStateText.text = Loc.T("HOLD, THEN RELEASE IN GOLD");
+                heavyStateText.color = new Color(0.72f, 0.86f, 1f);
+                return;
+            }
             if (!heavyStateText || heavyFlashUntil <= 0f) return;
             if (Time.time < heavyFlashUntil)
             {
