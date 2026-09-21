@@ -244,8 +244,12 @@ namespace Shatterspire
             // Ausloesen beim Loslassen, nicht beim Druck: ein kurzer Tipp ist beides in einem, wer
             // haelt kann vorher richten. Das ist der ganze Unterschied zwischen "sofort" und
             // "genau", und er kostet keine zweite Taste.
-            if (!chargingHeavy && input.SkillReleased && Time.time >= skillReadyAt && !ultimateActive)
-                StartCoroutine(ClassSkill());
+            if (input.SkillReleased) RequestSkill();
+            if (skillQueuedUntil >= Time.time && SkillCanStart)
+            {
+                skillQueuedUntil = -1f;
+                StartCoroutine(ClassSkill(skillQueuedAuto, skillQueuedDirection));
+            }
             if (!chargingHeavy && input.UltimateReleased && UltimateReady && !ultimateActive)
                 StartCoroutine(Ultimate());
             UpdateAimIndicator();
@@ -962,8 +966,9 @@ namespace Shatterspire
         /// </summary>
         private IEnumerator MeleeImpact(float delay, System.Action impact)
         {
+            var swing = swingGeneration;
             yield return new WaitForSeconds(delay);
-            if (!health.IsAlive) yield break;
+            if (!health.IsAlive || swing != swingGeneration) yield break;
             var before = landedHits;
             impact();
             if (landedHits > before) NotifyLightHit();
@@ -1033,11 +1038,13 @@ namespace Shatterspire
         /// Bricht die Ladung ab und laesst den Balken stehen. Ein Tipp daneben darf nichts kosten -
         /// und er darf vor allem nichts ausloesen.
         /// </summary>
-        private void CancelHeavyCharge()
+        private void CancelHeavyCharge(bool explain = true)
         {
             chargingHeavy = false;
             heavyCharge = 0f;
-            LastHeavyCancel = Time.time;
+            // Nur ein zu frueh losgelassener Knopf braucht die Erklaerung des Griffs. Wer mit dem
+            // Dash abbricht, hat es so gewollt.
+            if (explain) LastHeavyCancel = Time.time;
             chargeRing?.Hide();
             PublishHeavyState();
         }
@@ -1137,12 +1144,56 @@ namespace Shatterspire
         /// Rahmen um die Faehigkeit: haelt ihre Zielabsicht fest, solange sie laeuft, und gibt sie
         /// danach frei - egal, an welcher der vielen Stellen die Faehigkeit endet.
         /// </summary>
-        private IEnumerator ClassSkill()
+        /// <summary>
+        /// So lange vor dem Ende der Abklingzeit zaehlt ein Loslassen noch: die Faehigkeit loest aus,
+        /// sobald sie bereit ist.
+        ///
+        /// Vorher ging ein Loslassen kurz vor dem Ende einfach verloren - kein Schlag, kein Hinweis.
+        /// Der normale Angriff hatte seit Langem einen Puffer, die Faehigkeit nicht. Wer im Kampf auf
+        /// die Zahl im Knopf schaut und bei "0,2" loslaesst, hat richtig gespielt.
+        /// </summary>
+        public const float SkillBufferSeconds = 0.4f;
+
+        private float skillQueuedUntil = -1f;
+        private bool skillQueuedAuto;
+        private Vector3 skillQueuedDirection;
+
+        /// <summary>
+        /// Wann zuletzt ein Loslassen abgewiesen wurde, weil die Faehigkeit noch lange nicht bereit
+        /// war. Das HUD zeigt es am Knopf - ein Druck ohne jede Antwort liest sich wie ein Defekt.
+        /// </summary>
+        public float LastSkillRefused { get; private set; } = -99f;
+
+        private bool SkillCanStart => !chargingHeavy && !ultimateActive && Time.time >= skillReadyAt;
+
+        /// <summary>
+        /// Das Loslassen der Faehigkeit: sofort ausloesen, wenn sie bereit ist; knapp davor merken,
+        /// samt der Richtung, die in diesem Moment gemeint war; sonst sichtbar abweisen.
+        /// </summary>
+        private void RequestSkill()
+        {
+            if (SkillCanStart)
+            {
+                StartCoroutine(ClassSkill());
+                return;
+            }
+            var wait = skillReadyAt - Time.time;
+            if (!chargingHeavy && !ultimateActive && wait <= SkillBufferSeconds)
+            {
+                skillQueuedUntil = Time.time + Mathf.Max(0f, wait) + 0.1f;
+                skillQueuedAuto = input.AutoAim;
+                skillQueuedDirection = aimDirection;
+                return;
+            }
+            LastSkillRefused = Time.time;
+        }
+
+        private IEnumerator ClassSkill(bool? auto = null, Vector3? direction = null)
         {
             // Im Bild des Ausloesens, nicht erst in der verschachtelten Faehigkeit: sonst koennte ein
             // zweites Loslassen im selben Moment eine zweite Faehigkeit starten.
             skillReadyAt = Time.time + SkillCooldown;
-            BeginAbilityAim();
+            BeginAbilityAim(auto, direction);
             if (build.HasOverflow)
             {
                 heavyMeter = Mathf.Min(HeavyMeterMaximum, heavyMeter + HeavyMeterMaximum * RelicRules.OverflowHeavyFill);
@@ -1383,8 +1434,21 @@ namespace Shatterspire
         // ── DASH ────────────────────────────────────────────────────────────
 
         /// <summary>Vom PlayerController zu Beginn eines Dash gerufen. Hier haengen die Dash-Upgrades der Helden.</summary>
+        /// <summary>
+        /// Zaehler der Hiebe, die ein Dash abgebrochen hat. Ein Hieb merkt sich beim Ausholen den
+        /// Stand und faellt nicht, wenn sich der Stand bis zum Treffer geaendert hat.
+        /// </summary>
+        private int swingGeneration;
+
         public void OnDashStarted(Vector3 origin, Vector3 direction)
         {
+            // Der Dash ist der Ausweg aus jeder Aktion. Vorher landete ein Hieb, der schon ausgeholt
+            // hatte, auch nach dem Dash noch - an der neuen Stelle, weil der Treffer erst beim
+            // Einschlag berechnet wird. Wer aus einem Schlag herausrollte, schlug trotzdem zu, nur
+            // woanders. Eine Ladung des schweren Angriffs bricht er ebenso ab und gibt den Balken
+            // zurueck.
+            swingGeneration++;
+            if (chargingHeavy) CancelHeavyCharge(explain: false);
             if (build.HasSparkWard) build.ArmSparkWard();
             if (build.HasPhantomEdge) StartCoroutine(PhantomEdge(origin));
             if (heroClass == HeroClassId.Ranger && build.Has(PerkId.RangerPartingShot))
@@ -1479,10 +1543,18 @@ namespace Shatterspire
                 }
                 NotifyDamageDealt(dealt);
             }
-            // Ein Treffer muss kurz haengen bleiben, sonst laeuft der Schlag durch den Gegner
-            // hindurch. Nur einmal je Schlag, nicht je getroffenem Gegner.
-            if (weaponImpact && strikeTargets.Count > 0)
-                LocalHitstop(heavyImpact ? 0.05f : 0.03f, heavyImpact ? 0.07f : 0.1f);
+            // Ein schwerer Treffer bleibt kurz haengen, sonst laeuft der Schlag durch den Gegner
+            // hindurch. Einmal je Schlag, nicht je getroffenem Gegner.
+            //
+            // Nur schwere Hiebe - der dritte im Kombo, Schmettern, Wirbel. Die Starre haelt die ganze
+            // Welt an, auch die eigene Figur unter dem Daumen, und bei XIRO kam sie mit jedem der
+            // drei Hiebe: allein 12 % der Zeit Zeitlupe, 2,8 Stopps je Sekunde. Leichte Hiebe haben
+            // Klingenspur, Einschlag und Klang; das Gewicht gehoert dem Schlag, der das Kombo
+            // beendet. Nachgerechnet sinkt XIRO damit auf 8 % und 1,3 Stopps, BRAX von 10 auf 9 %.
+            // Und weil die Sperre nach einem Stopp nicht mehr von leichten Hieben belegt ist,
+            // bekommen Finisher und Krits ihre Starre jetzt zuverlaessig.
+            if (weaponImpact && heavyImpact && strikeTargets.Count > 0)
+                LocalHitstop(0.05f, 0.07f);
             if (critical && build.IsShatter && strikeTargets.Count > 0)
                 CombatUtility.Explode(point, 3f, amount * 0.8f, TeamId.Enemy, DamageType.Ice, gameObject);
         }
@@ -1716,11 +1788,19 @@ namespace Shatterspire
         }
 
         /// <summary>Haelt die Absicht einer gerade ausgeloesten Faehigkeit fest und dreht die Figur dorthin.</summary>
-        private void BeginAbilityAim()
+        /// <summary>
+        /// Haelt die Absicht fest, mit der eine Faehigkeit ausgeloest wurde. Eine gepufferte
+        /// Faehigkeit bringt ihre eigene mit - die aus dem Moment des Loslassens, nicht die von
+        /// jetzt. Sonst ginge eine im Rueckzug losgelassene Welle beim Ausloesen nach hinten.
+        /// </summary>
+        private void BeginAbilityAim(bool? auto = null, Vector3? direction = null)
         {
             abilityAimUntil = Time.time + AbilityAimSeconds;
-            abilityAimAuto = input.AutoAim;
-            abilityAimDirection = aimDirection;
+            abilityAimAuto = auto ?? input.AutoAim;
+            abilityAimDirection = direction ?? aimDirection;
+            // Nur ein Ziel, das das Selbstzielen gerade erfasst hat, geht der Richtung vom Loslassen
+            // vor - dafuer ist es da. Ohne Ziel gilt, was beim Loslassen gemeint war.
+            if (!(abilityAimAuto && lockedTarget)) aimDirection = abilityAimDirection;
             FaceNow(aimDirection);
         }
 

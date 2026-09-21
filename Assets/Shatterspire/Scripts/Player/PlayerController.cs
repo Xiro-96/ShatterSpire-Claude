@@ -194,6 +194,9 @@ namespace Shatterspire
         private IEnumerator Roll()
         {
             rolling = true;
+            // Die Bindung eines Hiebs endet mit dem Dash - sonst schleicht der Held nach der Rolle
+            // mit einem Drittel seines Tempos weiter, bis der abgebrochene Schlag ausgelaufen waere.
+            boundUntil = -1f;
             dashCharges--;
             if (dashCharges == MaxCharges - 1) nextRecharge = Time.time + RechargeSeconds;
             rollDirection = new Vector3(input.Move.x, 0f, input.Move.y);

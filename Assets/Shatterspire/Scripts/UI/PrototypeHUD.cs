@@ -650,6 +650,12 @@ namespace Shatterspire
                 var remaining = weapon.SkillCooldownRemaining;
                 var ready = remaining <= 0f;
                 skillButton.Cooldown.fillAmount = ready ? 0f : 1f - weapon.SkillNormalized;
+                // Abgewiesen, weil noch lange nicht bereit: die Abklingzeit leuchtet kurz rot auf.
+                // Ein Druck ohne jede Antwort liest sich wie ein Knopf, der nicht funktioniert.
+                var refused = Time.time - weapon.LastSkillRefused < 0.3f;
+                skillButton.Cooldown.color = refused
+                    ? new Color(0.55f, 0.04f, 0.06f, 0.78f)
+                    : new Color(0f, 0.01f, 0.03f, 0.66f);
                 skillButton.Center.text = ready ? string.Empty : remaining >= 1f ? Mathf.CeilToInt(remaining).ToString() : remaining.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
                 if (ready && !skillWasReady) skillButton.Punch();
                 skillWasReady = ready;

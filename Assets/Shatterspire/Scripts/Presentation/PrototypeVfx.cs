@@ -148,7 +148,7 @@ namespace Shatterspire
             Sfx.Play(Sound.Shot, position);
             var go = PrototypeFactory.Primitive(PrimitiveType.Sphere, "Muzzle Flash", position + direction * 0.2f,
                 new Vector3(0.28f, 0.28f, 0.46f), new Color(1f, 0.8f, 0.2f), true);
-            Object.Destroy(go.GetComponent<Collider>());
+            PrototypeFactory.RemoveCollider(go.GetComponent<Collider>());
             go.transform.rotation = Quaternion.LookRotation(direction);
             go.AddComponent<VfxPulse>().Configure(0.11f, 2.2f, true);
         }
@@ -233,7 +233,7 @@ namespace Shatterspire
             Sfx.Play(heavy ? Sound.HitHeavy : Sound.HitLight, point, heavy ? 0.9f : 0.7f);
             var core = PrototypeFactory.Primitive(PrimitiveType.Sphere, "Weapon Impact", point,
                 Vector3.one * (heavy ? 0.34f : 0.24f), Color.Lerp(Color.white, color, 0.35f), true);
-            Object.Destroy(core.GetComponent<Collider>());
+            PrototypeFactory.RemoveCollider(core.GetComponent<Collider>());
             core.AddComponent<VfxPulse>().Configure(heavy ? 0.16f : 0.12f, heavy ? 2.6f : 2.1f, true);
 
             var flat = new Vector3(direction.x, 0f, direction.z);
@@ -244,7 +244,7 @@ namespace Shatterspire
             {
                 var spark = PrototypeFactory.Primitive(PrimitiveType.Cube, "Impact Spark", point,
                     new Vector3(0.06f, 0.06f, 0.3f), color, true);
-                Object.Destroy(spark.GetComponent<Collider>());
+                PrototypeFactory.RemoveCollider(spark.GetComponent<Collider>());
                 // In Schlagrichtung weg, faecherfoermig - nicht ringsum: der Funke soll die
                 // Richtung des Hiebs zeigen.
                 var spread = Quaternion.Euler(Random.Range(-26f, 26f), Random.Range(-44f, 44f), 0f);
@@ -264,7 +264,7 @@ namespace Shatterspire
             var column = PrototypeFactory.Primitive(PrimitiveType.Cylinder, "Verdict Column",
                 point + Vector3.up * 5.5f, new Vector3(radius * 0.9f, 5.5f, radius * 0.9f),
                 Color.Lerp(color, Color.white, 0.4f), true);
-            Object.Destroy(column.GetComponent<Collider>());
+            PrototypeFactory.RemoveCollider(column.GetComponent<Collider>());
             column.AddComponent<VfxPulse>().Configure(0.3f, 0f, false);
 
             var ring = GameObject.CreatePrimitive(PrimitiveType.Quad);
@@ -282,7 +282,7 @@ namespace Shatterspire
             {
                 var mote = PrototypeFactory.Primitive(PrimitiveType.Cube, "Verdict Mote",
                     point + Vector3.up * 0.3f, new Vector3(0.08f, 0.24f, 0.08f), color, true);
-                Object.Destroy(mote.GetComponent<Collider>());
+                PrototypeFactory.RemoveCollider(mote.GetComponent<Collider>());
                 mote.AddComponent<VfxShard>().Configure(
                     (Quaternion.Euler(0f, i * 60f, 0f) * Vector3.forward + Vector3.up * 1.4f) * Random.Range(2.2f, 3.6f));
             }
@@ -300,19 +300,19 @@ namespace Shatterspire
             if (shake) CameraController.Impulse(Mathf.Min(0.16f, radius * 0.025f));
             var ring = PrototypeFactory.Primitive(PrimitiveType.Cylinder, "Impact Ring", position + Vector3.up * 0.06f,
                 new Vector3(0.24f, 0.025f, 0.24f), color, true);
-            Object.Destroy(ring.GetComponent<Collider>());
+            PrototypeFactory.RemoveCollider(ring.GetComponent<Collider>());
             ring.AddComponent<VfxPulse>().Configure(0.24f, Mathf.Max(8f, radius * 8f), true);
 
             var core = PrototypeFactory.Primitive(PrimitiveType.Sphere, "Impact Core", position + Vector3.up * 0.55f,
                 Vector3.one * 0.2f, Color.Lerp(Color.white, color, 0.45f), true);
-            Object.Destroy(core.GetComponent<Collider>());
+            PrototypeFactory.RemoveCollider(core.GetComponent<Collider>());
             core.AddComponent<VfxPulse>().Configure(0.16f, Mathf.Max(4f, radius * 2.5f), true);
 
             for (var i = 0; i < 5; i++)
             {
                 var spark = PrototypeFactory.Primitive(PrimitiveType.Cube, "Impact Spark", position + Vector3.up * 0.35f,
                     new Vector3(0.1f, 0.28f, 0.1f), color, true);
-                Object.Destroy(spark.GetComponent<Collider>());
+                PrototypeFactory.RemoveCollider(spark.GetComponent<Collider>());
                 spark.AddComponent<VfxShard>().Configure((Quaternion.Euler(0f, i * 72f, 0f) * Vector3.forward + Vector3.up * 0.7f) * Random.Range(2.5f, 4.2f));
             }
         }
@@ -344,7 +344,7 @@ namespace Shatterspire
             {
                 var shard = PrototypeFactory.Primitive(PrimitiveType.Cube, "Death Shard", position + Vector3.up,
                     new Vector3(0.12f, Random.Range(0.2f, 0.38f), 0.12f), i % 3 == 0 ? Color.white : color, true);
-                Object.Destroy(shard.GetComponent<Collider>());
+                PrototypeFactory.RemoveCollider(shard.GetComponent<Collider>());
                 var pulse = shard.AddComponent<VfxShard>();
                 pulse.Configure(Random.onUnitSphere * Random.Range(2.5f, 5f));
             }
@@ -354,7 +354,7 @@ namespace Shatterspire
         {
             var go = PrototypeFactory.Primitive(PrimitiveType.Sphere, "Dash Trail", position + Vector3.up * 0.62f,
                 new Vector3(1.05f, 0.16f, 1.05f), color, true);
-            Object.Destroy(go.GetComponent<Collider>());
+            PrototypeFactory.RemoveCollider(go.GetComponent<Collider>());
             go.AddComponent<VfxPulse>().Configure(0.35f, 1.8f, false);
         }
 
