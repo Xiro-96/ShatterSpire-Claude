@@ -139,7 +139,8 @@ namespace Shatterspire
                 var shot = flying[i];
                 if (!shot || shot.TargetTeam != TeamId.Player) continue;
                 if (Flat(shot.transform.position) > radius) continue;
-                PrototypeVfx.SpawnHit(shot.transform.position, Vector3.up, DamageType.Void, false);
+                PrototypeVfx.SpawnHit(shot.transform.position, Vector3.up, DamageType.Void, false,
+                    !PartyMember.IsOtherHero(owner));
                 Destroy(shot.gameObject);
                 swallowed++;
             }

@@ -153,7 +153,8 @@ namespace Shatterspire
             go.AddComponent<VfxPulse>().Configure(0.11f, 2.2f, true);
         }
 
-        public static void SpawnHit(Vector3 position, Vector3 force, DamageType type, bool critical)
+        public static void SpawnHit(Vector3 position, Vector3 force, DamageType type, bool critical,
+            bool shake = true)
         {
             var color = ElementColor(type);
             var direction = force;
@@ -179,7 +180,7 @@ namespace Shatterspire
             }
 
             Sfx.Play(critical ? Sound.HitCritical : Sound.HitLight, position, critical ? 1f : 0.85f);
-            CameraController.Impulse(critical ? 0.085f : 0.025f);
+            if (shake) CameraController.Impulse(critical ? 0.085f : 0.025f);
         }
 
         public static void SpawnEnemyArrival(Vector3 position, bool elite)
@@ -256,10 +257,10 @@ namespace Shatterspire
         /// Ein Urteil, das herabfaehrt: eine Saeule aus Licht, die in sich zusammenfaellt, mit einem
         /// Ring am Fuss. Anders als eine Explosion kommt sie von oben - das ist der ganze Punkt.
         /// </summary>
-        public static void SpawnJudgement(Vector3 point, float radius, Color color)
+        public static void SpawnJudgement(Vector3 point, float radius, Color color, bool shake = true)
         {
             Sfx.Play(Sound.Smash, point, 0.95f);
-            CameraController.Impulse(Mathf.Min(0.18f, radius * 0.05f));
+            if (shake) CameraController.Impulse(Mathf.Min(0.18f, radius * 0.05f));
             var column = PrototypeFactory.Primitive(PrimitiveType.Cylinder, "Verdict Column",
                 point + Vector3.up * 5.5f, new Vector3(radius * 0.9f, 5.5f, radius * 0.9f),
                 Color.Lerp(color, Color.white, 0.4f), true);
@@ -287,12 +288,16 @@ namespace Shatterspire
             }
         }
 
-        public static void SpawnExplosion(Vector3 position, float radius, Color color)
+        /// <param name="shake">
+        /// Ob die Kamera mitgeht. Nur wenn die Explosion dem Helden an diesem Geraet gehoert oder
+        /// aus der Welt kommt - nicht, wenn ein Begleiter sie ausloest.
+        /// </param>
+        public static void SpawnExplosion(Vector3 position, float radius, Color color, bool shake = true)
         {
             // Eine kleine Detonation soll nicht so laut sein wie eine grosse.
             Sfx.Play(radius >= 2.4f ? Sound.Explosion : Sound.HitHeavy, position,
                 Mathf.Clamp(0.45f + radius * 0.12f, 0.45f, 1f));
-            CameraController.Impulse(Mathf.Min(0.16f, radius * 0.025f));
+            if (shake) CameraController.Impulse(Mathf.Min(0.16f, radius * 0.025f));
             var ring = PrototypeFactory.Primitive(PrimitiveType.Cylinder, "Impact Ring", position + Vector3.up * 0.06f,
                 new Vector3(0.24f, 0.025f, 0.24f), color, true);
             Object.Destroy(ring.GetComponent<Collider>());

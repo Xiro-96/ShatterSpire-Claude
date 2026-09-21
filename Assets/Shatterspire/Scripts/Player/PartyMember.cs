@@ -114,6 +114,30 @@ namespace Shatterspire
             return best;
         }
 
+        /// <summary>
+        /// Gehoert dieses Objekt zum Helden an diesem Geraet? Fuer Treffer ist das die Quelle
+        /// (<see cref="DamageInfo.Source"/>) - Geschosse, Bomben und Wellen tragen dort den Helden,
+        /// der sie geworfen hat.
+        /// </summary>
+        public static bool IsLocalHero(GameObject source)
+        {
+            if (!source) return false;
+            var member = source.GetComponentInParent<PartyMember>();
+            return member && member.IsLocal;
+        }
+
+        /// <summary>
+        /// Gehoert dieses Objekt zu einem Helden, den dieses Geraet nicht steuert - einem Bot, und
+        /// spaeter einem Mitspieler? Dann bekommt der Spieler hier keine Zeitlupe und keinen
+        /// Kamerastoss davon. Alles ohne Helden - Gegner, Fallen, die Welt - bleibt, wie es war.
+        /// </summary>
+        public static bool IsOtherHero(GameObject source)
+        {
+            if (!source) return false;
+            var member = source.GetComponentInParent<PartyMember>();
+            return member && !member.IsLocal;
+        }
+
         /// <summary>Lebt ueberhaupt noch jemand? Solange nicht, ist der Aufstieg vorbei.</summary>
         public static bool AnyAlive()
         {

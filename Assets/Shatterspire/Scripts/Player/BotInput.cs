@@ -138,6 +138,14 @@ namespace Shatterspire
             var threat = regrouping ? null : target;
             var distance = threat ? FlatDistance(transform.position, threat.transform.position) : float.MaxValue;
 
+            // Eine angefangene Ladung geht vor: wer mitten darin abbiegt, laesst den Schlag haengen.
+            if (FinishHeavy())
+            {
+                Steer(DesiredPosition(threat));
+                Aim(threat);
+                return;
+            }
+
             // Einen Gefallenen aufzuheben geht vor allem anderen - aber nur, wenn gerade nichts
             // unmittelbar auf einen selbst einschlaegt. Sonst liegen am Ende beide da.
             var fallen = FallenToHelp(distance);
@@ -330,22 +338,19 @@ namespace Shatterspire
                 return;
             }
 
-            // Der schwere Angriff ist der einzige, bei dem Timing zaehlt: im richtigen Moment
-            // loslassen gibt den perfekten Schlag. Der Loslasspunkt wird beim Ausholen einmal
-            // ausgewuerfelt und liegt meistens, aber nicht immer, im Fenster - ein Bot, der ihn
-            // jedes Mal trifft, waere besser als jeder Spieler.
-            if (weapon.ChargingHeavy)
-            {
-                if (weapon.HeavyChargeNormalized >= heavyReleaseAt) HeavyReleased = true;
-                else HeavyHeld = true;
-                return;
-            }
-            if (weapon.HeavyReady && inRange && Time.time >= nextHeavy)
+            // Der schwere Angriff ist der groesste Moment, den ein Held hat - und bei einem
+            // Begleiter der lauteste auf dem Bildschirm. Vorher setzte ein Bot ihn ein, sobald der
+            // Balken voll war, also alle zwei Sekunden: XIROs Urteil fiel ununterbrochen, auch wenn
+            // man selbst einen anderen Helden spielte. Jetzt nur, wo er etwas ausrichtet - gegen
+            // eine Gruppe oder einen starken Gegner - und hoechstens alle paar Sekunden.
+            if (weapon.HeavyReady && inRange && Time.time >= nextHeavy && WorthAHeavy(threat))
             {
                 HeavyPressed = true;
                 HeavyHeld = true;
+                // Der Loslasspunkt wird einmal ausgewuerfelt und liegt meistens, aber nicht immer,
+                // im Fenster. Ein Bot, der ihn jedes Mal trifft, waere besser als jeder Spieler.
                 heavyReleaseAt = Random.Range(0.42f, 0.86f);
-                nextHeavy = Time.time + 1.4f;
+                nextHeavy = Time.time + HeavyPause;
                 return;
             }
 
@@ -394,6 +399,42 @@ namespace Shatterspire
                 best = down;
             }
             return best;
+        }
+
+        /// <summary>So lange wartet ein Begleiter mindestens zwischen zwei schweren Angriffen.</summary>
+        private const float HeavyPause = 6f;
+
+        /// <summary>
+        /// Haelt eine angefangene Ladung und laesst sie am gewuerfelten Punkt los - auch wenn das
+        /// Ziel inzwischen gefallen ist. Seit volle Ladung nicht mehr von selbst ausloest, bliebe
+        /// ein Bot sonst mit geladenem Schlag stehen und koennte nichts anderes mehr tun.
+        /// </summary>
+        private bool FinishHeavy()
+        {
+            if (!weapon || !weapon.ChargingHeavy) return false;
+            if (weapon.HeavyChargeNormalized >= heavyReleaseAt) HeavyReleased = true;
+            else HeavyHeld = true;
+            return true;
+        }
+
+        /// <summary>
+        /// Lohnt sich hier der schwere Angriff? Gegen einen starken Gegner immer, sonst nur, wenn
+        /// er mehr als einen trifft.
+        /// </summary>
+        private bool WorthAHeavy(Health threat)
+        {
+            if (!threat) return false;
+            var agent = threat.GetComponent<EnemyAgent>();
+            if (agent && (EnemyKinds.IsBoss(agent.Kind) || agent.Kind == EnemyKind.Elite)) return true;
+            var around = 0;
+            var active = Health.Active;
+            for (var i = 0; i < active.Count; i++)
+            {
+                var candidate = active[i];
+                if (!Targeting.IsTargetable(candidate, TeamId.Enemy)) continue;
+                if (FlatDistance(candidate.transform.position, threat.transform.position) <= 3.5f) around++;
+            }
+            return around >= 2;
         }
 
         private Health ChooseTarget()

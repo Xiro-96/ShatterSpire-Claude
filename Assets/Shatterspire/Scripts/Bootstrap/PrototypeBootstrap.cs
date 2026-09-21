@@ -200,7 +200,7 @@ namespace Shatterspire
             controller.ConfigureClass(hero);
             // Linie am Boden und Ring um das Ziel gibt es nur einmal - fuer den Helden an diesem
             // Geraet. Drei Kreise auf dem Boden, und keiner davon ist noch der eigene.
-            weapon.SetIndicatorsEnabled(local);
+            weapon.SetLocal(local);
             weapon.ConfigureClass(hero);
             var built = AuthoredArt.TryBuildHero(root.transform, hero, out var muzzle);
             if (!built) muzzle = StylizedArt.BuildRex(root.transform);

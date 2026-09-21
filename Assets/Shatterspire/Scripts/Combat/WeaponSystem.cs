@@ -143,20 +143,58 @@ namespace Shatterspire
         public string UltimateName => HeroCatalog.UltimateName(heroClass);
 
         /// <summary>
-        /// Zeigt dieser Held seine Zielanzeige am Boden und den Ring um sein Ziel?
+        /// Steuert dieses Geraet diesen Helden?
         ///
-        /// Nur der Held an diesem Geraet tut das. Bei drei Helden mit Ringen und Linien waere der
-        /// Boden voll, und keiner der Kreise waere noch der eigene. Muss vor
-        /// <see cref="ConfigureClass"/> gesetzt werden - dort entstehen die Anzeigen.
+        /// Davon haengt mehr ab als die Zielanzeige. Alles, was der Spieler an seinem eigenen
+        /// Helden spueren soll, gehoert nur dem Helden an diesem Geraet: die Linie und der Ring am
+        /// Boden, die Trefferstarre, der Kamerastoss, die Ansagen ohne Ort, und der Zustand des
+        /// schweren Angriffs im HUD.
+        ///
+        /// Seit die zwei Begleiter echte Helden sind, lief all das auch fuer sie. Die
+        /// Trefferstarre setzt Time.timeScale fuer die ganze Welt herunter - gemessen lief das Spiel
+        /// mit zwei Begleitern 13 bis 17 % der Zeit in Zeitlupe statt 4 bis 12 %, auch die eigene
+        /// Figur unter dem Daumen. Und das HUD zeigte ihre Ladungen auf dem eigenen Knopf an: der
+        /// schwere Angriff schien zu laden und auszuloesen, ohne dass jemand drueckte.
+        ///
+        /// Muss vor <see cref="ConfigureClass"/> gesetzt werden - dort entstehen die Anzeigen.
         /// </summary>
-        public void SetIndicatorsEnabled(bool value) => indicatorsEnabled = value;
+        public void SetLocal(bool value) => isLocal = value;
 
-        private bool indicatorsEnabled = true;
+        private bool isLocal = true;
+
+        /// <summary>Steuert dieses Geraet diesen Helden? Siehe <see cref="SetLocal"/>.</summary>
+        public bool IsLocal => isLocal;
+
+        // ── Rueckmeldung, die nur dem eigenen Helden gehoert ────────────────
+        // Jeder Aufruf in dieser Klasse geht ueber diese fuenf. Ein Test haelt fest, dass keiner
+        // daran vorbei direkt Hitstop, Kamera oder Ansage anspricht.
+
+        private void LocalHitstop(float seconds, float scale = 0.06f)
+        {
+            if (isLocal) Hitstop.Freeze(seconds, scale);
+        }
+
+        private void LocalShake(float amount)
+        {
+            if (isLocal) CameraController.Impulse(amount);
+        }
+
+        private void LocalStinger(Sound sound, float gain = 1f)
+        {
+            if (isLocal) Sfx.Play2D(sound, gain);
+        }
+
+        /// <summary>Die Explosion sehen alle; den Stoss spuert nur, wem sie gehoert.</summary>
+        private void Explosion(Vector3 position, float radius, Color color)
+            => PrototypeVfx.SpawnExplosion(position, radius, color, isLocal);
+
+        private void Judgement(Vector3 point, float radius, Color color)
+            => PrototypeVfx.SpawnJudgement(point, radius, color, isLocal);
 
         public void ConfigureClass(HeroClassId value)
         {
             heroClass = value;
-            if (!indicatorsEnabled) return;
+            if (!isLocal) return;
             // Erst hier steht die Klasse fest, und damit die Farbe der Anzeige.
             if (!aimIndicator) aimIndicator = AimIndicator.Attach(transform, HeroCatalog.Accent(heroClass));
             if (!targetIndicator) targetIndicator = gameObject.AddComponent<TargetLockIndicator>();
@@ -232,7 +270,7 @@ namespace Shatterspire
             if (HeavyReady)
             {
                 PrototypeVfx.SpawnHeavyReady(transform.position);
-                CameraController.Impulse(0.07f);
+                LocalShake(0.07f);
             }
             PublishHeavyState();
         }
@@ -279,7 +317,7 @@ namespace Shatterspire
             // Die Obergrenze waechst mit der Staerke: sonst holten ein paar Abschuesse die volle
             // Dauer zurueck, und eine frisch verdiente Ultimate waere nur am Anfang schwaecher.
             focusUntil = Mathf.Min(Time.time + FocusMaximum * UltimatePower, focusUntil + FocusPerKill);
-            Sfx.Play2D(Sound.FocusExtend, 0.6f);
+            LocalStinger(Sound.FocusExtend, 0.6f);
         }
 
         private void AddUltimateCharge(float amount)
@@ -296,7 +334,7 @@ namespace Shatterspire
             ultimateCharge = Mathf.Min(1f, ultimateCharge + amount * build.UltimateChargeMultiplier);
             if (!UltimateReady) return;
             PrototypeVfx.SpawnHeavyReady(transform.position);
-            CameraController.Impulse(0.06f);
+            LocalShake(0.06f);
         }
 
         private void UpdateHeavyAttack()
@@ -318,7 +356,7 @@ namespace Shatterspire
             if (open && !windowAnnounced)
             {
                 windowAnnounced = true;
-                if (indicatorsEnabled) Sfx.Play2D(Sound.HeavyWindow, 0.9f);
+                LocalStinger(Sound.HeavyWindow, 0.9f);
             }
             chargeRing?.Show(HeavyChargeNormalized, open);
             PublishHeavyState();
@@ -406,7 +444,7 @@ namespace Shatterspire
             }
             if (finisher) controller?.CombatStep(direction, 0.17f);
             PulseShot(finisher ? 1f : 0.62f);
-            if (finisher) CameraController.Impulse(0.055f);
+            if (finisher) LocalShake(0.055f);
         }
 
         /// <summary>
@@ -452,7 +490,7 @@ namespace Shatterspire
                     if (build.ProjectileCount > 1)
                         Strike(point + direction * 1.25f, 1.3f, hit * 0.8f, type, flash: false, weaponImpact: true);
                     controller?.CombatStep(direction, 0.25f);
-                    CameraController.Impulse(0.06f);
+                    LocalShake(0.06f);
                 }));
                 return;
             }
@@ -466,7 +504,7 @@ namespace Shatterspire
                 var radius = 2.6f + reach;
                 Strike(transform.position, radius, hit * 1.75f, type, 8f, flash: false,
                     weaponImpact: true, heavyImpact: true);
-                CameraController.Impulse(0.09f);
+                LocalShake(0.09f);
                 if (build.Ricochets > 0) StartCoroutine(DelayedBlast(transform.position, radius * 0.85f, hit * 0.6f, type, 0.22f));
                 if (build.Has(PerkId.GuardianCleaveWave))
                     StartCoroutine(Eruptions(transform.position, direction, 3, 3.4f, 2.4f, 1.2f, hit * 1.2f, 0.07f));
@@ -509,7 +547,7 @@ namespace Shatterspire
             }
             motion?.PlayMotion(AttackMotion.Swing, finisher ? 1f : 0.7f);
             Sfx.Play(Sound.BombThrow, transform.position);
-            if (finisher) CameraController.Impulse(0.03f);
+            if (finisher) LocalShake(0.03f);
         }
 
         /// <summary>
@@ -584,9 +622,9 @@ namespace Shatterspire
         private IEnumerator ChainDetonator()
         {
             var accent = HeroCatalog.Accent(heroClass);
-            Sfx.Play2D(Sound.ChainDetonate);
-            PrototypeVfx.SpawnExplosion(transform.position, 3f, accent);
-            CameraController.Impulse(0.26f);
+            LocalStinger(Sound.ChainDetonate);
+            Explosion(transform.position, 3f, accent);
+            LocalShake(0.26f);
             // Der Zuschlag waechst mit der Staerke, nicht die ganze Ladung: auch eine frische
             // Ultimate zuendet mindestens mit vollem Wurfschaden.
             var power = UltimatePower;
@@ -676,7 +714,7 @@ namespace Shatterspire
             }
             HealParty(BaseDamage * (build.Has(PerkId.PaladinTwinWave) ? 0.6f : 0.3f));
             Sfx.Play(Sound.CoreActivated, transform.position, 0.45f);
-            CameraController.Impulse(0.05f);
+            LocalShake(0.05f);
         }
 
         /// <summary>
@@ -742,7 +780,7 @@ namespace Shatterspire
         {
             yield return new WaitForSeconds(delay);
             if (!health.IsAlive) yield break;
-            PrototypeVfx.SpawnJudgement(point, radius, accent);
+            Judgement(point, radius, accent);
             Strike(point, radius, damage, type, 6f, flash: false);
             if (!perfect) yield break;
             // Kein hoeherer Schaden, sondern Zeit: was unter der Saeule steht, steht still.
@@ -753,7 +791,7 @@ namespace Shatterspire
                 offset.y = 0f;
                 if (offset.sqrMagnitude <= radius * radius) enemy.Stun(1.4f);
             }
-            PrototypeVfx.SpawnExplosion(point, radius, accent);
+            Explosion(point, radius, accent);
         }
 
         /// <summary>
@@ -793,7 +831,7 @@ namespace Shatterspire
             AshWave.Launch(transform.position + direction * 1.2f + Vector3.up * 0.1f, direction,
                 reach, waveDamage, type, gameObject, accent);
             controller?.CombatStep(direction, 0.45f);
-            CameraController.Impulse(0.16f);
+            LocalShake(0.16f);
             Sfx.Play(Sound.Shockwave, transform.position, 0.9f);
             Debug.Log($"SHATTERSPIRE Aschewelle: {reach:0} Einheiten Reichweite, {waveDamage:0} Schaden.");
             yield return new WaitForSeconds(0.2f);
@@ -806,10 +844,10 @@ namespace Shatterspire
         private IEnumerator WrathfulRetribution()
         {
             var accent = HeroCatalog.Accent(heroClass);
-            Sfx.Play2D(Sound.UltimateRise);
-            PrototypeVfx.SpawnExplosion(transform.position + Vector3.up * 0.8f, 3.4f, accent);
+            LocalStinger(Sound.UltimateRise);
+            Explosion(transform.position + Vector3.up * 0.8f, 3.4f, accent);
             PrototypeVfx.SpawnShockwave(transform.position, 4.2f, accent);
-            CameraController.Impulse(0.22f);
+            LocalShake(0.22f);
             var seconds = (build.Has(PerkId.PaladinLongVigil) ? 9f : 7f) * UltimatePower;
             build.BeginRetribution(seconds);
             motion?.ShowWrathWings(accent, seconds);
@@ -895,7 +933,7 @@ namespace Shatterspire
             yield return new WaitForSeconds(0.18f);
             if (!health.IsAlive) yield break;
             var color = PrototypeVfx.ElementColor(DamageType.Lightning);
-            PrototypeVfx.SpawnJudgement(point, RelicRules.StormBellRadius, color);
+            Judgement(point, RelicRules.StormBellRadius, color);
             Strike(point, RelicRules.StormBellRadius,
                 BaseDamage * RelicRules.StormBellDamage * build.DamageMultiplier, DamageType.Lightning, 4f, flash: false);
         }
@@ -913,13 +951,26 @@ namespace Shatterspire
                     damage, type, 3f, flash: false, weaponImpact: true);
         }
 
+        /// <summary>
+        /// Laesst den Hieb im Bild des Treffers fallen. Der schwere Balken fuellt sich nur, wenn der
+        /// Hieb auch etwas getroffen hat.
+        ///
+        /// Vorher lud jeder Nahkampfschwung, auch ins Leere. Fernkaempfer luden nur bei Treffern
+        /// (Geschoss und Bombe melden erst beim Einschlag) - Nahkaempfer bekamen ihren schweren
+        /// Angriff also geschenkt, und ein Begleiter, der in die Luft schlug, hatte ihn alle zwei
+        /// Sekunden. Die Norm in ActionBalance sagt "zwei Sekunden, wenn er dabei trifft".
+        /// </summary>
         private IEnumerator MeleeImpact(float delay, System.Action impact)
         {
             yield return new WaitForSeconds(delay);
             if (!health.IsAlive) yield break;
+            var before = landedHits;
             impact();
-            NotifyLightHit();
+            if (landedHits > before) NotifyLightHit();
         }
+
+        /// <summary>Wie viele Gegner die Schlaege dieses Helden insgesamt getroffen haben.</summary>
+        private int landedHits;
 
         // ── Zielanzeige ─────────────────────────────────────────────────────
 
@@ -998,8 +1049,8 @@ namespace Shatterspire
             var perfect = timing == HeavyTiming.Perfect;
             chargeRing?.Hide();
             // Der Klang sagt, welche Stufe es war - noch bevor die Zahl am Gegner steht.
-            if (indicatorsEnabled && timing != HeavyTiming.Loose)
-                Sfx.Play2D(perfect ? Sound.HeavyPerfect : Sound.HeavyGood, perfect ? 1f : 0.7f);
+            if (timing != HeavyTiming.Loose)
+                LocalStinger(perfect ? Sound.HeavyPerfect : Sound.HeavyGood, perfect ? 1f : 0.7f);
             if (perfect && build.HasSteadyHeart) health.Heal(health.Maximum * RelicRules.SteadyHeartHeal);
             if (heroClass == HeroClassId.Paladin)
             {
@@ -1009,7 +1060,7 @@ namespace Shatterspire
                 heavyCharge = 0f;
                 nextShot = Time.time + 0.32f;
                 PublishHeavyState();
-                CameraController.Impulse(perfect ? 0.2f : 0.1f);
+                LocalShake(perfect ? 0.2f : 0.1f);
                 return;
             }
             if (heroClass == HeroClassId.Bomber)
@@ -1020,7 +1071,7 @@ namespace Shatterspire
                 heavyCharge = 0f;
                 nextShot = Time.time + 0.3f;
                 PublishHeavyState();
-                CameraController.Impulse(perfect ? 0.16f : 0.08f);
+                LocalShake(perfect ? 0.16f : 0.08f);
                 return;
             }
             var multiplier = ActionBalance.Multiplier(normalized) * build.HeavyDamageMultiplier;
@@ -1067,12 +1118,12 @@ namespace Shatterspire
                 motion?.PlayMotion(AttackMotion.Shot, perfect ? 1.5f : 1.05f);
             }
 
-            PrototypeVfx.SpawnExplosion(transform.position + direction * 1.1f + Vector3.up * 0.3f,
+            Explosion(transform.position + direction * 1.1f + Vector3.up * 0.3f,
                 perfect ? 2f : 1.2f, perfect ? new Color(1f, 0.78f, 0.12f) : HeroCatalog.Accent(heroClass));
-            CameraController.Impulse(perfect ? 0.2f : 0.1f);
+            LocalShake(perfect ? 0.2f : 0.1f);
             // Das Perfect-Fenster ist die praeziseste Eingabe im ganzen Spiel und
             // hatte bisher kein eigenes Feedback ausser dem Schaden.
-            Hitstop.Freeze(perfect ? 0.095f : 0.05f, perfect ? 0.04f : 0.09f);
+            LocalHitstop(perfect ? 0.095f : 0.05f, perfect ? 0.04f : 0.09f);
             heavyMeter = 0f;
             heavyCharge = 0f;
             chargingHeavy = false;
@@ -1124,7 +1175,7 @@ namespace Shatterspire
                 Strike(transform.position, 3.6f, BaseDamage * 1.6f * build.DamageMultiplier, type, 9f);
                 PrototypeVfx.SpawnShockwave(transform.position, 4.2f, new Color(1f, 0.55f, 0.08f));
                 health.SetInvulnerable(1.5f);
-                CameraController.Impulse(0.12f);
+                LocalShake(0.12f);
                 yield break;
             }
 
@@ -1190,10 +1241,10 @@ namespace Shatterspire
             var direction = AcquireAttackDirection();
             health.SetInvulnerable(heroClass == HeroClassId.Guardian ? 2.2f : 1.3f);
             if (build.Has(PerkId.UltimateAfterglow)) health.Heal(health.Maximum * 0.3f);
-            CameraController.Impulse(0.24f);
-            Hitstop.Freeze(0.07f, 0.06f);
+            LocalShake(0.24f);
+            LocalHitstop(0.07f, 0.06f);
             // Ohne Ort und damit ohne Abstandsdaempfung: die eigene Ultimate soll im Vordergrund stehen.
-            Sfx.Play2D(Sound.UltimateRise);
+            LocalStinger(Sound.UltimateRise);
             PrototypeVfx.SpawnHeavyReady(transform.position);
 
             if (heroClass == HeroClassId.Guardian) yield return ForgePlunge(direction);
@@ -1259,14 +1310,14 @@ namespace Shatterspire
 
             motion?.PlayMotion(AttackMotion.Smash, 1.8f);
             Sfx.Play(Sound.PlungeImpact, landing);
-            CameraController.Impulse(0.3f);
-            Hitstop.Freeze(0.08f, 0.08f);
+            LocalShake(0.3f);
+            LocalHitstop(0.08f, 0.08f);
             var type = build.Has(PerkId.GuardianMoltenQuake) ? DamageType.Fire : ResolveDamageType(DamageType.Physical);
             // Frisch verdient wirkt die Ultimate schwaecher; der Radius bleibt, damit man sie lesen kann.
             var power = UltimatePower;
             Strike(landing, impactRadius, BaseDamage * 4.5f * power * build.DamageMultiplier, type, 6f);
             PrototypeVfx.SpawnShockwave(landing, impactRadius + 0.6f, accent);
-            PrototypeVfx.SpawnExplosion(landing, impactRadius * 0.7f, accent);
+            Explosion(landing, impactRadius * 0.7f, accent);
 
             // Betaeubung: das Fenster, in dem die Gruppe nachsetzen kann.
             foreach (var agent in EnemyAgent.Active)
@@ -1296,7 +1347,7 @@ namespace Shatterspire
             if (navigation != null) centre = navigation.ClampToWalkable(centre, 0.6f);
             var accent = Color.Lerp(HeroCatalog.Accent(heroClass), new Color(0.1f, 0.9f, 1f), 0.45f);
             Sfx.Play(Sound.RiftOpen, centre);
-            PrototypeVfx.SpawnExplosion(centre, 3.2f, accent);
+            Explosion(centre, 3.2f, accent);
             var power = UltimatePower;
             var seconds = (build.Has(PerkId.ArcanistEventHorizon) ? 8.5f : 6.5f) * power;
             TimeRift.Spawn(centre, 6.2f, seconds, BaseDamage * 0.18f * power * build.DamageMultiplier, gameObject, accent);
@@ -1317,7 +1368,7 @@ namespace Shatterspire
             focusUntil = Time.time + (build.Has(PerkId.RangerHomingBarrage) ? FocusBaseSeconds + 2f : FocusBaseSeconds)
                 * UltimatePower;
             motion?.PlayMotion(AttackMotion.Draw, 1.4f);
-            Sfx.Play2D(Sound.FocusEnter);
+            LocalStinger(Sound.FocusEnter);
             PrototypeVfx.SpawnHeavyReady(transform.position);
             // Schneller unterwegs: der Zustand ist zum Kiten gedacht, nicht zum Stehenbleiben.
             build.SetFocusSpeed(1.25f);
@@ -1326,7 +1377,7 @@ namespace Shatterspire
             ultimateActive = false;
             while (HunterFocusActive) yield return null;
             build.SetFocusSpeed(1f);
-            Sfx.Play2D(Sound.FocusEnd, 0.7f);
+            LocalStinger(Sound.FocusEnd, 0.7f);
         }
 
         // ── DASH ────────────────────────────────────────────────────────────
@@ -1373,7 +1424,7 @@ namespace Shatterspire
             var radius = Mathf.Max(1.6f, Vector3.Distance(origin, end) * 0.5f + 0.9f);
             Strike(middle, radius, BaseDamage * 1.2f * build.DamageMultiplier, ResolveDamageType(DamageType.Physical));
             PrototypeVfx.SpawnShockwave(end, 2.2f, HeroCatalog.Accent(heroClass));
-            CameraController.Impulse(0.06f);
+            LocalShake(0.06f);
         }
 
         // ── Treffer ─────────────────────────────────────────────────────────
@@ -1396,7 +1447,7 @@ namespace Shatterspire
             // jedem Spieler eine andere. Im Netzwerk wird spaeter das Ergebnis verschickt.
             var critical = Random.value < build.CritChance;
             var amount = damage * (critical ? build.CritMultiplier : 1f);
-            if (flash) PrototypeVfx.SpawnExplosion(point, radius, PrototypeVfx.ElementColor(type));
+            if (flash) Explosion(point, radius, PrototypeVfx.ElementColor(type));
             strikeTargets.Clear();
             foreach (var candidate in Health.Active)
             {
@@ -1414,6 +1465,7 @@ namespace Shatterspire
                 var dealt = amount * (build.Has(PerkId.Execution) && target.Normalized <= 0.2f ? 2f : 1f);
                 var away = offset.sqrMagnitude > 0.001f ? offset.normalized : Vector3.zero;
                 target.TakeDamage(new DamageInfo(dealt, type, gameObject, point, away * (pull ? -knockback : knockback), critical));
+                landedHits++;
                 ApplyStatus(target, type, dealt);
                 if (build.Has(PerkId.Vampirism)) health.Heal(dealt * 0.04f);
                 if (build.HasSiphonStone) health.Heal(dealt * 0.03f);
@@ -1430,7 +1482,7 @@ namespace Shatterspire
             // Ein Treffer muss kurz haengen bleiben, sonst laeuft der Schlag durch den Gegner
             // hindurch. Nur einmal je Schlag, nicht je getroffenem Gegner.
             if (weaponImpact && strikeTargets.Count > 0)
-                Hitstop.Freeze(heavyImpact ? 0.05f : 0.03f, heavyImpact ? 0.07f : 0.1f);
+                LocalHitstop(heavyImpact ? 0.05f : 0.03f, heavyImpact ? 0.07f : 0.1f);
             if (critical && build.IsShatter && strikeTargets.Count > 0)
                 CombatUtility.Explode(point, 3f, amount * 0.8f, TeamId.Enemy, DamageType.Ice, gameObject);
         }
@@ -1461,7 +1513,7 @@ namespace Shatterspire
                 Strike(point, radius, damage, type);
                 PrototypeVfx.SpawnShockwave(point, radius + 0.35f, new Color(1f, 0.55f, 0.08f));
             }
-            CameraController.Impulse(0.05f);
+            LocalShake(0.05f);
         }
 
         private IEnumerator DelayedBlast(Vector3 point, float radius, float damage, DamageType type, float delay)
@@ -1471,7 +1523,7 @@ namespace Shatterspire
             yield return new WaitForSeconds(delay);
             Strike(point, radius, damage, type);
             PrototypeVfx.SpawnShockwave(point, radius + 0.4f, HeroCatalog.Accent(heroClass));
-            CameraController.Impulse(0.08f);
+            LocalShake(0.08f);
         }
 
         private void Advance(Vector3 direction, float distance)
@@ -1710,9 +1762,17 @@ namespace Shatterspire
             return fallback;
         }
 
+        /// <summary>
+        /// Meldet den Zustand des schweren Angriffs ans HUD - aber nur fuer den eigenen Helden.
+        /// Das Ereignis ist global und traegt keinen Absender. Bis hierher meldeten auch die
+        /// Begleiter, und der eigene Knopf lud und loeste im Takt ihrer Schlaege aus.
+        /// </summary>
         private void PublishHeavyState()
-            => GameEvents.RaiseHeavyAttackChanged(HeavyMeterNormalized, HeavyChargeNormalized, chargingHeavy,
+        {
+            if (!isLocal) return;
+            GameEvents.RaiseHeavyAttackChanged(HeavyMeterNormalized, HeavyChargeNormalized, chargingHeavy,
                 HeavyTimingNow);
+        }
     }
 
     public sealed class TargetLockIndicator : MonoBehaviour

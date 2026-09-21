@@ -102,14 +102,21 @@ namespace Shatterspire
             Damaged?.Invoke(applied);
             GetComponent<StylizedCharacterMotion>()?.PulseHit();
             // Eigener Klang fuer die eigene Seite: im Getuemmel muss hoerbar sein, wer getroffen wurde.
-            if (team == TeamId.Player) Sfx.Play(Sound.PlayerHurt, transform.position, 0.85f);
+            // Nur der eigene Held. Seit die Begleiter echte Helden sind, klang jeder Treffer auf
+            // ihnen wie ein Treffer auf einen selbst - und genau das soll dieser Laut unterscheiden.
+            if (team == TeamId.Player && PartyMember.IsLocalHero(gameObject))
+                Sfx.Play(Sound.PlayerHurt, transform.position, 0.85f);
             GameEvents.RaiseHealthChanged(this);
             DamageNumber.Spawn(applied.HitPoint, applied.Amount, applied.IsCritical, applied.Type);
             if (applied.Force.sqrMagnitude > 0.01f || applied.IsCritical)
-                PrototypeVfx.SpawnHit(applied.HitPoint, applied.Force, applied.Type, applied.IsCritical);
+                PrototypeVfx.SpawnHit(applied.HitPoint, applied.Force, applied.Type, applied.IsCritical,
+                    !PartyMember.IsOtherHero(applied.Source) && !PartyMember.IsOtherHero(gameObject));
             // Nur bei kritischen Treffern auf Gegner. Ein Stop bei jedem Schaden
             // waere Dauerzeitlupe, und Treffer am Spieler sollen nicht belohnen.
-            if (applied.IsCritical && team == TeamId.Enemy) Hitstop.Freeze(0.045f, 0.08f);
+            // Die Starre haelt die ganze Welt an, auch die eigene Figur. Sie gehoert deshalb nur
+            // den Krits des eigenen Helden.
+            if (applied.IsCritical && team == TeamId.Enemy && PartyMember.IsLocalHero(applied.Source))
+                Hitstop.Freeze(0.045f, 0.08f);
             if (isActiveAndEnabled) StartCoroutine(Flash());
             if (current <= 0f)
             {

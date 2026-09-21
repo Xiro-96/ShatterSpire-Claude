@@ -47,7 +47,7 @@ namespace Shatterspire.Tests
             Invoke(weapon, "Awake");
             health.Configure(TeamId.Player, 160f);
             // Ohne Anzeigen: die bauen Objekte und Materialien, die hier nichts zu suchen haben.
-            weapon.SetIndicatorsEnabled(false);
+            weapon.SetLocal(false);
             weapon.ConfigureClass(HeroClassId.Paladin);
             SetPrivate(weapon, "heavyMeter", 100f);
         }

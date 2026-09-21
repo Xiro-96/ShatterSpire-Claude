@@ -221,7 +221,8 @@ namespace Shatterspire
             else if (blocked)
             {
                 transform.position = obstaclePoint;
-                PrototypeVfx.SpawnHit(obstaclePoint, -direction, payload.Type, false);
+                PrototypeVfx.SpawnHit(obstaclePoint, -direction, payload.Type, false,
+                    !PartyMember.IsOtherHero(payload.Owner));
                 Despawn();
                 return;
             }

@@ -198,7 +198,8 @@ namespace Shatterspire
         /// </summary>
         public static int Explode(Vector3 point, float radius, float damage, TeamId targetTeam, DamageType type, GameObject source)
         {
-            PrototypeVfx.SpawnExplosion(point, radius, PrototypeVfx.ElementColor(type));
+            PrototypeVfx.SpawnExplosion(point, radius, PrototypeVfx.ElementColor(type),
+                !PartyMember.IsOtherHero(source));
             var hits = 0;
             var active = Health.Active;
             for (var i = active.Count - 1; i >= 0; i--)

@@ -134,10 +134,11 @@ namespace Shatterspire
             var hits = CombatUtility.Explode(transform.position, radius, damage, TeamId.Enemy, type, owner);
             if (hits > 0 && chargesHeavy && owner)
                 owner.GetComponent<WeaponSystem>()?.NotifyLightHit();
-            PrototypeVfx.SpawnExplosion(transform.position, radius, PrototypeVfx.ElementColor(type));
+            var mine = !PartyMember.IsOtherHero(owner);
+            PrototypeVfx.SpawnExplosion(transform.position, radius, PrototypeVfx.ElementColor(type), mine);
             PrototypeVfx.SpawnShockwave(transform.position, radius + 0.4f, PrototypeVfx.ElementColor(type));
             Sfx.Play(Sound.Explosion, transform.position);
-            CameraController.Impulse(Mathf.Min(0.14f, radius * 0.03f));
+            if (mine) CameraController.Impulse(Mathf.Min(0.14f, radius * 0.03f));
             Destroy(gameObject);
         }
     }
