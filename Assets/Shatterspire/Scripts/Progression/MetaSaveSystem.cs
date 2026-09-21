@@ -84,8 +84,18 @@ namespace Shatterspire
             return data;
         }
 
+        /// <summary>
+        /// Ein Selbsttest liest keinen Spielstand und schreibt keinen. Jeder Lauf beginnt mit einem
+        /// frischen Helden - ohne Prestige, ohne Relikte -, und kein Lauf veraendert den naechsten.
+        /// Sonst wuerde jeder Durchgang den folgenden leichter machen, und zwei Messungen waeren nicht
+        /// mehr vergleichbar. Kein Spielzustand, sondern die Frage, ob dieses Programm etwas behalten
+        /// darf - deshalb statisch.
+        /// </summary>
+        public static bool Ephemeral { get; set; }
+
         private static MetaSaveData Read()
         {
+            if (Ephemeral) return new MetaSaveData { version = CurrentVersion };
             if (TryRead(Key, out var current)) return current;
             // Aeltere Staende hochziehen statt wegwerfen. Wer schon Shards und
             // Upgrades hat, soll sie behalten.
@@ -389,6 +399,7 @@ namespace Shatterspire
 
         private static void Save(MetaSaveData data)
         {
+            if (Ephemeral) return;
             data = Sanitize(data);
             data.version = CurrentVersion;
             PlayerPrefs.SetString(Key, JsonUtility.ToJson(data));

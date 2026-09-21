@@ -1455,10 +1455,13 @@ namespace Shatterspire
             }
             labels.AppendLine(Loc.T(result.Extracted ? "EXTRACTED" : "FALLEN"));
             values.AppendLine(result.Extracted ? "x1.15" : "x0.70");
+            // Sechs Zeilen zu je rund 28 brauchen 168 - der Kasten war 150 hoch, und die letzte Zeile
+            // (die mit dem Faktor fuer Gefallene) rutschte unter das Kassenfeld. Gesehen auf einem
+            // Bild des Selbsttests.
             CreateText(scorePanel.transform, labels.ToString(), 24, TextAnchor.UpperLeft,
-                new Vector2(30, -122), new Vector2(320, 150), new Vector2(0f, 1f));
+                new Vector2(30, -118), new Vector2(320, 176), new Vector2(0f, 1f));
             CreateText(scorePanel.transform, values.ToString(), 24, TextAnchor.UpperRight,
-                new Vector2(-30, -122), new Vector2(260, 150), new Vector2(1f, 1f));
+                new Vector2(-30, -118), new Vector2(260, 176), new Vector2(1f, 1f));
 
             var rankPanel = CreateImage(modal.transform, "Rank", new Color(0.035f, 0.075f, 0.12f, 0.98f),
                 new Vector2(345, 25), new Vector2(660, 300), new Vector2(0.5f, 0.5f));
@@ -1485,8 +1488,9 @@ namespace Shatterspire
                 $"{Loc.T("RANK POINTS")}  {rankPoints:N0}\n{Loc.T("FROM YOUR")} {RankTable.ClimbCount} {Loc.T("BEST CLIMBS")}\n{next}\n\n{Loc.T("SHIFT ENDS IN")}  {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}",
                 24, TextAnchor.UpperCenter, new Vector2(0, -160), new Vector2(600, 130), new Vector2(0.5f, 1));
 
+            // Die Kasse lag mit ihrer Oberkante 16 Einheiten in der Wertung (Wertung endet bei -125).
             var walletPanel = CreateImage(modal.transform, "Wallet", new Color(0.03f, 0.06f, 0.1f, 0.96f),
-                new Vector2(0, -140), new Vector2(1010, 62), new Vector2(0.5f, 0.5f));
+                new Vector2(0, -162), new Vector2(1010, 62), new Vector2(0.5f, 0.5f));
             ApplyRounded(walletPanel);
             CreateText(walletPanel.transform,
                 $"{Loc.T("SHARDS")}  +{earned}  ·  {Loc.T("TOTAL")} {save.shards}      {Loc.T("TOKENS")}  {save.tokens}"
@@ -1497,15 +1501,18 @@ namespace Shatterspire
             var prestige = MetaSaveSystem.PrestigeStep(save, runConfig.Hero);
             var rank = Loc.T(HeroPrestige.RankName(prestige))
                        + (HeroPrestige.SubStep(prestige) > 0 ? " " + HeroPrestige.SubStep(prestige) : string.Empty);
-            CreateText(walletPanel.transform,
+            // Eigene Zeile unter der Kasse. Sie hing vorher 34 Einheiten unter dem Kassenfeld und
+            // reichte damit in die Knoepfe hinein.
+            CreateText(modal.transform,
                 $"{HeroCatalog.Name(runConfig.Hero)}  ·  {rank}  ·  +{badges} {Loc.T("BADGES")}"
                 + $"  ·  {Loc.T("YOU HAVE")} {MetaSaveSystem.Badges(save, runConfig.Hero)}",
-                20, TextAnchor.MiddleCenter, new Vector2(0, -34), new Vector2(1010, 28),
+                20, TextAnchor.MiddleCenter, new Vector2(0, -214), new Vector2(1010, 28),
                 new Vector2(0.5f, 0.5f)).color = HeroPrestige.RankColor(prestige);
-            var restart = CreateButton(modal.transform, Loc.T("CLIMB AGAIN"), new Vector2(225, -225), new Vector2(360, 96), new Color(0.1f, 0.86f, 0.72f));
+            // Das Fenster reicht bis -395; bis hierher war darunter ungenutzter Platz.
+            var restart = CreateButton(modal.transform, Loc.T("CLIMB AGAIN"), new Vector2(225, -292), new Vector2(360, 96), new Color(0.1f, 0.86f, 0.72f));
             restart.onClick.AddListener(RestartRun);
             modalButtons.Add(restart);
-            var home = CreateButton(modal.transform, Loc.T("MAIN MENU"), new Vector2(-225, -225), new Vector2(360, 96), new Color(0.46f, 0.38f, 0.7f));
+            var home = CreateButton(modal.transform, Loc.T("MAIN MENU"), new Vector2(-225, -292), new Vector2(360, 96), new Color(0.46f, 0.38f, 0.7f));
             home.onClick.AddListener(RestartScene);
             modalButtons.Add(home);
         }

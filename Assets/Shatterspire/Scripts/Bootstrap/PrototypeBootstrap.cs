@@ -97,6 +97,14 @@ namespace Shatterspire
             if (CaptureDemo.Requested && !RunLaunchSettings.HasPendingRun)
                 RunLaunchSettings.Prepare(new RunConfig { Hero = CaptureDemo.Hero, Mode = RunMode.Brave });
 
+            // Selbsttest (-shatterspire-autoplay): ohne Menue in den Aufstieg, mit frischem Spielstand,
+            // der nie geschrieben wird. Siehe Autoplay.
+            if (Autoplay.Requested && !RunLaunchSettings.HasPendingRun)
+            {
+                MetaSaveSystem.Ephemeral = true;
+                RunLaunchSettings.Prepare(new RunConfig { Hero = Autoplay.Hero, Mode = Autoplay.RunPath });
+            }
+
             if (!RunLaunchSettings.HasPendingRun)
             {
                 BuildFrontEnd();
@@ -130,6 +138,15 @@ namespace Shatterspire
             spawner.Configure(player.transform);
             var hud = systems.AddComponent<PrototypeHUD>();
             hud.Configure(player, config, team);
+            // Der Selbsttest muss zuhoeren, bevor der Aufstieg beginnt: RunDirector.Configure startet
+            // Etage 1 sofort, und ein Protokoll, das danach einsteigt, kennt sie nicht.
+            if (Autoplay.Requested)
+            {
+                var pilot = player.GetComponent<AutoPilot>();
+                pilot.Configure(config.Hero, hud);
+                systems.AddComponent<PlaytestRecorder>().Configure(player, hud, pilot, config,
+                    CaptureDemo.FixedSeed, Autoplay.Folder, Autoplay.Floors, Autoplay.Minutes);
+            }
             var run = systems.AddComponent<RunDirector>();
             run.Configure(player.transform, spawner, hud, config, runCamera, team);
 #if UNITY_EDITOR
@@ -176,14 +193,17 @@ namespace Shatterspire
             var motor = root.AddComponent<CharacterController>();
             motor.center = Vector3.up * 0.9f;
             motor.height = 1.8f;
-            motor.radius = 0.45f;
+            motor.radius = PartyMember.BodyRadius;
             var build = root.AddComponent<PlayerBuild>();
             var health = root.AddComponent<Health>();
             var member = root.AddComponent<PartyMember>();
             member.Configure(HeroCatalog.Name(hero), HeroCatalog.Accent(hero), hero, slot, local);
 
             // Die Eingabe muss vor Steuerung und Waffe stehen: beide holen sie sich in ihrem Awake.
-            if (local) root.AddComponent<PlayerInputRouter>();
+            // Im Selbsttest sitzt am eigenen Helden der Autopilot statt des Daumens - derselbe Held,
+            // dieselbe Schnittstelle, nur ein anderer, der drueckt.
+            if (local && Autoplay.Requested) root.AddComponent<AutoPilot>();
+            else if (local) root.AddComponent<PlayerInputRouter>();
             else root.AddComponent<BotInput>();
 
             if (local)

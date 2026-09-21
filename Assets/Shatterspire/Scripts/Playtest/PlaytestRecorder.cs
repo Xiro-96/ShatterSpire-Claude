@@ -1,0 +1,514 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using UnityEngine;
+
+namespace Shatterspire
+{
+    /// <summary>
+    /// Schreibt mit, was im Selbsttest passiert, und haelt an, was auffaellt.
+    ///
+    /// Jede der Pruefungen hier steht fuer einen Fehler, den bisher nur der Spieler auf dem Telefon
+    /// gefunden hat:
+    /// - <b>Schritt schneller als Laufen</b>: "XIRO dasht auf Monster zu" - der Schritt ins Ziel lag
+    ///   ueber dem Lauftempo, bei BRAX schon vorher.
+    /// - <b>Schwerer Angriff ohne Loslassen</b>: "Richturteil wird automatisch eingesetzt".
+    /// - <b>Zeitlupe</b>: die Begleiter hielten die ganze Welt an, 13 bis 17 % der Zeit.
+    /// - <b>Festhaengen</b>: ein Held, der sein Ziel hat und nicht vom Fleck kommt.
+    /// - <b>Fehlermeldungen</b>: jede Ausnahme, die das Spiel wirft, mit den ersten Zeilen des Stapels.
+    ///
+    /// Am Ende liegen im Ordner <c>summary.txt</c> (zum Lesen), <c>summary.json</c> (zum Vergleichen),
+    /// <c>events.log</c> (alle SHATTERSPIRE-Zeilen) und Bilder in regelmaessigem Abstand und von jeder
+    /// Auffaelligkeit.
+    /// </summary>
+    public sealed class PlaytestRecorder : MonoBehaviour
+    {
+        [Serializable]
+        public sealed class FloorRecord
+        {
+            public int floor;
+            public string kind;
+            public float seconds;
+            public float damageTaken;
+            public float lowestHealth = 1f;
+            public int kills;
+            public int heavy;
+            public int perfect;
+            public int good;
+            public int skills;
+            public int ultimates;
+            public int companionFalls;
+            public int playerDowns;
+        }
+
+        [Serializable]
+        public sealed class EventRecord
+        {
+            public float time;
+            public int floor;
+            public string kind;
+            public string detail;
+        }
+
+        [Serializable]
+        public sealed class Summary
+        {
+            public string hero;
+            public string path;
+            public int seed;
+            public int floorsWanted;
+            public int floorsReached;
+            public string endReason;
+            public float realSeconds;
+            public float fpsMean;
+            public float fpsLow5;
+            public float worstFrameMs;
+            public float slowShare;
+            public float stopsPerMinute;
+            public int fastSteps;
+            public float fastStepMax;
+            public float runSpeed;
+            public int fastStepsAttacking;
+            public int heavyFired;
+            public int heavyIssued;
+            public int heavyWithoutInput;
+            public int stuck;
+            public int unstickDashes;
+            public int dodges;
+            public int errors;
+            public int exceptions;
+            public List<FloorRecord> floors = new();
+            public List<EventRecord> events = new();
+            public List<string> errorSamples = new();
+        }
+
+        /// <summary>Alle so viele Sekunden ein Bild.</summary>
+        private const float ShotEvery = 15f;
+
+        private readonly Summary summary = new();
+        private readonly List<float> frames = new();
+        private readonly Queue<(float Time, Vector3 Position, float[] Sources)> recent = new();
+        private readonly Queue<(float Time, Vector3 Position)> stuckSamples = new();
+        private readonly StringBuilder log = new();
+        private readonly HashSet<string> seenErrors = new();
+
+        private GameObject hero;
+        private Health playerHealth;
+        private WeaponSystem weapon;
+        private PlayerController controller;
+        private PlayerBuild build;
+        private PrototypeHUD hud;
+        private AutoPilot pilot;
+        private string folder;
+        private float limitSeconds;
+        private float started;
+        private FloorRecord floor;
+        private float floorStarted;
+        private float slowSeconds;
+        private float activeSeconds;
+        private int stops;
+        private bool wasSlow;
+        private float nextShot;
+        private float lastExcused = -99f;
+        private bool inFastStep;
+        private float fastStepPeak;
+        private bool fastStepAttacking;
+        private string fastStepCause = string.Empty;
+        private float nextStuckCheck;
+        private float nextStuckReport;
+        private int shotCount;
+        private int anomalyShots;
+        private string runEndReason;
+        private bool finished;
+
+        public void Configure(GameObject player, PrototypeHUD hudReference, AutoPilot autoPilot, RunConfig config,
+            int seed, string outputFolder, int floorsWanted, float minutes)
+        {
+            hero = player;
+            playerHealth = player.GetComponent<Health>();
+            weapon = player.GetComponent<WeaponSystem>();
+            controller = player.GetComponent<PlayerController>();
+            build = player.GetComponent<PlayerBuild>();
+            hud = hudReference;
+            pilot = autoPilot;
+            folder = outputFolder;
+            limitSeconds = minutes * 60f;
+            summary.hero = HeroCatalog.Name(config.Hero);
+            summary.path = config.Mode.ToString();
+            summary.seed = seed;
+            summary.floorsWanted = floorsWanted;
+            Directory.CreateDirectory(Path.Combine(folder, "shots"));
+            started = Time.realtimeSinceStartup;
+            nextShot = ShotEvery;
+
+            // Drei Fenster nebeneinander, die gleichzeitig spielen: ohne das waeren alle laut.
+            AudioListener.volume = 0f;
+            Application.runInBackground = true;
+
+            Application.logMessageReceived += OnLog;
+            GameEvents.RoomStarted += OnRoomStarted;
+            GameEvents.EntityDied += OnEntityDied;
+            GameEvents.RunEnded += OnRunEnded;
+            if (playerHealth) playerHealth.Damaged += OnPlayerDamaged;
+            if (weapon)
+            {
+                weapon.HeavyFired += OnHeavyFired;
+                weapon.SkillFired += OnSkillFired;
+                weapon.UltimateFired += OnUltimateFired;
+            }
+            Note("START", $"{summary.hero}, {summary.path}, Seed {seed}, {floorsWanted} Etagen, "
+                          + $"hoechstens {minutes:0} min");
+        }
+
+        private void OnDestroy()
+        {
+            Application.logMessageReceived -= OnLog;
+            GameEvents.RoomStarted -= OnRoomStarted;
+            GameEvents.EntityDied -= OnEntityDied;
+            GameEvents.RunEnded -= OnRunEnded;
+            if (playerHealth) playerHealth.Damaged -= OnPlayerDamaged;
+            if (!weapon) return;
+            weapon.HeavyFired -= OnHeavyFired;
+            weapon.SkillFired -= OnSkillFired;
+            weapon.UltimateFired -= OnUltimateFired;
+        }
+
+        private float Real => Time.realtimeSinceStartup - started;
+
+        private void Update()
+        {
+            if (finished || !hero) return;
+            var dt = Time.unscaledDeltaTime;
+            // Die ersten drei Sekunden laden noch - sie wuerden die Bildrate verfaelschen.
+            if (Real > 3f) frames.Add(dt);
+
+            var scale = Time.timeScale;
+            if (scale > 0f)
+            {
+                activeSeconds += dt;
+                var slow = scale < 0.999f;
+                if (slow) slowSeconds += dt;
+                if (slow && !wasSlow) stops++;
+                wasSlow = slow;
+                WatchSteps();
+                WatchStuck();
+            }
+            if (floor != null && playerHealth) floor.lowestHealth = Mathf.Min(floor.lowestHealth, playerHealth.Normalized);
+
+            if (Real >= nextShot)
+            {
+                nextShot = Real + ShotEvery;
+                StartCoroutine(Shot($"t{Mathf.RoundToInt(Real):0000}"));
+            }
+
+            if (hud && hud.OpenModal == ModalKind.RunEnd) Finish(runEndReason ?? "Aufstieg beendet");
+            else if (Real >= limitSeconds) Finish($"Zeitgrenze nach {limitSeconds / 60f:0} min");
+        }
+
+        // ── Pruefungen ──────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Ein Schritt, der schneller ist als Laufen. Gemessen ueber 0,1 s Spielzeit, damit ein
+        /// einzelnes Bild nicht zaehlt. Dash und Sprung sind ausgenommen, Versetzungen ueber drei
+        /// Einheiten auch - das sind Etagenwechsel.
+        /// </summary>
+        private void WatchSteps()
+        {
+            if (!controller) return;
+            var now = Time.time;
+            var position = hero.transform.position;
+            position.y = 0f;
+            if (controller.Rolling || controller.IsAirborne || controller.Charging) lastExcused = now;
+            var sources = new float[6];
+            for (var i = 0; i < sources.Length; i++) sources[i] = controller.Travelled((MoveSource)i);
+            recent.Enqueue((now, position, sources));
+            while (recent.Count > 1 && now - recent.Peek().Time > 0.15f) recent.Dequeue();
+            var (oldTime, oldPosition, oldSources) = recent.Peek();
+            var age = now - oldTime;
+            if (age < 0.1f || now - lastExcused < 0.3f) return;
+            var distance = Vector3.Distance(position, oldPosition);
+            if (distance > 3f)
+            {
+                recent.Clear();
+                return;
+            }
+            var run = HeroCatalog.BaseSpeed(build ? build.HeroClass : HeroClassId.Ranger)
+                      * (build ? build.MoveSpeedMultiplier : 1f);
+            summary.runSpeed = run;
+            var speed = distance / age;
+            if (speed > PlaytestMath.FastStepLimit(run))
+            {
+                if (speed > fastStepPeak)
+                {
+                    // Woher die Strecke in diesem Fenster kam - das ist die Frage, die der erste Lauf
+                    // nicht beantworten konnte.
+                    var parts = new StringBuilder();
+                    var named = 0f;
+                    string[] labels = { "Laufen", "Schritt", "Ansturm", "Rolle", "Randkorrektur", "Verdraengung" };
+                    for (var i = 0; i < sources.Length; i++)
+                    {
+                        var part = sources[i] - oldSources[i];
+                        named += part;
+                        parts.Append(labels[i]).Append(' ').Append(part.ToString("0.00", CultureInfo.InvariantCulture)).Append(", ");
+                    }
+                    parts.Append("sonst ").Append(Mathf.Max(0f, distance - named).ToString("0.00", CultureInfo.InvariantCulture));
+                    fastStepCause = $"in {age:0.00} s: {parts}";
+                }
+                fastStepPeak = Mathf.Max(fastStepPeak, speed);
+                fastStepAttacking |= weapon && weapon.AimEngaged;
+                inFastStep = true;
+                return;
+            }
+            if (!inFastStep) return;
+            inFastStep = false;
+            summary.fastSteps++;
+            summary.fastStepMax = Mathf.Max(summary.fastStepMax, fastStepPeak);
+            if (fastStepAttacking) summary.fastStepsAttacking++;
+            var detail = $"{fastStepPeak:0.0} je Sekunde statt hoechstens {run:0.0}"
+                         + (fastStepAttacking ? ", beim Angreifen" : ", ohne Angriff")
+                         + " - " + fastStepCause;
+            Anomaly("SCHRITT", detail, "schritt");
+            fastStepPeak = 0f;
+            fastStepAttacking = false;
+        }
+
+        /// <summary>
+        /// Festhaengen: der Autopilot hat ein Ziel, kaempft nicht, und ist in sechs Sekunden keinen
+        /// Meter weit gekommen.
+        /// </summary>
+        private void WatchStuck()
+        {
+            if (Real < nextStuckCheck || !pilot) return;
+            nextStuckCheck = Real + 1f;
+            var position = hero.transform.position;
+            stuckSamples.Enqueue((Real, position));
+            while (stuckSamples.Count > 7) stuckSamples.Dequeue();
+            if (stuckSamples.Count < 7 || !pilot.HasGoal || pilot.Fighting) return;
+            var moved = CombatBrain.FlatDistance(position, stuckSamples.Peek().Position);
+            if (moved >= 1f || Real < nextStuckReport) return;
+            nextStuckReport = Real + 20f;
+            summary.stuck++;
+            Anomaly("FEST", $"bei ({position.x:0.0} / {position.z:0.0}), {moved:0.00} Einheiten in 6 s, "
+                            + $"Autopilot: {pilot.Doing}", "fest");
+        }
+
+        // ── Ereignisse ──────────────────────────────────────────────────────
+
+        private void OnRoomStarted(int index, RoomKind kind)
+        {
+            CloseFloor();
+            summary.floorsReached = Mathf.Max(summary.floorsReached, index);
+            if (index > summary.floorsWanted)
+            {
+                Finish($"Ziel erreicht: {summary.floorsWanted} Etagen");
+                return;
+            }
+            floor = new FloorRecord { floor = index, kind = kind.ToString() };
+            floorStarted = Time.time;
+            Note("ETAGE", $"{index}, {kind}");
+            StartCoroutine(Shot($"etage{index:00}_{kind}"));
+        }
+
+        private void CloseFloor()
+        {
+            if (floor == null) return;
+            floor.seconds = Time.time - floorStarted;
+            summary.floors.Add(floor);
+            floor = null;
+        }
+
+        private void OnEntityDied(Health value)
+        {
+            if (!value || floor == null) return;
+            if (value.Team == TeamId.Enemy)
+            {
+                floor.kills++;
+                return;
+            }
+            if (value == playerHealth)
+            {
+                floor.playerDowns++;
+                Anomaly("GEFALLEN", "der eigene Held", "gefallen");
+                return;
+            }
+            floor.companionFalls++;
+            var member = value.GetComponent<PartyMember>();
+            Note("BEGLEITER", (member ? member.DisplayName : value.name) + " gefallen");
+        }
+
+        private void OnRunEnded(bool victory, int shards)
+            => runEndReason = victory ? $"Aufstieg geschafft, {shards} Splitter" : $"Aufstieg verloren, {shards} Splitter";
+
+        private void OnPlayerDamaged(DamageInfo damage)
+        {
+            if (floor != null) floor.damageTaken += damage.Amount;
+        }
+
+        private void OnHeavyFired(HeavyTiming timing)
+        {
+            summary.heavyFired++;
+            if (floor == null) return;
+            floor.heavy++;
+            if (timing == HeavyTiming.Perfect) floor.perfect++;
+            else if (timing == HeavyTiming.Good) floor.good++;
+        }
+
+        private void OnSkillFired()
+        {
+            if (floor != null) floor.skills++;
+        }
+
+        private void OnUltimateFired()
+        {
+            if (floor != null) floor.ultimates++;
+        }
+
+        private void OnLog(string condition, string stack, LogType type)
+        {
+            if (condition.StartsWith("SHATTERSPIRE") && log.Length < 400000)
+                log.Append(Real.ToString("0.0", CultureInfo.InvariantCulture)).Append("  ").AppendLine(condition);
+            if (type is not (LogType.Error or LogType.Exception or LogType.Assert)) return;
+            if (type == LogType.Exception) summary.exceptions++;
+            else summary.errors++;
+            if (!seenErrors.Add(condition) || summary.errorSamples.Count >= 12) return;
+            var lines = (stack ?? string.Empty).Split('\n');
+            var head = string.Join(" | ", lines, 0, Mathf.Min(3, lines.Length)).Trim();
+            summary.errorSamples.Add($"[{type}] {condition}  @ {head}");
+            Anomaly(type == LogType.Exception ? "AUSNAHME" : "FEHLER", condition, "fehler");
+        }
+
+        // ── Protokoll ───────────────────────────────────────────────────────
+
+        private void Note(string kind, string detail)
+        {
+            summary.events.Add(new EventRecord { time = Real, floor = floor?.floor ?? 0, kind = kind, detail = detail });
+            log.Append(Real.ToString("0.0", CultureInfo.InvariantCulture)).Append("  [").Append(kind).Append("] ")
+                .AppendLine(detail);
+        }
+
+        private void Anomaly(string kind, string detail, string shotName)
+        {
+            Note(kind, detail);
+            // Hoechstens zwanzig Bilder von Auffaelligkeiten - bei einem Fehler je Bild waere der Ordner sonst voll.
+            if (anomalyShots >= 20) return;
+            anomalyShots++;
+            StartCoroutine(Shot($"{shotName}_{Mathf.RoundToInt(Real):0000}"));
+        }
+
+        private IEnumerator Shot(string name)
+        {
+            yield return new WaitForEndOfFrame();
+            Texture2D image = null;
+            try
+            {
+                image = ScreenCapture.CaptureScreenshotAsTexture();
+                if (image && image.width > 8)
+                {
+                    File.WriteAllBytes(Path.Combine(folder, "shots", $"{shotCount++:000}_{name}.jpg"),
+                        image.EncodeToJPG(80));
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("SHATTERSPIRE Selbsttest: Bild nicht moeglich - " + exception.Message);
+            }
+            finally
+            {
+                if (image) Destroy(image);
+            }
+        }
+
+        private void Finish(string reason)
+        {
+            if (finished) return;
+            finished = true;
+            CloseFloor();
+            summary.endReason = reason;
+            summary.realSeconds = Real;
+            frames.Sort();
+            if (frames.Count > 0)
+            {
+                var total = 0f;
+                foreach (var frame in frames) total += frame;
+                summary.fpsMean = frames.Count / Mathf.Max(0.001f, total);
+                summary.fpsLow5 = 1f / Mathf.Max(0.0001f, PlaytestMath.Percentile(frames, 0.95f));
+                summary.worstFrameMs = frames[frames.Count - 1] * 1000f;
+            }
+            summary.slowShare = activeSeconds <= 0f ? 0f : slowSeconds / activeSeconds;
+            summary.stopsPerMinute = activeSeconds <= 0f ? 0f : stops / activeSeconds * 60f;
+            summary.heavyIssued = pilot ? pilot.HeavyReleasesIssued : 0;
+            summary.heavyWithoutInput = Mathf.Max(0, summary.heavyFired - summary.heavyIssued);
+            summary.unstickDashes = pilot ? pilot.UnstickDashes : 0;
+            summary.dodges = pilot ? pilot.Dodges : 0;
+            if (summary.heavyWithoutInput > 0)
+                Note("HEAVY", $"{summary.heavyWithoutInput} schwere Angriffe ohne Loslassen");
+            Note("ENDE", reason);
+
+            File.WriteAllText(Path.Combine(folder, "summary.json"), JsonUtility.ToJson(summary, true));
+            File.WriteAllText(Path.Combine(folder, "summary.txt"), PlaytestMath.Describe(summary));
+            File.WriteAllText(Path.Combine(folder, "events.log"), log.ToString());
+            Debug.Log($"SHATTERSPIRE Selbsttest fertig: {reason}. Protokoll in {folder}");
+            StartCoroutine(QuitAfterShot());
+        }
+
+        private IEnumerator QuitAfterShot()
+        {
+            yield return Shot("ende");
+            yield return null;
+            Application.Quit();
+        }
+    }
+
+    /// <summary>Die Rechnungen des Selbsttests, ohne Unity nachpruefbar.</summary>
+    public static class PlaytestMath
+    {
+        /// <summary>
+        /// Ab welchem Tempo ein Schritt auffaellt. Ein Fuenftel ueber dem Lauftempo: darunter liegen
+        /// Bremsweg und Rundung, darueber ein Satz, den das Auge als Sprung liest.
+        /// </summary>
+        public static float FastStepLimit(float runSpeed) => runSpeed * 1.2f;
+
+        /// <summary>Wert bei diesem Anteil einer aufsteigend sortierten Liste.</summary>
+        public static float Percentile(IReadOnlyList<float> sorted, float fraction)
+        {
+            if (sorted == null || sorted.Count == 0) return 0f;
+            var index = Mathf.Clamp(Mathf.RoundToInt(fraction * (sorted.Count - 1)), 0, sorted.Count - 1);
+            return sorted[index];
+        }
+
+        /// <summary>Der Bericht zum Lesen.</summary>
+        public static string Describe(PlaytestRecorder.Summary s)
+        {
+            var text = new StringBuilder();
+            var de = CultureInfo.GetCultureInfo("de-DE");
+            text.AppendLine($"SHATTERSPIRE Selbsttest · {s.hero} · {s.path} · Seed {s.seed}");
+            text.AppendLine($"{s.realSeconds / 60f:0.0} min gespielt, Etage {s.floorsReached} von {s.floorsWanted} erreicht. "
+                            + $"Ende: {s.endReason}.");
+            text.AppendLine();
+            text.AppendLine(string.Format(de, "Bildrate      Mittel {0:0} fps, langsamste 5 % {1:0} fps, schlimmstes Bild {2:0} ms",
+                s.fpsMean, s.fpsLow5, s.worstFrameMs));
+            text.AppendLine(string.Format(de, "Zeitlupe      {0:0.0} % der Spielzeit, {1:0} Stopps je Minute",
+                s.slowShare * 100f, s.stopsPerMinute));
+            text.AppendLine();
+            text.AppendLine("Etage  Art        Dauer  Schaden  tiefstes Leben  Kills  Heavy (perfekt/gut)  Faehigk.  Ult.  Begleiter gefallen  selbst gefallen");
+            foreach (var f in s.floors)
+                text.AppendLine(string.Format(de,
+                    "{0,5}  {1,-9} {2,5:0}s  {3,7:0}  {4,13:0} %  {5,5}  {6,5} ({7}/{8}){9,12}  {10,8}  {11,4}  {12,18}  {13,15}",
+                    f.floor, f.kind, f.seconds, f.damageTaken, f.lowestHealth * 100f, f.kills, f.heavy, f.perfect, f.good,
+                    string.Empty, f.skills, f.ultimates, f.companionFalls, f.playerDowns));
+            text.AppendLine();
+            text.AppendLine("Auffaelligkeiten");
+            text.AppendLine(string.Format(de, "  Schritt schneller als Laufen   {0}x (hoechstens {1:0.0} je s, Lauftempo {2:0.0}), davon {3} beim Angreifen",
+                s.fastSteps, s.fastStepMax, s.runSpeed, s.fastStepsAttacking));
+            text.AppendLine($"  Schwerer Angriff ohne Loslassen {s.heavyWithoutInput}x ({s.heavyFired} ausgeloest, {s.heavyIssued} losgelassen)");
+            text.AppendLine($"  Festgehangen                    {s.stuck}x, freigedasht {s.unstickDashes}x");
+            text.AppendLine($"  Ausgewichen                     {s.dodges}x");
+            text.AppendLine($"  Fehler / Ausnahmen              {s.errors} / {s.exceptions}");
+            foreach (var sample in s.errorSamples) text.AppendLine("    " + sample);
+            return text.ToString();
+        }
+    }
+}

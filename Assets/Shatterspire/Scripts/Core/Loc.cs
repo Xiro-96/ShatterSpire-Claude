@@ -80,7 +80,10 @@ namespace Shatterspire
         private static readonly HashSet<string> ProperNames = new()
         {
             "AEGIS", "HAMMER", "ELITE", "BOSS", "ULTIMATE", "BRAX", "REX", "ORION", "KORR", "XIRO",
-            "PRESTIGE", "CHAMPION"
+            "PRESTIGE", "CHAMPION",
+            // Gefunden vom Test, der jeden festen Text im Code prueft: gleich im Deutschen, aber nie
+            // hier eingetragen - die Laufzeit meldete sie deshalb als unuebersetzt.
+            "GOLD", "FUSION", "MAXIMUM"
         };
 
         public static bool IsProperName(string text) => text != null && ProperNames.Contains(text);
@@ -153,6 +156,7 @@ namespace Shatterspire
             { "PERFECT!  RELEASE", "PERFEKT!  LOSLASSEN" },
             { "PERFECT!  RELEASE RMB", "PERFEKT!  RECHTE MAUSTASTE LOSLASSEN" },
             { "PERFECT HIT", "PERFEKT GETROFFEN" },
+            { "YOU HAVE", "DU HAST" },
             { "RELEASE NOW", "JETZT LOSLASSEN" },
             { "HOLD, THEN RELEASE IN GOLD", "HALTEN, DANN IM GOLD LOSLASSEN" },
             { "ALMOST PERFECT", "FAST PERFEKT" },

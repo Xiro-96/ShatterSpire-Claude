@@ -41,9 +41,6 @@ namespace Shatterspire
         private const float LaneLength = 3.4f;
         private const float LaneHalfWidth = 1.3f;
 
-        /// <summary>Wie nah ein Ziel sein muss, damit es ueberhaupt beachtet wird.</summary>
-        private const float ThreatRange = 14f;
-
         /// <summary>Wie schnell der Bot reagiert. Ohne das trifft er auf das Bild genau - und wirkt tot.</summary>
         private const float ReactionSeconds = 0.18f;
 
@@ -63,11 +60,9 @@ namespace Shatterspire
         private Vector3 aimDirection = Vector3.forward;
         private Health target;
         private float nextDecision;
-        private float nextSkill;
-        private float nextHeavy;
-        private float nextUltimate;
-        private float nextDash;
-        private float heavyReleaseAt = 0.6f;
+
+        /// <summary>Die Kampfentscheidungen - dieselben wie beim Autopiloten, in der Spielweise eines Begleiters.</summary>
+        private readonly CombatBrain brain = new(CombatBrain.Companion);
 
         // ── Die Knoepfe ─────────────────────────────────────────────────────
         public Vector2 Move { get; private set; }
@@ -130,17 +125,19 @@ namespace Shatterspire
             if (Time.time >= nextDecision)
             {
                 nextDecision = Time.time + ReactionSeconds;
-                target = ChooseTarget();
+                target = CombatBrain.ChooseTarget(transform);
             }
             if (target && !Targeting.IsTargetable(target, TeamId.Enemy)) target = null;
 
-            var regrouping = FlatDistance(transform.position, leader.position) > RegroupDistance;
+            var regrouping = CombatBrain.FlatDistance(transform.position, leader.position) > RegroupDistance;
             var threat = regrouping ? null : target;
-            var distance = threat ? FlatDistance(transform.position, threat.transform.position) : float.MaxValue;
+            var distance = threat ? CombatBrain.FlatDistance(transform.position, threat.transform.position) : float.MaxValue;
 
             // Eine angefangene Ladung geht vor: wer mitten darin abbiegt, laesst den Schlag haengen.
-            if (FinishHeavy())
+            var holding = new CombatIntent();
+            if (brain.FinishHeavy(weapon, ref holding))
             {
+                Press(holding);
                 Steer(DesiredPosition(threat));
                 Aim(threat);
                 return;
@@ -159,7 +156,12 @@ namespace Shatterspire
 
             Steer(DesiredPosition(threat));
             Aim(threat);
-            if (!regrouping) Fight(threat, distance);
+            if (!regrouping)
+            {
+                var intent = new CombatIntent();
+                brain.Fight(transform, health, weapon, heroClass, threat, distance, ref intent);
+                Press(intent);
+            }
             UpdateStatus(threat, regrouping);
         }
 
@@ -308,74 +310,6 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// Welchen Knopf dieses Mitglied drueckt. Die Reihenfolge ist die Reihenfolge des Wertes:
-        /// eine Ultimate ist das Teuerste, was es hat, dann die Faehigkeit, dann der schwere Schlag,
-        /// und der einfache Angriff laeuft die ganze Zeit mit.
-        /// </summary>
-        private void Fight(Health threat, float distance)
-        {
-            if (!threat || weapon == null) return;
-            var range = HeroCatalog.EngageRange(heroClass);
-            var inRange = distance <= range;
-
-            if (weapon.UltimateActive) return;
-            if (Escape(threat, distance)) return;
-
-            // Die Ultimate nur, wenn sie sich lohnt. Ein Mitglied, das sie am ersten Laeufer
-            // verbraucht, hat sie im Bosskampf nicht - und genau dort braucht die Gruppe sie.
-            if (weapon.UltimateReady && Time.time >= nextUltimate && inRange
-                && (CountEnemiesWithin(8f) >= 3 || BossWithin(13f)))
-            {
-                UltimateReleased = true;
-                nextUltimate = Time.time + 8f;
-                return;
-            }
-
-            if (weapon.SkillCooldownRemaining <= 0f && inRange && Time.time >= nextSkill)
-            {
-                SkillReleased = true;
-                nextSkill = Time.time + 0.75f;
-                return;
-            }
-
-            // Der schwere Angriff ist der groesste Moment, den ein Held hat - und bei einem
-            // Begleiter der lauteste auf dem Bildschirm. Vorher setzte ein Bot ihn ein, sobald der
-            // Balken voll war, also alle zwei Sekunden: XIROs Urteil fiel ununterbrochen, auch wenn
-            // man selbst einen anderen Helden spielte. Jetzt nur, wo er etwas ausrichtet - gegen
-            // eine Gruppe oder einen starken Gegner - und hoechstens alle paar Sekunden.
-            if (weapon.HeavyReady && inRange && Time.time >= nextHeavy && WorthAHeavy(threat))
-            {
-                HeavyPressed = true;
-                HeavyHeld = true;
-                // Der Loslasspunkt wird einmal ausgewuerfelt und liegt meistens, aber nicht immer,
-                // im Fenster. Ein Bot, der ihn jedes Mal trifft, waere besser als jeder Spieler.
-                heavyReleaseAt = Random.Range(0.42f, 0.86f);
-                nextHeavy = Time.time + HeavyPause;
-                return;
-            }
-
-            AttackHeld = inRange;
-        }
-
-        /// <summary>
-        /// Ausweichen, wenn es eng wird: wenig Leben und ein Gegner auf der Haut. Der Dash geht vom
-        /// Gegner weg, nicht irgendwohin - eine Rolle in die Umklammerung hinein waere schlimmer als
-        /// keine.
-        /// </summary>
-        private bool Escape(Health threat, float distance)
-        {
-            if (Time.time < nextDash || !health) return false;
-            if (health.Normalized > 0.35f || distance > 3.2f) return false;
-            var away = transform.position - threat.transform.position;
-            away.y = 0f;
-            if (away.sqrMagnitude < 0.01f) return false;
-            Move = Vector2.ClampMagnitude(new Vector2(away.normalized.x, away.normalized.z), 1f);
-            DashPressed = true;
-            nextDash = Time.time + 4.5f;
-            return true;
-        }
-
-        /// <summary>
         /// Der naechste gefallene Mitstreiter, zu dem es sich zu laufen lohnt. Nah genug, dass die
         /// Gruppe nicht auseinanderfaellt, und nicht mitten im eigenen Handgemenge - es sei denn, man
         /// steht ohnehin schon fast daneben.
@@ -391,7 +325,7 @@ namespace Shatterspire
                 if (!other || other == member || other.IsAlive) continue;
                 var down = other.GetComponent<FallenHero>();
                 if (!down || !down.IsDown) continue;
-                var offset = FlatDistance(transform.position, other.transform.position);
+                var offset = CombatBrain.FlatDistance(transform.position, other.transform.position);
                 if (offset > bestDistance) continue;
                 // Mitten im Kampf nur, wenn es fast ohne Umweg geht.
                 if (threatDistance < 5f && offset > 4f) continue;
@@ -401,77 +335,18 @@ namespace Shatterspire
             return best;
         }
 
-        /// <summary>So lange wartet ein Begleiter mindestens zwischen zwei schweren Angriffen.</summary>
-        private const float HeavyPause = 6f;
-
-        /// <summary>
-        /// Haelt eine angefangene Ladung und laesst sie am gewuerfelten Punkt los - auch wenn das
-        /// Ziel inzwischen gefallen ist. Seit volle Ladung nicht mehr von selbst ausloest, bliebe
-        /// ein Bot sonst mit geladenem Schlag stehen und koennte nichts anderes mehr tun.
-        /// </summary>
-        private bool FinishHeavy()
+        /// <summary>Setzt die Absicht des Kopfes auf die Knoepfe dieses Bildes.</summary>
+        private void Press(in CombatIntent intent)
         {
-            if (!weapon || !weapon.ChargingHeavy) return false;
-            if (weapon.HeavyChargeNormalized >= heavyReleaseAt) HeavyReleased = true;
-            else HeavyHeld = true;
-            return true;
-        }
-
-        /// <summary>
-        /// Lohnt sich hier der schwere Angriff? Gegen einen starken Gegner immer, sonst nur, wenn
-        /// er mehr als einen trifft.
-        /// </summary>
-        private bool WorthAHeavy(Health threat)
-        {
-            if (!threat) return false;
-            var agent = threat.GetComponent<EnemyAgent>();
-            if (agent && (EnemyKinds.IsBoss(agent.Kind) || agent.Kind == EnemyKind.Elite)) return true;
-            var around = 0;
-            var active = Health.Active;
-            for (var i = 0; i < active.Count; i++)
-            {
-                var candidate = active[i];
-                if (!Targeting.IsTargetable(candidate, TeamId.Enemy)) continue;
-                if (FlatDistance(candidate.transform.position, threat.transform.position) <= 3.5f) around++;
-            }
-            return around >= 2;
-        }
-
-        private Health ChooseTarget()
-        {
-            // Dasselbe Selbstzielen wie beim Spieler, mit einer Ausnahme: Gegner, die noch ruhen,
-            // bleiben ruhen. Sonst zieht ein Bot ein Lager aus dem Nachbarraum, das der Spieler noch
-            // gar nicht gesehen hat.
-            var best = Targeting.FindBestAutoAim(transform.position, transform.forward, ThreatRange, TeamId.Enemy);
-            if (best && best.GetComponent<EnemyAgent>() is { IsIdle: true }) return null;
-            return best;
-        }
-
-        private int CountEnemiesWithin(float radius)
-        {
-            var count = 0;
-            var active = Health.Active;
-            for (var i = 0; i < active.Count; i++)
-            {
-                var candidate = active[i];
-                if (!Targeting.IsTargetable(candidate, TeamId.Enemy)) continue;
-                if (FlatDistance(transform.position, candidate.transform.position) <= radius) count++;
-            }
-            return count;
-        }
-
-        private bool BossWithin(float radius)
-        {
-            var active = Health.Active;
-            for (var i = 0; i < active.Count; i++)
-            {
-                var candidate = active[i];
-                if (!Targeting.IsTargetable(candidate, TeamId.Enemy)) continue;
-                var agent = candidate.GetComponent<EnemyAgent>();
-                if (!agent || !EnemyKinds.IsBoss(agent.Kind)) continue;
-                if (FlatDistance(transform.position, candidate.transform.position) <= radius) return true;
-            }
-            return false;
+            AttackHeld |= intent.Attack;
+            SkillReleased |= intent.SkillRelease;
+            HeavyPressed |= intent.HeavyPress;
+            HeavyHeld |= intent.HeavyHold;
+            HeavyReleased |= intent.HeavyRelease;
+            UltimateReleased |= intent.UltimateRelease;
+            if (!intent.Dash) return;
+            DashPressed = true;
+            Move = intent.DashMove;
         }
 
         // ── Kleinkram ───────────────────────────────────────────────────────
@@ -498,7 +373,7 @@ namespace Shatterspire
         /// <summary>Zurueckgeblieben, etwa nach einem Etagenwechsel: nicht quer ueber die Etage laufen.</summary>
         private void RecoverIfLost()
         {
-            if (FlatDistance(transform.position, leader.position) <= TeleportDistance) return;
+            if (CombatBrain.FlatDistance(transform.position, leader.position) <= TeleportDistance) return;
             var fallback = leader.position - leaderHeading * 2f
                            + Vector3.Cross(Vector3.up, leaderHeading) * side * 2f;
             Teleport(navigation != null ? navigation.ClampToWalkable(fallback, 0.5f) : fallback);
@@ -521,11 +396,5 @@ namespace Shatterspire
                 : "FLANKING";
         }
 
-        private static float FlatDistance(Vector3 a, Vector3 b)
-        {
-            var dx = a.x - b.x;
-            var dz = a.z - b.z;
-            return Mathf.Sqrt(dx * dx + dz * dz);
-        }
     }
 }

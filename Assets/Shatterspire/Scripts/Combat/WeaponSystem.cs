@@ -165,6 +165,15 @@ namespace Shatterspire
         /// <summary>Steuert dieses Geraet diesen Helden? Siehe <see cref="SetLocal"/>.</summary>
         public bool IsLocal => isLocal;
 
+        // ── Was dieser Held ausloest ────────────────────────────────────────
+        // Ereignisse an der Instanz, keine globalen: jeder Held meldet nur sich selbst. Der
+        // Selbsttest zaehlt damit mit - und vergleicht die schweren Angriffe mit den Loslassern, die
+        // sein Autopilot gedrueckt hat. Ein Unterschied waere der Fehler "loest von selbst aus".
+
+        public event System.Action<HeavyTiming> HeavyFired;
+        public event System.Action SkillFired;
+        public event System.Action UltimateFired;
+
         // ── Rueckmeldung, die nur dem eigenen Helden gehoert ────────────────
         // Jeder Aufruf in dieser Klasse geht ueber diese fuenf. Ein Test haelt fest, dass keiner
         // daran vorbei direkt Hitstop, Kamera oder Ansage anspricht.
@@ -1053,6 +1062,7 @@ namespace Shatterspire
         {
             var normalized = HeavyChargeNormalized;
             var timing = ActionBalance.Judge(normalized);
+            HeavyFired?.Invoke(timing);
             var perfect = timing == HeavyTiming.Perfect;
             chargeRing?.Hide();
             // Der Klang sagt, welche Stufe es war - noch bevor die Zahl am Gegner steht.
@@ -1194,6 +1204,7 @@ namespace Shatterspire
             // zweites Loslassen im selben Moment eine zweite Faehigkeit starten.
             skillReadyAt = Time.time + SkillCooldown;
             BeginAbilityAim(auto, direction);
+            SkillFired?.Invoke();
             if (build.HasOverflow)
             {
                 heavyMeter = Mathf.Min(HeavyMeterMaximum, heavyMeter + HeavyMeterMaximum * RelicRules.OverflowHeavyFill);
@@ -1285,6 +1296,7 @@ namespace Shatterspire
         /// </summary>
         private IEnumerator Ultimate()
         {
+            UltimateFired?.Invoke();
             ultimateActive = true;
             ultimateCharge = 0f;
             ultimateLockedUntil = Time.time + UltimateLockoutSeconds;
@@ -1600,8 +1612,10 @@ namespace Shatterspire
 
         private void Advance(Vector3 direction, float distance)
         {
-            // Ueber den CharacterController, damit die Waende der Raeume den Anlauf stoppen.
-            if (controller) controller.CombatStep(direction, distance);
+            // Ueber den CharacterController, damit die Waende der Raeume den Anlauf stoppen. Ein
+            // Sturmangriff ist ausdruecklich schneller als Laufen - er laeuft deshalb nicht ueber
+            // den gedeckelten Schritt, sondern ueber einen eigenen Weg, der sich als Sturm meldet.
+            if (controller) controller.Charge(direction, distance);
             else transform.position += direction * distance;
         }
 
@@ -2002,6 +2016,21 @@ namespace Shatterspire
         /// Der Schritt, wie ihn das Spiel wirklich nimmt: er haelt an der Reichweite dieses Helden an
         /// und ist nie schneller als sein Laufen.
         /// </summary>
+        /// <summary>
+        /// Wie weit ein erzwungener Schritt in diesem Bild gehen darf.
+        ///
+        /// Der Selbsttest hat es gemessen: XIRO kam beim Angreifen auf bis zu 8,0 Einheiten je
+        /// Sekunde, bei 4,9 Lauftempo. Keiner der Schritte war fuer sich zu schnell - der Schritt ins
+        /// Ziel lief im Mittel mit Lauftempo, die Rucke am Kombo-Ende waren kurz. Aber der Schritt ins
+        /// Ziel wird weich beschleunigt und ist in der Mitte anderthalbmal so schnell wie im Mittel,
+        /// er kam zum Laufen noch dazu, und die Rucke fielen auf einen Schlag in ein Bild. Das Auge
+        /// sieht die Summe.
+        ///
+        /// Also rechnet der Schritt mit dem, was das Laufen in diesem Bild schon verbraucht.
+        /// </summary>
+        public static float StepBudget(float wanted, float runSpeed, float walkingSpeed, float deltaTime)
+            => Mathf.Clamp(wanted, 0f, Mathf.Max(0f, runSpeed - walkingSpeed) * Mathf.Max(0f, deltaTime));
+
         public static float StepDistance(float distanceToTarget, float seconds, HeroClassId hero, float runSpeed)
         {
             if (distanceToTarget > MaxEngage) return 0f;

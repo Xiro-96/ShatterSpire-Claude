@@ -22,6 +22,9 @@ namespace Shatterspire
     {
         private static readonly List<PartyMember> ActiveMembers = new();
 
+        /// <summary>Radius des Koerpers eines Helden. Gegner halten mindestens diesen Abstand plus ihren eigenen.</summary>
+        public const float BodyRadius = 0.45f;
+
         /// <summary>Alle lebenden und gefallenen Mitglieder der Gruppe, in der Reihenfolge des Beitritts.</summary>
         public static IReadOnlyList<PartyMember> Active => ActiveMembers;
 

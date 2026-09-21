@@ -88,6 +88,12 @@ namespace Shatterspire
         /// </summary>
         public bool IsTelegraphing => state == State.Telegraph;
 
+        /// <summary>
+        /// Wen dieser Gegner gerade angreift. Ein Kopf, der ausweichen will, muss wissen, ob der
+        /// angekuendigte Schlag ihm gilt - wie ein Mensch, der sieht, wohin die Linie zeigt.
+        /// </summary>
+        public Transform Target => target;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetRegistry() => ActiveAgents.Clear();
 
@@ -465,6 +471,39 @@ namespace Shatterspire
                 force += away.normalized * (1f - Mathf.Sqrt(distanceSqr) / desiredSpacing);
             }
             return force;
+        }
+
+        /// <summary>
+        /// Am Ende jedes Bildes: steckt dieser Gegner in einem Helden, rueckt er heraus.
+        ///
+        /// Gegner bewegen sich, indem sie ihre Position direkt versetzen, und kennen dabei keine
+        /// Kollision mit Helden. Ein Crawler im Angriff oder ein Brute im Sprung landete im Helden,
+        /// und beim naechsten Schritt drueckte dessen Kollisionskoerper ihn um die Ueberlappung heraus
+        /// - bis zu gut einer Einheit in einem Bild. Der Held ruckte, ohne dass jemand etwas
+        /// gedrueckt hatte. Gefunden vom Selbsttest: "Verdraengung 1,07 in 0,13 s", bei 0,37 Laufen.
+        ///
+        /// Jetzt weicht der Gegner dem Helden, nicht umgekehrt. Was der Spieler steuert, bewegt nur
+        /// der Spieler.
+        /// </summary>
+        private void LateUpdate()
+        {
+            if (state == State.Dead) return;
+            var pushed = false;
+            var members = PartyMember.Active;
+            for (var i = 0; i < members.Count; i++)
+            {
+                var member = members[i];
+                if (!member || !member.IsAlive) continue;
+                var offset = transform.position - member.transform.position;
+                offset.y = 0f;
+                var minimum = stats.ColliderRadius + PartyMember.BodyRadius;
+                var distance = offset.magnitude;
+                if (distance >= minimum) continue;
+                var away = distance > 0.001f ? offset / distance : -member.transform.forward;
+                transform.position += away * (minimum - distance);
+                pushed = true;
+            }
+            if (pushed) ClampToArena();
         }
 
         private void ClampToArena()

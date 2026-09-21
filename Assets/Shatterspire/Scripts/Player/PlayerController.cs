@@ -3,6 +3,9 @@ using UnityEngine;
 
 namespace Shatterspire
 {
+    /// <summary>Wodurch sich ein Held bewegt hat. Der Selbsttest ordnet damit zu schnelle Schritte zu.</summary>
+    public enum MoveSource { Walk, Step, Charge, Roll, Clamp, Push }
+
     [RequireComponent(typeof(CharacterController), typeof(PlayerBuild))]
     public sealed class PlayerController : MonoBehaviour
     {
@@ -33,6 +36,12 @@ namespace Shatterspire
         private HeroClassId heroClass;
         private WeaponSystem weaponSystem;
         public int DashCharges => dashCharges;
+
+        /// <summary>Rollt der Held gerade? Der Selbsttest nimmt Dash-Tempo von der Schritt-Pruefung aus.</summary>
+        public bool Rolling => rolling;
+
+        /// <summary>Fliegt er gerade - etwa im Sprung einer Ultimate?</summary>
+        public bool IsAirborne => airborne;
         public float DashRechargeNormalized => dashCharges >= MaxCharges ? 1f : 1f - Mathf.Clamp01((nextRecharge - Time.time) / RechargeSeconds);
         public int MaxDashCharges => MaxCharges;
         private int MaxCharges => 2 + build.ExtraDashCharges;
@@ -126,7 +135,7 @@ namespace Shatterspire
                 velocity = Vector3.zero;
                 acceleration = Vector3.zero;
             }
-            if (velocity.sqrMagnitude > 0f) motor.Move(velocity * Time.deltaTime);
+            if (velocity.sqrMagnitude > 0f) MoveBody(velocity * Time.deltaTime, MoveSource.Walk);
             // Im Kampf schaut die Figur dorthin, wohin die Waffe schiesst - dieselbe Richtung, die
             // auch die Linie zeigt. Ausserhalb des Kampfes dorthin, wohin gezielt oder gelaufen wird.
             // Vorher folgte der Koerper immer der Eingabe, und die entschied das Ziel anders als die
@@ -176,19 +185,76 @@ namespace Shatterspire
                 // Weich hinein und weich hinaus: der Schritt soll sich als Gewichtsverlagerung
                 // lesen, nicht als Ruck.
                 var wanted = distance * Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / seconds));
-                if (wanted > moved) motor.Move(direction * (wanted - moved));
-                moved = wanted;
+                // Zusammen mit dem Laufen nie schneller als das Lauftempo. Was in diesem Bild keinen
+                // Platz hat, holt der Schritt in den naechsten nach - oder laesst es.
+                var walking = new Vector3(velocity.x, 0f, velocity.z).magnitude;
+                var step = MeleeApproach.StepBudget(wanted - moved, TopSpeed, walking, Time.deltaTime);
+                if (step > 0f) MoveBody(direction * step, MoveSource.Step);
+                moved += step;
                 yield return null;
             }
             lunge = null;
         }
 
+        /// <summary>
+        /// Ein kleiner Schritt nach vorn im Schlag. Vorher ein Versatz auf einen Schlag in einem
+        /// einzigen Bild - jetzt gleitend und gedeckelt wie der Schritt ins Ziel.
+        /// </summary>
         public void CombatStep(Vector3 direction, float distance)
+        {
+            if (!motor || rolling || distance <= 0f) return;
+            Lunge(direction, distance, Mathf.Max(0.06f, distance / Mathf.Max(0.5f, TopSpeed)));
+        }
+
+        /// <summary>
+        /// Ein Sturmangriff: schneller als Laufen, und das mit Absicht. Nur fuer Faehigkeiten, die ein
+        /// Ansturm sind. Meldet sich ueber <see cref="Charging"/>, damit der Selbsttest ihn nicht
+        /// fuer einen zu schnellen Schritt haelt.
+        /// </summary>
+        public void Charge(Vector3 direction, float distance)
         {
             if (!motor || rolling || distance <= 0f) return;
             direction.y = 0f;
             if (direction.sqrMagnitude < 0.01f) return;
-            motor.Move(direction.normalized * distance);
+            chargingUntil = Time.time + 0.12f;
+            MoveBody(direction.normalized * distance, MoveSource.Charge);
+        }
+
+        private float chargingUntil = -1f;
+
+        /// <summary>Laeuft gerade ein Sturmangriff?</summary>
+        public bool Charging => Time.time < chargingUntil;
+
+        /// <summary>Das Lauftempo dieses Helden, mit allem, was es gerade veraendert.</summary>
+        private float TopSpeed => HeroCatalog.BaseSpeed(heroClass) * build.MoveSpeedMultiplier;
+
+        private readonly float[] travelled = new float[6];
+
+        /// <summary>Wie weit sich der Held insgesamt auf diesem Weg bewegt hat, in Einheiten.</summary>
+        public float Travelled(MoveSource source) => travelled[(int)source];
+
+        /// <summary>
+        /// Die einzige Stelle, an der der Held bewegt wird.
+        ///
+        /// Ein gefallener Held hat seine Bewegung abgeschaltet (FallenHero). Eine Rolle oder ein
+        /// Ansturm, die in dem Moment noch liefen, riefen Move trotzdem weiter auf -
+        /// "CharacterController.Move called on inactive controller", vom Selbsttest zwoelfmal in
+        /// einem Aufstieg gefunden, jedes Mal kurz nachdem ein Begleiter gefallen war.
+        /// </summary>
+        private void MoveBody(Vector3 delta, MoveSource source)
+        {
+            if (!motor || !motor.enabled) return;
+            var before = transform.position;
+            motor.Move(delta);
+            var moved = transform.position - before;
+            moved.y = 0f;
+            // Was die Kollision ueber den angeforderten Weg hinaus verschiebt, ist keine Bewegung des
+            // Helden, sondern Verdraengung - etwa wenn ein Gegnerkoerper in ihn hineinlaeuft. Der
+            // Selbsttest fand Stoesse von 1,5 Einheiten in 0,13 s, die sonst als Laufen zaehlten.
+            var requested = new Vector3(delta.x, 0f, delta.z).magnitude;
+            travelled[(int)source] += Mathf.Min(moved.magnitude, requested);
+            if (moved.magnitude > requested + 0.001f)
+                travelled[(int)MoveSource.Push] += moved.magnitude - requested;
         }
 
         private IEnumerator Roll()
@@ -211,7 +277,7 @@ namespace Shatterspire
             var elapsed = 0f;
             while (elapsed < RollDuration)
             {
-                motor.Move(rollDirection * (RollSpeed * Time.deltaTime));
+                MoveBody(rollDirection * (RollSpeed * Time.deltaTime), MoveSource.Roll);
                 elapsed += Time.deltaTime;
                 yield return null;
             }
@@ -254,6 +320,9 @@ namespace Shatterspire
                 corrected = new Vector3(flat.x, position.y, flat.y);
             }
             if ((corrected - position).sqrMagnitude < 0.000001f) return;
+            var pushed = corrected - position;
+            pushed.y = 0f;
+            travelled[(int)MoveSource.Clamp] += pushed.magnitude;
             var wasEnabled = motor.enabled;
             motor.enabled = false;
             transform.position = corrected;

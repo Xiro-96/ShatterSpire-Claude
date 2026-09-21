@@ -162,6 +162,28 @@ namespace Shatterspire.Tests
             });
         }
 
+        [Test]
+        public void JederFesteTextImCodeIstUebersetzt()
+        {
+            // Die Tests oben pruefen, was aus Katalogen kommt. Feste Texte im Code - Loc.T("...") in
+            // HUD und Menue - prueften sie nicht. So stand "YOU HAVE" eine Woche lang englisch im
+            // Ende-Bildschirm, bis der Selbsttest es auf einem Bild zeigte.
+            var literal = new System.Text.RegularExpressions.Regex(@"Loc\.T\(""((?:[^""\\]|\\.)*)""\)");
+            var root = System.IO.Path.Combine(UnityEngine.Application.dataPath, "Shatterspire", "Scripts");
+            WithGerman(() =>
+            {
+                var missing = new SortedSet<string>();
+                foreach (var file in System.IO.Directory.GetFiles(root, "*.cs", System.IO.SearchOption.AllDirectories))
+                foreach (System.Text.RegularExpressions.Match match in literal.Matches(System.IO.File.ReadAllText(file)))
+                {
+                    var text = System.Text.RegularExpressions.Regex.Unescape(match.Groups[1].Value);
+                    if (string.IsNullOrWhiteSpace(text) || Loc.T(text) != text || Loc.IsProperName(text)) continue;
+                    missing.Add($"'{text}' in {System.IO.Path.GetFileName(file)}");
+                }
+                Assert.That(missing, Is.Empty, "Nicht uebersetzt: " + string.Join(" | ", missing));
+            });
+        }
+
         /// <summary>Merkt sich alles, was unverändert zurueckkommt - mit Ausnahme der Eigennamen.</summary>
         private static void Check(List<string> missing, string text, string where)
         {
