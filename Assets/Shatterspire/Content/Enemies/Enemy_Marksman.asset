@@ -16,7 +16,7 @@ MonoBehaviour:
   health: 46
   speed: 2.35
   attackRange: 12
-  attackDamage: 26
+  attackDamage: 19
   knockbackResistance: 0.6
   staggerSeconds: 0.1
   separationSpacing: 1.05

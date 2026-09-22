@@ -13,10 +13,10 @@ MonoBehaviour:
   m_Name: Enemy_IronWarden
   m_EditorClassIdentifier: 
   kind: 4
-  health: 1900
+  health: 2850
   speed: 1.75
   attackRange: 2.5
-  attackDamage: 24
+  attackDamage: 18
   knockbackResistance: 0.08
   staggerSeconds: 0.025
   separationSpacing: 1.65
