@@ -86,13 +86,17 @@ namespace Shatterspire
         /// </summary>
         private bool chargesHeavy;
 
+        /// <summary>Ein Ziel, das die Ladung beim Zuenden zusaetzlich trifft, wenn es noch im Radius steht.</summary>
+        private Health focus;
+        private float focusBonus;
+
         /// <summary>
         /// Legt eine Ladung. <paramref name="flight"/> ist die Wurfzeit bis zur Landung,
         /// <paramref name="fuse"/> die Zeit danach bis zur Zuendung.
         /// </summary>
         public static TimedBomb Throw(Vector3 from, Vector3 to, float flight, float fuse, float blastRadius,
             float blastDamage, DamageType damageType, GameObject source, Color accent,
-            bool chargesHeavyMeter = false)
+            bool chargesHeavyMeter = false, Health focus = null, float focusBonus = 0f)
         {
             var go = PrototypeFactory.Primitive(PrimitiveType.Sphere, "Timed Bomb",
                 from, Vector3.one * 0.42f, accent, true);
@@ -108,6 +112,8 @@ namespace Shatterspire
             bomb.flightSeconds = Mathf.Max(0.01f, flight);
             bomb.shell = go.GetComponent<Renderer>();
             bomb.chargesHeavy = chargesHeavyMeter;
+            bomb.focus = focus;
+            bomb.focusBonus = focusBonus;
             // Die Flaeche liegt von Anfang an am Boden: man muss vor der Zuendung wissen, wo es knallt.
             bomb.marker = PrototypeVfx.SpawnZone(to, blastRadius, accent, flight + bomb.fuseSeconds);
             return bomb;
@@ -174,6 +180,13 @@ namespace Shatterspire
             if (marker) Destroy(marker);
             var hits = CombatUtility.Explode(transform.position, radius, damage, TeamId.Enemy, type, owner);
             GameEvents.RaiseBombDetonated(owner, hits);
+            if (focus && focus.IsAlive && focusBonus > 0f)
+            {
+                var offset = focus.transform.position - transform.position;
+                offset.y = 0f;
+                if (offset.sqrMagnitude <= radius * radius)
+                    focus.TakeDamage(new DamageInfo(damage * focusBonus, type, owner, focus.transform.position, Vector3.zero));
+            }
             if (hits > 0 && chargesHeavy && owner)
                 owner.GetComponent<WeaponSystem>()?.NotifyLightHit();
             var mine = !PartyMember.IsOtherHero(owner);

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Shatterspire.Tests
 {
@@ -451,6 +452,44 @@ namespace Shatterspire.Tests
             Assert.Greater(plain, 0f, "Gegenprobe: der Riss trifft den Gegner auch ohne Erfassung.");
             Assert.AreEqual(1f + ActionBalance.RiftFocusBonus, focused / plain, 0.05f,
                 $"Erfasst {focused:0}, nicht erfasst {plain:0}.");
+        }
+
+        /// <summary>
+        /// KORRs perfekte Haftmine trifft das erfasste Ziel doppelt - beim Zuenden, wenn es noch im
+        /// Radius steht. Die Mine zerstoert sich dabei mit Destroy, was im Editor eine Meldung gibt;
+        /// die wird nur fuer das Zuenden ausgeblendet.
+        /// </summary>
+        [Test]
+        public void APerfectMineHitsTheLockedTargetTwice()
+        {
+            var korr = Spawn("KORR");
+            float Blast(bool focused)
+            {
+                var enemy = LoneEnemy(Vector3.forward * 3f);
+                try
+                {
+                    var bomb = TimedBomb.Throw(Vector3.zero, enemy.transform.position, 0.3f, 0.05f, 3f, 40f,
+                        DamageType.Fire, korr, Color.white, focus: focused ? enemy : null,
+                        focusBonus: focused ? ActionBalance.MineFocusBonus : 0f);
+                    spawned.Add(bomb.gameObject);
+                    bomb.transform.position = enemy.transform.position;
+                    var before = enemy.Current;
+                    LogAssert.ignoreFailingMessages = true;
+                    typeof(TimedBomb).GetMethod("Detonate", Hidden).Invoke(bomb, null);
+                    return before - enemy.Current;
+                }
+                finally
+                {
+                    LogAssert.ignoreFailingMessages = false;
+                    typeof(Health).GetMethod("OnDisable", Hidden).Invoke(enemy, null);
+                }
+            }
+
+            var plain = Blast(false);
+            var focused = Blast(true);
+            Assert.AreEqual(40f, plain, 0.01f, "Gegenprobe: ohne Ziel trifft die Mine einmal.");
+            Assert.AreEqual(1f + ActionBalance.MineFocusBonus, focused / plain, 0.01f,
+                $"Mit Ziel {focused:0}, ohne {plain:0}.");
         }
 
         private Health LoneEnemy(Vector3 at)

@@ -618,8 +618,10 @@ namespace Shatterspire
             var radius = Mathf.Lerp(2.6f, 4.4f, normalized) * (perfect ? 1.25f : 1f);
             var damage = BaseDamage * Mathf.Lerp(2.2f, 3.6f, normalized) * build.HeavyDamageMultiplier
                          * build.DamageMultiplier * (build.Has(PerkId.BomberStickyCluster) ? 1.4f : 1f);
+            // Im goldenen Fenster trifft die Mine das erfasste Ziel ein zweites Mal - wie ORIONs Riss.
             TimedBomb.Throw(MuzzlePosition(), landing, 0.3f, perfect ? 0.05f : 0.85f, radius, damage,
-                type, gameObject, accent);
+                type, gameObject, accent, focus: perfect ? lockedTarget : null,
+                focusBonus: perfect ? ActionBalance.MineFocusBonus : 0f);
             if (build.Has(PerkId.PerfectEcho) && perfect)
                 TimedBomb.Throw(MuzzlePosition(), landing + direction * 2.4f, 0.34f, 0.2f, radius * 0.8f,
                     damage * 0.6f, type, gameObject, accent);

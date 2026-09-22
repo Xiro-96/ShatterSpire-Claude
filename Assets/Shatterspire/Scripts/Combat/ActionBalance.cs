@@ -60,6 +60,13 @@ namespace Shatterspire
         /// </summary>
         public const float RiftFocusBonus = 1f;
 
+        /// <summary>
+        /// Dasselbe fuer KORRs perfekte Haftmine. Seine Ladungen sind fuer Gruppen gebaut; am Boss
+        /// richtete er im Selbsttest ein Drittel des Schadens der anderen an (2372 statt 5000 bis 7000)
+        /// und schaffte keinen Aufstieg. Entscheidung des Users vom 22.09.
+        /// </summary>
+        public const float MineFocusBonus = 1f;
+
         // ── KORRs Zuendschnur ───────────────────────────────────────────────
 
         /// <summary>
