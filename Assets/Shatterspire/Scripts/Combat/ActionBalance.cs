@@ -36,6 +36,18 @@ namespace Shatterspire
     /// </summary>
     public static class ActionBalance
     {
+        // ── Nahkampf haelt sich ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Welcher Anteil eines Waffentreffers den Helden heilt. Nur fuer Nahkaempfer.
+        ///
+        /// Der Selbsttest zeigte: XIRO und BRAX nahmen auf Etage 4 das Drei- bis Vierfache an
+        /// Schaden wie REX und stuerzten dort im Schnitt zweimal - sie muessen dort stehen, wo die
+        /// Gegner zuschlagen. Lebensraub macht aus dem Draufgehen das, was sie haelt: wer trifft,
+        /// bleibt stehen; wer zoegert, nicht. Entscheidung des Users vom 22.09.
+        /// </summary>
+        public static float MeleeLifesteal(HeroClassId hero) => HeroCatalog.IsMelee(hero) ? 0.08f : 0f;
+
         // ── Der perfekte Moment ─────────────────────────────────────────────
 
         /// <summary>Wie lange sich der schwere Angriff auflaedt, bis er von selbst ausloest.</summary>

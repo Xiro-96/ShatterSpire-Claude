@@ -38,7 +38,8 @@ def floor_stats(summaries, number):
             entry[1] += h["amount"]
     top = sorted(sources.items(), key=lambda kv: -kv[1][1])[:3]
     n = max(1, len(floors))
-    dealt = [f.get("damageDealt", 0) / max(1.0, f["seconds"]) for f in floors if "damageDealt" in f]
+    # Je Kampfsekunde, nicht je Etagensekunde - siehe PlaytestRecorder.FloorRecord.fightSeconds.
+    dealt = [f["damageDealt"] / max(1.0, f["fightSeconds"]) for f in floors if f.get("fightSeconds")]
     return (len(floors), mean(f["damageTaken"] for f in floors), mean(f["playerDowns"] for f in floors),
             ", ".join(f"{name} {v[1] / n:.0f}" for name, v in top), mean(dealt) if dealt else None)
 
@@ -53,7 +54,7 @@ def describe(root, hero):
     for number in (1, 2, 4, 5):
         count, damage, downs, top, dps = floor_stats(s, number)
         if count:
-            dealt = f", teilt {dps:.1f}/s aus" if dps is not None else ""
+            dealt = f", teilt {dps:.1f}/s im Kampf aus" if dps is not None else ""
             lines.append(f"  Etage {number} ({count}x): Schaden {damage:.0f}, gestuerzt {downs:.1f}{dealt} | {top}")
     return lines
 

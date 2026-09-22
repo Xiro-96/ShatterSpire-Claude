@@ -1545,6 +1545,7 @@ namespace Shatterspire
                 ApplyStatus(target, type, dealt);
                 if (build.Has(PerkId.Vampirism)) health.Heal(dealt * 0.04f);
                 if (build.HasSiphonStone) health.Heal(dealt * 0.03f);
+                if (weaponImpact) health.Heal(dealt * ActionBalance.MeleeLifesteal(heroClass));
                 if (weaponImpact)
                 {
                     // Auf Brusthoehe zwischen Klinge und Gegner, nicht in seinem Mittelpunkt: dort

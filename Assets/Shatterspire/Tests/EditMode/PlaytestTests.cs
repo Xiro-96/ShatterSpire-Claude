@@ -334,6 +334,46 @@ namespace Shatterspire.Tests
             return weapon;
         }
 
+        /// <summary>
+        /// Nahkaempfer heilen sich mit jedem Waffentreffer - und nur mit dem, nicht mit jeder
+        /// Explosion; Fernkaempfer gar nicht.
+        /// </summary>
+        [Test]
+        public void MeleeWeaponHitsHealTheHero()
+        {
+            Assert.Greater(ActionBalance.MeleeLifesteal(HeroClassId.Paladin), 0f);
+            Assert.Greater(ActionBalance.MeleeLifesteal(HeroClassId.Guardian), 0f);
+            Assert.AreEqual(0f, ActionBalance.MeleeLifesteal(HeroClassId.Ranger), "REX schiesst aus elf Einheiten.");
+            Assert.AreEqual(0f, ActionBalance.MeleeLifesteal(HeroClassId.Arcanist));
+            Assert.AreEqual(0f, ActionBalance.MeleeLifesteal(HeroClassId.Bomber));
+
+            var weapon = Xiro();
+            var health = weapon.GetComponent<Health>();
+            var enemy = LoneEnemy(weapon.transform.position + Vector3.forward);
+            var attacker = Spawn("Brute");
+            health.TakeDamage(new DamageInfo(80f, DamageType.Physical, attacker, Vector3.zero, Vector3.zero));
+            typeof(Health).GetField("invulnerableUntil", Hidden).SetValue(health, 0f);
+            var strike = typeof(WeaponSystem).GetMethod("Strike", Hidden);
+            float After(bool weaponImpact)
+            {
+                var before = health.Current;
+                strike.Invoke(weapon, new object[] { enemy.transform.position, 1.5f, 50f, DamageType.Holy, 4f, false,
+                    false, weaponImpact, false });
+                return health.Current - before;
+            }
+            try
+            {
+                Assert.GreaterOrEqual(After(true), 50f * ActionBalance.MeleeLifesteal(HeroClassId.Paladin) - 0.01f,
+                    "Ein Hieb fuer 50 heilt XIRO um mindestens 8 % davon.");
+                // Gegenprobe: ein Treffer, der kein Waffenhieb ist, heilt nicht.
+                Assert.AreEqual(0f, After(false), 0.001f);
+            }
+            finally
+            {
+                typeof(Health).GetMethod("OnDisable", Hidden).Invoke(enemy, null);
+            }
+        }
+
         private Health LoneEnemy(Vector3 at)
         {
             var enemy = Spawn("Crawler").AddComponent<Health>();

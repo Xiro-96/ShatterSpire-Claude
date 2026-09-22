@@ -52,6 +52,14 @@ namespace Shatterspire
             public float damageDealt;
             /// <summary>Schaden, den die Begleiter austeilten.</summary>
             public float allyDamageDealt;
+            /// <summary>
+            /// Sekunden, in denen der Held ein Ziel in Kampfweite hatte. Ausgeteilt je Etagensekunde
+            /// hing an den festen Verteidigungszeiten und an dem, was es zu toeten gab - wer ohnehin
+            /// fast alles toetete, zeigte dieselbe Zahl, egal wie hart er traf (REX: 83 % des
+            /// Gruppenschadens vor und nach einem Fuenftel weniger Grundschaden). Je Kampfsekunde
+            /// misst, wie hart er trifft.
+            /// </summary>
+            public float fightSeconds;
             public int orbsCollected;
             public int orbsExpired;
             public float orbHealing;
@@ -221,6 +229,7 @@ namespace Shatterspire
                 wasSlow = slow;
                 WatchSteps();
                 WatchStuck();
+                if (floor != null && pilot && pilot.Fighting) floor.fightSeconds += Time.deltaTime;
             }
             if (floor != null && playerHealth) floor.lowestHealth = Mathf.Min(floor.lowestHealth, playerHealth.Normalized);
 
@@ -597,11 +606,12 @@ namespace Shatterspire
                     f.floor, f.kind, f.seconds, f.healthAtStart * 100f, f.damageTaken, f.lowestHealth * 100f, f.kills,
                     f.heavy, f.perfect, f.good, string.Empty, f.skills, f.ultimates, f.companionFalls, f.playerDowns));
             text.AppendLine();
-            text.AppendLine("Ausgeteilt (eigener Held je Sekunde, Begleiter zusammen je Sekunde)");
+            text.AppendLine("Ausgeteilt (eigener Held: Summe, je Kampfsekunde, Anteil an der Gruppe)");
             foreach (var f in s.floors)
                 if (f.seconds > 1f)
-                    text.AppendLine(string.Format(de, "{0,5}  {1,6:0} ({2:0.0}/s)   Begleiter {3,6:0} ({4:0.0}/s)", f.floor,
-                        f.damageDealt, f.damageDealt / f.seconds, f.allyDamageDealt, f.allyDamageDealt / f.seconds));
+                    text.AppendLine(string.Format(de, "{0,5}  {1,6:0}  {2,5:0.0}/s im Kampf ({3:0} s)  Anteil {4:0} %", f.floor,
+                        f.damageDealt, f.damageDealt / Mathf.Max(1f, f.fightSeconds), f.fightSeconds,
+                        100f * f.damageDealt / Mathf.Max(1f, f.damageDealt + f.allyDamageDealt)));
             text.AppendLine();
             text.AppendLine("Heilkugeln (eingesammelt/verfallen, geheilt)");
             foreach (var f in s.floors)
