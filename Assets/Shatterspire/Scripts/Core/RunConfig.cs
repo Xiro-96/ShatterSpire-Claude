@@ -128,7 +128,10 @@ namespace Shatterspire
             HeroClassId.Paladin => 14f,
             HeroClassId.Guardian => 17f,
             HeroClassId.Arcanist => 12.5f,
-            _ => 11.5f
+            // Rex: 9,2 statt 11,5. Der Selbsttest mass ihn auf Etage 4 bei 74 Schaden je Sekunde, die
+            // anderen bei 45 bis 56 - und er nahm dabei ein Drittel bis ein Viertel ihres Schadens,
+            // weil er aus elf Einheiten schiesst. Er gewann 3 von 4 Aufstiegen, sie fast keinen.
+            _ => 9.2f
         };
 
         /// <summary>

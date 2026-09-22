@@ -19,7 +19,7 @@ MonoBehaviour:
   accent: {r: 0.04, g: 0.88, b: 0.92, a: 1}
   baseHealth: 105
   baseSpeed: 6.25
-  baseDamage: 11.5
+  baseDamage: 9.2
   skillCooldown: 7
   lightAttackName: RIFT ARROW
   heavyAttackName: PIERCING DRAW
