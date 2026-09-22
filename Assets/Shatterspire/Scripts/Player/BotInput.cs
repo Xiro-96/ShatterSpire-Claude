@@ -137,7 +137,8 @@ namespace Shatterspire
             var holding = new CombatIntent();
             if (brain.FinishHeavy(weapon, ref holding))
             {
-                Press(holding);
+                var dodge = new CombatIntent();
+                Press(brain.DodgeWhileCharging(transform, ref dodge) ? dodge : holding);
                 Steer(DesiredPosition(threat));
                 Aim(threat);
                 return;

@@ -271,6 +271,20 @@ namespace Shatterspire
             return true;
         }
 
+        /// <summary>
+        /// Ausweichen mitten im Aufladen. Der schwere Knopf bleibt dabei gedrueckt - losgelassen
+        /// wuerde er den Angriff ausloesen oder abbrechen, und das soll der Dash tun, wie beim
+        /// Menschen. Vorher prueften Autopilot und Begleiter beim Aufladen gar nicht, ob sie
+        /// ausweichen muessen: KORR, der seine Haftmine oft laedt, nahm Armbrust- und Schuetzen-
+        /// treffer fast nie kurz nach einem Ausweichen.
+        /// </summary>
+        public bool DodgeWhileCharging(Transform self, ref CombatIntent intent)
+        {
+            if (!Dodge(self, ref intent)) return false;
+            intent.HeavyHold = true;
+            return true;
+        }
+
         /// <summary>Wie oft dieser Kopf ausgewichen ist. Der Selbsttest schreibt es mit.</summary>
         public int Dodges { get; private set; }
 
