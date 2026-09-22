@@ -127,6 +127,7 @@ namespace Shatterspire
         private void OnRoomStarted(int index, RoomKind kind)
         {
             floor = index;
+            unreachableOrbs.Clear();
             goal = null;
             target = null;
         }
@@ -285,7 +286,7 @@ namespace Shatterspire
                 nextUnstick = Time.time + 3f;
                 UnstickDashes++;
                 Debug.Log($"SHATTERSPIRE Autopilot: haengt bei ({transform.position.x:0.0} / "
-                          + $"{transform.position.z:0.0}) fest, dasht quer heraus.");
+                          + $"{transform.position.z:0.0}) fest, dasht quer heraus ({Doing}).");
             }
             stuckAnchor = transform.position;
             stuckSince = Time.time;
@@ -297,7 +298,29 @@ namespace Shatterspire
         /// Einheiten weit. Vorher ging er nie hin - Kugeln zogen ihn nur an, wenn er zufaellig
         /// daneben stand, und verfielen sonst nach 14 Sekunden.
         /// </summary>
+        private HealthOrb chasedOrb;
+        private float chasedSince;
+        private readonly System.Collections.Generic.HashSet<HealthOrb> unreachableOrbs = new();
+
+        /// <summary>
+        /// Wie <see cref="OrbNearby"/>, gibt eine Kugel aber nach vier Sekunden auf. Eine Kugel hinter
+        /// einer Mauer liess ihn sonst davor stehen und laufen, bis sie verfiel.
+        /// </summary>
         private HealthOrb OrbWorthTheWalk(float healthShare, bool fighting)
+        {
+            var orb = OrbNearby(healthShare, fighting);
+            if (orb != chasedOrb)
+            {
+                chasedOrb = orb;
+                chasedSince = Time.time;
+            }
+            if (!orb || Time.time - chasedSince < 4f) return orb;
+            unreachableOrbs.Add(orb);
+            chasedOrb = null;
+            return null;
+        }
+
+        private HealthOrb OrbNearby(float healthShare, bool fighting)
         {
             if (healthShare >= 0.75f || (fighting && healthShare >= 0.5f)) return null;
             var reach = fighting ? 4f : 8f;
@@ -307,7 +330,7 @@ namespace Shatterspire
             for (var i = 0; i < orbs.Count; i++)
             {
                 var candidate = orbs[i];
-                if (!candidate || candidate.Owner != transform) continue;
+                if (!candidate || candidate.Owner != transform || unreachableOrbs.Contains(candidate)) continue;
                 var distance = CombatBrain.FlatDistance(transform.position, candidate.transform.position);
                 if (distance >= bestDistance) continue;
                 bestDistance = distance;

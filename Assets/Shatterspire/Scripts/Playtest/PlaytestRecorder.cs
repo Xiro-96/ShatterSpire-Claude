@@ -60,6 +60,9 @@ namespace Shatterspire
             /// misst, wie hart er trifft.
             /// </summary>
             public float fightSeconds;
+            /// <summary>Gezuendete eigene Ladungen, und wie viele davon mindestens einen Gegner trafen.</summary>
+            public int bombs;
+            public int bombsHit;
             public int orbsCollected;
             public int orbsExpired;
             public float orbHealing;
@@ -184,6 +187,7 @@ namespace Shatterspire
             GameEvents.RunEnded += OnRunEnded;
             GameEvents.OrbEnded += OnOrbEnded;
             GameEvents.DamageApplied += OnDamageApplied;
+            GameEvents.BombDetonated += OnBombDetonated;
             if (playerHealth) playerHealth.Damaged += OnPlayerDamaged;
             if (weapon)
             {
@@ -203,6 +207,7 @@ namespace Shatterspire
             GameEvents.RunEnded -= OnRunEnded;
             GameEvents.OrbEnded -= OnOrbEnded;
             GameEvents.DamageApplied -= OnDamageApplied;
+            GameEvents.BombDetonated -= OnBombDetonated;
             if (playerHealth) playerHealth.Damaged -= OnPlayerDamaged;
             if (!weapon) return;
             weapon.HeavyFired -= OnHeavyFired;
@@ -429,6 +434,13 @@ namespace Shatterspire
             else if (PartyMember.IsOtherHero(damage.Source)) floor.allyDamageDealt += dealt;
         }
 
+        private void OnBombDetonated(GameObject owner, int hits)
+        {
+            if (floor == null || owner != hero) return;
+            floor.bombs++;
+            if (hits > 0) floor.bombsHit++;
+        }
+
         private void OnOrbEnded(float heal, bool collected)
         {
             if (floor == null) return;
@@ -612,6 +624,16 @@ namespace Shatterspire
                     text.AppendLine(string.Format(de, "{0,5}  {1,6:0}  {2,5:0.0}/s im Kampf ({3:0} s)  Anteil {4:0} %", f.floor,
                         f.damageDealt, f.damageDealt / Mathf.Max(1f, f.fightSeconds), f.fightSeconds,
                         100f * f.damageDealt / Mathf.Max(1f, f.damageDealt + f.allyDamageDealt)));
+            var bombs = 0;
+            var bombsHit = 0;
+            foreach (var f in s.floors)
+            {
+                bombs += f.bombs;
+                bombsHit += f.bombsHit;
+            }
+            if (bombs > 0)
+                text.AppendLine(string.Format(de, "  Ladungen: {0} gezuendet, {1} trafen ({2:0} %)", bombs, bombsHit,
+                    100f * bombsHit / bombs));
             text.AppendLine();
             text.AppendLine("Heilkugeln (eingesammelt/verfallen, geheilt)");
             foreach (var f in s.floors)

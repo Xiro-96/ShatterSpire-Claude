@@ -34,6 +34,8 @@ namespace Shatterspire
         public static event Action<float, bool> OrbEnded;
         /// <summary>Ein Treffer ist angekommen: Ziel, Treffer und wie viel davon Leben kostete (ohne Overkill).</summary>
         public static event Action<Health, DamageInfo, float> DamageApplied;
+        /// <summary>Eine Ladung ist gezuendet: wem sie gehoerte und wie viele Gegner sie traf.</summary>
+        public static event Action<GameObject, int> BombDetonated;
 
         public static void RaiseHealthChanged(Health value) => HealthChanged?.Invoke(value);
         public static void RaiseEntityDied(Health value) => EntityDied?.Invoke(value);
@@ -65,6 +67,7 @@ namespace Shatterspire
         public static void RaiseOrbEnded(float heal, bool collected) => OrbEnded?.Invoke(heal, collected);
         public static void RaiseDamageApplied(Health target, DamageInfo damage, float dealt)
             => DamageApplied?.Invoke(target, damage, dealt);
+        public static void RaiseBombDetonated(GameObject owner, int hits) => BombDetonated?.Invoke(owner, hits);
 
         public static void Reset()
         {
@@ -87,6 +90,7 @@ namespace Shatterspire
             RunEnded = null;
             OrbEnded = null;
             DamageApplied = null;
+            BombDetonated = null;
         }
     }
 }

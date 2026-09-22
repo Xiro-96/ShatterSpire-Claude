@@ -173,6 +173,7 @@ namespace Shatterspire
             spent = true;
             if (marker) Destroy(marker);
             var hits = CombatUtility.Explode(transform.position, radius, damage, TeamId.Enemy, type, owner);
+            GameEvents.RaiseBombDetonated(owner, hits);
             if (hits > 0 && chargesHeavy && owner)
                 owner.GetComponent<WeaponSystem>()?.NotifyLightHit();
             var mine = !PartyMember.IsOtherHero(owner);

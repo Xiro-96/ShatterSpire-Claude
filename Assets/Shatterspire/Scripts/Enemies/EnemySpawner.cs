@@ -303,7 +303,9 @@ namespace Shatterspire
             // Belohnung hier und nicht in einer statischen Kasse.
             // Lebenskugel fallen lassen. Liegt beim Spawner, weil er den Spieler kennt und den
             // Gegner in derselben Meldung hat.
-            if (player) HealthOrb.TryDrop(enemy.Kind, enemy.transform.position, player, runSeed, activeFloor, enemy.Salt);
+            // Auf begehbarem Boden: ein Gegner, der an einer Wand starb, liess die Kugel sonst hinter
+            // die Mauer fallen, wo sie niemand holen konnte - der Autopilot stand davor und lief.
+            if (player) HealthOrb.TryDrop(enemy.Kind, Walkable(enemy.transform.position), player, runSeed, activeFloor, enemy.Salt);
             if (player && player.TryGetComponent<RunWallet>(out var wallet))
             {
                 var reward = RunWallet.RewardFor(enemy.Kind, activeFloor) * modifier.Gold;

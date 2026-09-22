@@ -97,7 +97,9 @@ namespace Shatterspire
             // dass zwei Kugeln nebeneinander im Gleichtakt huepfen.
             orb.bobPhase = Random.value * 6.28f;
             // Kleiner Sprung beim Erscheinen, damit sie nicht im Gegner klebt.
-            orb.velocity = new Vector3(Random.Range(-1.2f, 1.2f), 3.4f, Random.Range(-1.2f, 1.2f));
+            // Der Sprung bleibt klein: weiter als eine halbe Einheit, und eine Kugel am Rand des Bodens
+            // landet ausserhalb.
+            orb.velocity = new Vector3(Random.Range(-0.7f, 0.7f), 3.4f, Random.Range(-0.7f, 0.7f));
             orb.settle = position + Vector3.up * 0.55f;
             return orb;
         }
