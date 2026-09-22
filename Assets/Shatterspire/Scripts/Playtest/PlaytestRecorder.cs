@@ -48,6 +48,10 @@ namespace Shatterspire
             public float healthAtStart = 1f;
             public float damageTaken;
             public List<HitRecord> hits = new();
+            /// <summary>Schaden, den der eigene Held austeilte (ohne Overkill).</summary>
+            public float damageDealt;
+            /// <summary>Schaden, den die Begleiter austeilten.</summary>
+            public float allyDamageDealt;
             public int orbsCollected;
             public int orbsExpired;
             public float orbHealing;
@@ -171,6 +175,7 @@ namespace Shatterspire
             GameEvents.EntityDied += OnEntityDied;
             GameEvents.RunEnded += OnRunEnded;
             GameEvents.OrbEnded += OnOrbEnded;
+            GameEvents.DamageApplied += OnDamageApplied;
             if (playerHealth) playerHealth.Damaged += OnPlayerDamaged;
             if (weapon)
             {
@@ -189,6 +194,7 @@ namespace Shatterspire
             GameEvents.EntityDied -= OnEntityDied;
             GameEvents.RunEnded -= OnRunEnded;
             GameEvents.OrbEnded -= OnOrbEnded;
+            GameEvents.DamageApplied -= OnDamageApplied;
             if (playerHealth) playerHealth.Damaged -= OnPlayerDamaged;
             if (!weapon) return;
             weapon.HeavyFired -= OnHeavyFired;
@@ -407,6 +413,13 @@ namespace Shatterspire
                 pendingAnomaly = parts[2].Trim();
         }
 
+        private void OnDamageApplied(Health target, DamageInfo damage, float dealt)
+        {
+            if (floor == null || !target || target.Team != TeamId.Enemy) return;
+            if (damage.Source == hero) floor.damageDealt += dealt;
+            else if (PartyMember.IsOtherHero(damage.Source)) floor.allyDamageDealt += dealt;
+        }
+
         private void OnOrbEnded(float heal, bool collected)
         {
             if (floor == null) return;
@@ -583,6 +596,12 @@ namespace Shatterspire
                     "{0,5}  {1,-9} {2,5:0}s  {3,13:0} %  {4,7:0}  {5,13:0} %  {6,5}  {7,5} ({8}/{9}){10,12}  {11,8}  {12,4}  {13,18}  {14,15}",
                     f.floor, f.kind, f.seconds, f.healthAtStart * 100f, f.damageTaken, f.lowestHealth * 100f, f.kills,
                     f.heavy, f.perfect, f.good, string.Empty, f.skills, f.ultimates, f.companionFalls, f.playerDowns));
+            text.AppendLine();
+            text.AppendLine("Ausgeteilt (eigener Held je Sekunde, Begleiter zusammen je Sekunde)");
+            foreach (var f in s.floors)
+                if (f.seconds > 1f)
+                    text.AppendLine(string.Format(de, "{0,5}  {1,6:0} ({2:0.0}/s)   Begleiter {3,6:0} ({4:0.0}/s)", f.floor,
+                        f.damageDealt, f.damageDealt / f.seconds, f.allyDamageDealt, f.allyDamageDealt / f.seconds));
             text.AppendLine();
             text.AppendLine("Heilkugeln (eingesammelt/verfallen, geheilt)");
             foreach (var f in s.floors)

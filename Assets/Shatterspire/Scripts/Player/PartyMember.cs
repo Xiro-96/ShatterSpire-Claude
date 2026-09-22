@@ -22,8 +22,19 @@ namespace Shatterspire
     {
         private static readonly List<PartyMember> ActiveMembers = new();
 
-        /// <summary>Radius des Koerpers eines Helden. Gegner halten mindestens diesen Abstand plus ihren eigenen.</summary>
+        /// <summary>Radius des Koerpers eines Helden.</summary>
         public const float BodyRadius = 0.45f;
+
+        /// <summary>Die Haut des CharacterControllers: so weit ueber den Radius hinaus drueckt er Kollider weg.</summary>
+        public const float SkinWidth = 0.08f;
+
+        /// <summary>
+        /// Wie weit Gegner mindestens von einem Helden wegbleiben, zusaetzlich zu ihrem eigenen Radius.
+        /// Koerper plus Haut plus ein Hauch. Mit dem Koerper allein stand ein nachdrueckender Gegner
+        /// in der Haut, und der CharacterController schob den Helden jedes Bild um bis zu 0,08 weg -
+        /// der Selbsttest mass daraus Stoesse von 0,2 bis 0,7 Einheiten in 0,13 s.
+        /// </summary>
+        public const float Clearance = BodyRadius + SkinWidth + 0.02f;
 
         /// <summary>
         /// Die Physik-Ebene der Helden (ProjectSettings/TagManager, "Party"). Sie ignoriert sich selbst:

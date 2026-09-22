@@ -131,10 +131,15 @@ namespace Shatterspire
             target = null;
         }
 
+        private const float RecoverSeconds = 1.8f;
+        private bool wasAlive = true;
+        private float recoverUntil;
+
         private void Update()
         {
             ReleaseAllButtons();
             PressModal();
+            if (health && !health.IsAlive) wasAlive = false;
             if (!controller || !health || !health.IsAlive || Time.timeScale <= 0f) return;
             if (hud && hud.OpenModal != ModalKind.None) return;
 
@@ -166,13 +171,23 @@ namespace Shatterspire
                 destination = orb.transform.position;
                 Doing = "ORB";
             }
+            // Gerade aufgestanden: erst raus aus dem Pulk, solange die Unverwundbarkeit haelt - so
+            // wie ein Mensch es tut. Vorher kaempfte er mit 55 % Leben an derselben Stelle weiter,
+            // und 14 von 34 Folgestuerzen kamen weniger als 15 Sekunden nach dem Aufstehen.
+            if (!wasAlive) recoverUntil = Time.time + RecoverSeconds;
+            wasAlive = true;
+            if (Time.time < recoverUntil && CombatBrain.CountEnemiesWithin(transform.position, 5f) > 0)
+            {
+                destination = CombatBrain.AwayFromCrowd(transform.position, 5f, 4f);
+                Doing = "RECOVER";
+            }
             if (brain.HoldOff(transform.position, out var clear))
             {
                 destination = clear;
                 Doing = "EVADE";
             }
 
-            Steer(destination, Fighting || fallen || orb || Doing == "EVADE" ? ArriveRadius : GoalArriveRadius);
+            Steer(destination, Fighting || fallen || orb || Doing is "EVADE" or "RECOVER" ? ArriveRadius : GoalArriveRadius);
             Aim(Fighting ? target : null);
             var dodge = new CombatIntent();
             if (brain.Dodge(transform, ref dodge))

@@ -302,6 +302,29 @@ namespace Shatterspire
         }
 
         /// <summary>
+        /// Ein Punkt weg von den Gegnern in der Naehe: gegen ihren Schwerpunkt, so weit wie
+        /// <paramref name="distance"/>. Ohne Gegner im Umkreis der Punkt selbst.
+        /// </summary>
+        public static Vector3 AwayFromCrowd(Vector3 from, float radius, float distance)
+        {
+            var sum = Vector3.zero;
+            var count = 0;
+            var enemies = EnemyAgent.Active;
+            for (var i = 0; i < enemies.Count; i++)
+            {
+                var enemy = enemies[i];
+                if (!enemy || enemy.IsIdle || FlatDistance(from, enemy.transform.position) > radius) continue;
+                sum += enemy.transform.position;
+                count++;
+            }
+            if (count == 0) return from;
+            var away = from - sum / count;
+            away.y = 0f;
+            if (away.sqrMagnitude < 0.01f) away = Vector3.back;
+            return from + away.normalized * distance;
+        }
+
+        /// <summary>
         /// Lohnt sich der schwere Angriff? Gegen einen starken Gegner immer, sonst nur, wenn er mehr
         /// als einen trifft.
         /// </summary>

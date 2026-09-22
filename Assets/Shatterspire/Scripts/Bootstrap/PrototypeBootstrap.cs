@@ -194,6 +194,7 @@ namespace Shatterspire
             motor.center = Vector3.up * 0.9f;
             motor.height = 1.8f;
             motor.radius = PartyMember.BodyRadius;
+            motor.skinWidth = PartyMember.SkinWidth;
             var build = root.AddComponent<PlayerBuild>();
             var health = root.AddComponent<Health>();
             var member = root.AddComponent<PartyMember>();

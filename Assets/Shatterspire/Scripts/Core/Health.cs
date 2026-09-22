@@ -98,8 +98,10 @@ namespace Shatterspire
             var applied = Mathf.Approximately(effective, damage.Amount)
                 ? damage
                 : new DamageInfo(effective, damage.Type, damage.Source, damage.HitPoint, damage.Force, damage.IsCritical);
+            var before = current;
             current = Mathf.Max(0f, current - applied.Amount);
             Damaged?.Invoke(applied);
+            GameEvents.RaiseDamageApplied(this, applied, before - current);
             GetComponent<StylizedCharacterMotion>()?.PulseHit();
             // Eigener Klang fuer die eigene Seite: im Getuemmel muss hoerbar sein, wer getroffen wurde.
             // Nur der eigene Held. Seit die Begleiter echte Helden sind, klang jeder Treffer auf

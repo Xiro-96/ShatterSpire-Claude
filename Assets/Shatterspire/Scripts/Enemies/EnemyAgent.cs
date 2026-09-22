@@ -590,7 +590,7 @@ namespace Shatterspire
         {
             var offset = transform.position - member.position;
             offset.y = 0f;
-            var minimum = stats.ColliderRadius + PartyMember.BodyRadius;
+            var minimum = stats.ColliderRadius + PartyMember.Clearance;
             var distance = offset.magnitude;
             if (distance >= minimum) return false;
             var away = distance > 0.001f ? offset / distance : -member.forward;

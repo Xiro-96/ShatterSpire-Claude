@@ -175,7 +175,7 @@ namespace Shatterspire.Tests
             typeof(EnemyAgent).GetMethod("LateUpdate", Hidden).Invoke(brute, null);
 
             var gap = CombatBrain.FlatDistance(brute.transform.position, heroAt);
-            Assert.GreaterOrEqual(gap, EnemyBalance.For(EnemyKind.Brute).ColliderRadius + PartyMember.BodyRadius - 0.001f,
+            Assert.GreaterOrEqual(gap, EnemyBalance.For(EnemyKind.Brute).ColliderRadius + PartyMember.Clearance - 0.001f,
                 $"Der Brute steckt noch {gap:0.00} tief im Helden - beim naechsten Schritt schiebt die "
                 + "Kollision den Helden heraus.");
             Assert.AreEqual(heroAt, hero.transform.position, "Der Held selbst darf sich nicht bewegen.");
@@ -206,7 +206,7 @@ namespace Shatterspire.Tests
             {
                 EnemyAgent.MakeRoomFor(hero.transform);
                 var gap = CombatBrain.FlatDistance(brute.transform.position, heroAt);
-                Assert.GreaterOrEqual(gap, EnemyBalance.For(EnemyKind.Brute).ColliderRadius + PartyMember.BodyRadius - 0.001f,
+                Assert.GreaterOrEqual(gap, EnemyBalance.For(EnemyKind.Brute).ColliderRadius + PartyMember.Clearance - 0.001f,
                     $"Der Brute steckt noch {gap:0.00} tief im Helden.");
                 Assert.AreEqual(heroAt, hero.transform.position, "Der Held selbst darf sich nicht bewegen.");
             }

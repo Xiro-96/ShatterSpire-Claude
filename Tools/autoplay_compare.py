@@ -3,9 +3,10 @@
 
     python Tools/autoplay_compare.py Builds/Autoplay/20260922-0840 Builds/Autoplay/20260922-0915
 
-Je Held: Laeufe, geschafft, erreichte Etage im Mittel, und fuer Etage 1 und 2 Schaden, eigene
-Stuerze und die groessten Schadensquellen. Beide Ordner sollten mit denselben --seeds und --repeat
-entstanden sein, sonst vergleicht man Etagen, nicht Aenderungen.
+Je Held: Laeufe, geschafft, erreichte Etage im Mittel, und fuer Etage 1, 2, 4 und 5 Schaden,
+eigene Stuerze, ausgeteilter Schaden je Sekunde und die groessten Schadensquellen. Beide Ordner
+sollten mit denselben --seeds, --repeat und --routes entstanden sein, sonst vergleicht man
+Etagen, nicht Aenderungen.
 """
 import glob
 import json
@@ -37,8 +38,9 @@ def floor_stats(summaries, number):
             entry[1] += h["amount"]
     top = sorted(sources.items(), key=lambda kv: -kv[1][1])[:3]
     n = max(1, len(floors))
+    dealt = [f.get("damageDealt", 0) / max(1.0, f["seconds"]) for f in floors if "damageDealt" in f]
     return (len(floors), mean(f["damageTaken"] for f in floors), mean(f["playerDowns"] for f in floors),
-            ", ".join(f"{name} {v[1] / n:.0f}" for name, v in top))
+            ", ".join(f"{name} {v[1] / n:.0f}" for name, v in top), mean(dealt) if dealt else None)
 
 
 def describe(root, hero):
@@ -48,10 +50,11 @@ def describe(root, hero):
     wins = sum(1 for x in s if "geschafft" in (x.get("endReason") or ""))
     lines = [f"  {len(s)} Laeufe, {wins} geschafft, Etage im Mittel {mean(x['floorsReached'] for x in s):.1f}, "
              f"ausgewichen {mean(x.get('dodges', 0) for x in s):.0f}, festgehangen {mean(x['stuck'] for x in s):.1f}"]
-    for number in (1, 2):
-        count, damage, downs, top = floor_stats(s, number)
+    for number in (1, 2, 4, 5):
+        count, damage, downs, top, dps = floor_stats(s, number)
         if count:
-            lines.append(f"  Etage {number} ({count}x): Schaden {damage:.0f}, gestuerzt {downs:.1f} | {top}")
+            dealt = f", teilt {dps:.1f}/s aus" if dps is not None else ""
+            lines.append(f"  Etage {number} ({count}x): Schaden {damage:.0f}, gestuerzt {downs:.1f}{dealt} | {top}")
     return lines
 
 
