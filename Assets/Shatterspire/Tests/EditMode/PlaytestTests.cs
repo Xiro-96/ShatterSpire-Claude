@@ -374,6 +374,39 @@ namespace Shatterspire.Tests
             }
         }
 
+        /// <summary>
+        /// KORRs Ladungen: auf dem Telefon lag der Zielpunkt immer zehn Einheiten voraus, und die
+        /// Ladung flog auf volle Weite - ein Gegner in drei Einheiten wurde nie getroffen.
+        /// </summary>
+        [Test]
+        public void ABombLandsWhereTheTargetWillBe()
+        {
+            var hero = Vector3.zero;
+            var ahead = Vector3.forward;
+            var phoneAim = hero + ahead * 10f;
+            var near = new Vector3(0f, 0f, 3f);
+
+            var landing = BombThrow.Landing(hero, phoneAim, false, ahead, near, Vector3.zero, 6.5f, 1.24f);
+            Assert.AreEqual(3f, landing.z, 0.01f, "Auf dem Telefon auf den Gegner, nicht auf volle Weite.");
+
+            var running = BombThrow.Landing(hero, phoneAim, false, ahead, near, Vector3.right * 2f, 6.5f, 1.24f);
+            Assert.AreEqual(2f * BombThrow.MaxLeadSeconds, running.x, 0.01f,
+                "Dorthin, wo er bei der Zuendung ist - hoechstens 0,85 s vorgehalten.");
+
+            var far = BombThrow.Landing(hero, phoneAim, false, ahead, new Vector3(0f, 0f, 12f), Vector3.zero, 6.5f, 1.24f);
+            Assert.AreEqual(6.5f, far.magnitude, 0.01f, "Nie weiter als die Wurfweite.");
+
+            var mouse = BombThrow.Landing(hero, new Vector3(2f, 0f, 2f), false, ahead, near, Vector3.zero, 6.5f, 1.24f);
+            Assert.AreEqual(new Vector3(2f, 0f, 2f), mouse, "Mit der Maus auf eine Stelle in Wurfweite: genau dorthin.");
+
+            var auto = BombThrow.Landing(hero, near, true, ahead, near, Vector3.right * 2f, 6.5f, 1.24f);
+            Assert.Greater(auto.x, 1f, "Beim Selbstzielen wird vorgehalten, auch wenn der Zielpunkt der Gegner selbst ist.");
+
+            // Gegenprobe: ohne Ziel wie vorher - auf volle Weite in Blickrichtung.
+            var none = BombThrow.Landing(hero, phoneAim, false, ahead, null, Vector3.zero, 6.5f, 1.24f);
+            Assert.AreEqual(6.5f, none.z, 0.01f);
+        }
+
         private Health LoneEnemy(Vector3 at)
         {
             var enemy = Spawn("Crawler").AddComponent<Health>();

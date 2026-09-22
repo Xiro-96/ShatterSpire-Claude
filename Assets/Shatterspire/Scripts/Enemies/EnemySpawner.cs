@@ -163,6 +163,18 @@ namespace Shatterspire
             StartCoroutine(SpawnObjectiveEncounterRoutine(center, floorIndex, encounterIndex, kind));
         }
 
+        /// <summary>
+        /// Abstand, in dem die Verteidiger der ersten Welle eintreffen. Vorher kamen alle binnen
+        /// einer Viertelsekunde: wer den Kern im Ring hielt, stand sofort in der ganzen Welle. Der
+        /// Selbsttest fand XIRO auf Etage 4 fuenf Sekunden nach dem Erscheinen der Verteidiger am
+        /// Boden, umringt von Brute, zwei Schildtraegern und einem Crawler. Gestaffelt kann man den
+        /// ersten nehmen, bevor der vierte da ist. Entscheidung des Users vom 22.09.
+        /// </summary>
+        private const float FirstWaveStagger = 0.45f;
+
+        /// <summary>Spaetere Wellen etwas dichter - sie kommen, wenn die erste fast gefallen ist.</summary>
+        private const float LaterWaveStagger = 0.2f;
+
         private IEnumerator SpawnObjectiveEncounterRoutine(Vector3 center, int floorIndex, int encounterIndex, RoomKind kind)
         {
             spawningEncounter = true;
@@ -235,7 +247,7 @@ namespace Shatterspire
                     // Platz i wie oben beim Aufstellen - und damit dasselbe Salz.
                     encounter.Add(Spawn(kinds[localIndex], positions[localIndex], center, false,
                         EnemySalt(OriginDefender, encounterIndex, spawned + localIndex)));
-                    yield return new WaitForSeconds(0.075f);
+                    yield return new WaitForSeconds(wave == 0 ? FirstWaveStagger : LaterWaveStagger);
                 }
                 spawned += inWave;
 

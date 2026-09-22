@@ -18,7 +18,7 @@ MonoBehaviour:
   kitSummary: "OATHBLADE  \xB7  VERDICT  \xB7  ASH WAVE"
   accent: {r: 1, g: 0.93, b: 0.66, a: 1}
   baseHealth: 160
-  baseSpeed: 4.9
+  baseSpeed: 5.2
   baseDamage: 14
   skillCooldown: 9
   lightAttackName: OATHBLADE

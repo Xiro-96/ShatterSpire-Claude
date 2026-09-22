@@ -11,6 +11,47 @@ namespace Shatterspire
     /// Tastendrucks Schaden machen, legt er vor und spielt dem Gegner voraus. Deshalb liegt die
     /// Zuendschnur offen im Bild - sie ist die Information, aus der die Entscheidung entsteht.
     /// </summary>
+    /// <summary>Wohin eine Ladung fliegt. Reine Rechnung, damit sie sich ohne Spiel pruefen laesst.</summary>
+    public static class BombThrow
+    {
+        /// <summary>So weit wird hoechstens vorgehalten - wie bei Geschossen (Targeting.PredictIntercept).</summary>
+        public const float MaxLeadSeconds = 0.85f;
+
+        /// <summary>
+        /// Die Landestelle einer Ladung.
+        ///
+        /// Vorher immer der Zielpunkt der Eingabe, begrenzt auf die Wurfweite. Auf dem Telefon liegt
+        /// dieser Punkt aber stets zehn Einheiten in Blickrichtung - die Ladung flog damit auf volle
+        /// Weite, egal wie nah der Gegner stand, und ein Gegner in drei Einheiten wurde nie
+        /// getroffen. Der Selbsttest mass KORR auf Etage 1 bei 18 Schaden je Kampfsekunde, die
+        /// anderen bei 32 bis 44. Und selbst auf der richtigen Stelle ist ein laufender Gegner nach
+        /// Flug und Zuendschnur (gut eine Sekunde) nicht mehr da.
+        ///
+        /// Jetzt: gibt es ein Ziel, und zeigt die Eingabe nicht auf eine Stelle in Wurfweite (die
+        /// Maus), fliegt die Ladung dorthin, wo das Ziel bei der Zuendung sein wird.
+        /// </summary>
+        public static Vector3 Landing(Vector3 hero, Vector3 aimPoint, bool autoAim, Vector3 direction,
+            Vector3? target, Vector3 targetVelocity, float maximum, float secondsToBlast)
+        {
+            hero.y = 0f;
+            aimPoint.y = 0f;
+            var offset = aimPoint - hero;
+            var pointsAtASpot = !autoAim && offset.sqrMagnitude >= 1f && offset.magnitude <= maximum;
+            if (target.HasValue && !pointsAtASpot)
+            {
+                var velocity = targetVelocity;
+                velocity.y = 0f;
+                var at = target.Value + velocity * Mathf.Clamp(secondsToBlast, 0f, MaxLeadSeconds);
+                at.y = 0f;
+                var toTarget = at - hero;
+                return toTarget.magnitude > maximum ? hero + toTarget.normalized * maximum : hero + toTarget;
+            }
+            if (pointsAtASpot) return hero + offset;
+            direction.y = 0f;
+            return hero + (direction.sqrMagnitude > 0.01f ? direction.normalized : Vector3.forward) * maximum;
+        }
+    }
+
     public sealed class TimedBomb : MonoBehaviour
     {
         private static readonly List<TimedBomb> Live = new();

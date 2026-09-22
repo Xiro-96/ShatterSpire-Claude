@@ -112,8 +112,13 @@ namespace Shatterspire
         public static float BaseSpeed(HeroClassId hero) => hero switch
         {
             HeroClassId.Bomber => 6f,
-            // Die langsamste im Spiel. Wer Raeume sichert, kommt nicht ueberall hin.
-            HeroClassId.Paladin => 4.9f,
+            // 5,2 statt 4,9. Sie war mit Abstand die langsamste im Spiel - und kam im Selbsttest aus
+            // keinem Pulk heraus: auf Etage 4 fiel sie Sekunden nachdem die Verteidiger am Kern
+            // erschienen, und gewann keinen von zwoelf Aufstiegen. Entscheidung des Users vom 22.09.:
+            // schneller, auf BRAX' Niveau. Knapp darunter, nicht darueber: die Klassennorm verlangt,
+            // dass der langsamste Nahkaempfer am weitesten reicht, und ihr Zweihaender reicht weiter
+            // als sein Hammer (ClassStandardTests).
+            HeroClassId.Paladin => 5.2f,
             HeroClassId.Guardian => 5.25f,
             HeroClassId.Arcanist => 5.8f,
             _ => 6.25f
