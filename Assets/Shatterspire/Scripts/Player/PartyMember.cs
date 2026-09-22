@@ -25,6 +25,27 @@ namespace Shatterspire
         /// <summary>Radius des Koerpers eines Helden. Gegner halten mindestens diesen Abstand plus ihren eigenen.</summary>
         public const float BodyRadius = 0.45f;
 
+        /// <summary>
+        /// Die Physik-Ebene der Helden (ProjectSettings/TagManager, "Party"). Sie ignoriert sich selbst:
+        /// Mitglieder einer Gruppe laufen durcheinander hindurch.
+        ///
+        /// Der Selbsttest fand den Helden in der Luecke zwischen zwei Kistenreihen, zwei Begleiter
+        /// darin, und keiner kam vorbei - die Begleiter traten zur Seite, aber dort stand die Deckung.
+        /// Wie in den meisten Co-op-Spielen blockieren sich Verbuendete nicht; Abstand halten die
+        /// Bots weiter ueber ihre weiche Trennung, und Gegner bleiben fest.
+        /// </summary>
+        public const int Layer = 6;
+
+        public const string LayerName = "Party";
+
+        /// <summary>Stellt die Ebene auf einen Helden und alles an ihm, und laesst die Ebene sich selbst ignorieren.</summary>
+        public static void PassThroughEachOther(GameObject hero)
+        {
+            Physics.IgnoreLayerCollision(Layer, Layer, true);
+            if (!hero) return;
+            foreach (var part in hero.GetComponentsInChildren<Transform>(true)) part.gameObject.layer = Layer;
+        }
+
         /// <summary>Alle lebenden und gefallenen Mitglieder der Gruppe, in der Reihenfolge des Beitritts.</summary>
         public static IReadOnlyList<PartyMember> Active => ActiveMembers;
 

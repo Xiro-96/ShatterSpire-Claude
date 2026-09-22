@@ -168,6 +168,6 @@ namespace Shatterspire.Tests
 
         [Test]
         public void CountdownWirdNieNegativAngezeigt()
-            => Assert.That(ShiftCalendar.Countdown(TimeSpan.FromSeconds(-500)), Is.EqualTo("ENDED"));
+            => Assert.That(ShiftCalendar.Countdown(TimeSpan.FromSeconds(-500)), Is.EqualTo(Loc.T("ENDED")));
     }
 }

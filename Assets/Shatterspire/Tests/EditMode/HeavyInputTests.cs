@@ -79,12 +79,15 @@ namespace Shatterspire.Tests
         }
 
         /// <summary>
-        /// Setzt die Ladung. Achtung: jedes <see cref="Frame"/> legt danach noch ein
-        /// <c>Time.deltaTime</c> drauf - im Editor sind das rund 60 ms, also gut 5 % der Ladung.
-        /// Werte dicht an einer Schwelle rutschen dadurch darueber.
+        /// Setzt die Ladung so, dass sie nach dem naechsten gehaltenen <see cref="Frame"/> genau hier
+        /// steht - jedes Bild legt noch ein <c>Time.deltaTime</c> drauf. Das sind im Editor meist rund
+        /// 60 ms, nach einem Neuimport aber auch ein Mehrfaches: am 22.09. schob das die Mitte des
+        /// Fensters ueber sein Ende hinaus, und zwei Tests fielen durch, ohne dass sich am Spiel etwas
+        /// geaendert hatte.
         /// </summary>
         private void Charged(float normalized)
-            => SetPrivate(weapon, "heavyCharge", normalized * ActionBalance.HeavyChargeSeconds);
+            => SetPrivate(weapon, "heavyCharge",
+                Mathf.Max(0f, normalized * ActionBalance.HeavyChargeSeconds - Time.deltaTime));
 
         // ── Der Tipp ────────────────────────────────────────────────────────
 

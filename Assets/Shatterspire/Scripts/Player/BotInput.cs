@@ -173,6 +173,8 @@ namespace Shatterspire
         /// </summary>
         private Vector3 DesiredPosition(Health threat)
         {
+            // Nach dem Ausweichen erst den Schlag abwarten, statt gleich wieder hineinzulaufen.
+            if (brain.HoldOff(transform.position, out var clear)) return clear;
             if (!threat) return FormationSlot();
 
             var range = HeroCatalog.EngageRange(heroClass);

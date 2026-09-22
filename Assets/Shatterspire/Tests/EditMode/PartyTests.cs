@@ -18,6 +18,36 @@ namespace Shatterspire.Tests
     /// </summary>
     public sealed class PartyTests
     {
+        /// <summary>
+        /// Verbuendete blockieren sich nicht. Ohne die Ebene in den Projekteinstellungen waere die Zahl
+        /// in <see cref="PartyMember.Layer"/> eine namenlose Ebene, und niemand saehe, wofuer sie steht.
+        /// </summary>
+        [Test]
+        public void HeldenLaufenDurcheinanderHindurch()
+        {
+            Assert.That(LayerMask.NameToLayer(PartyMember.LayerName), Is.EqualTo(PartyMember.Layer),
+                "die Ebene fehlt in ProjectSettings/TagManager.asset oder hat eine andere Nummer");
+            var before = Physics.GetIgnoreLayerCollision(PartyMember.Layer, PartyMember.Layer);
+            var hero = new GameObject("Held");
+            var part = new GameObject("Teil");
+            part.transform.SetParent(hero.transform);
+            try
+            {
+                Physics.IgnoreLayerCollision(PartyMember.Layer, PartyMember.Layer, false);
+                PartyMember.PassThroughEachOther(hero);
+                Assert.That(Physics.GetIgnoreLayerCollision(PartyMember.Layer, PartyMember.Layer), Is.True);
+                Assert.That(hero.layer, Is.EqualTo(PartyMember.Layer));
+                Assert.That(part.layer, Is.EqualTo(PartyMember.Layer), "auch die Teile der Figur");
+                // Gegner und Waende bleiben fest: nur die Ebene mit sich selbst wird ignoriert.
+                Assert.That(Physics.GetIgnoreLayerCollision(PartyMember.Layer, 0), Is.False);
+            }
+            finally
+            {
+                Physics.IgnoreLayerCollision(PartyMember.Layer, PartyMember.Layer, before);
+                Object.DestroyImmediate(hero);
+            }
+        }
+
         private readonly List<GameObject> spawned = new();
 
         [TearDown]

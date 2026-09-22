@@ -150,6 +150,11 @@ namespace Shatterspire
             var fallen = Fighting ? null : FallenCompanionNearby();
             var destination = Fighting ? CombatPosition(target) : fallen ? fallen.position : goal;
             Doing = Fighting ? "FIGHT" : fallen ? "REVIVE" : goal.HasValue ? "OBJECTIVE" : "IDLE";
+            if (brain.HoldOff(transform.position, out var clear))
+            {
+                destination = clear;
+                Doing = "EVADE";
+            }
 
             Steer(destination);
             Aim(Fighting ? target : null);

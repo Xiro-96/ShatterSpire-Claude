@@ -468,6 +468,7 @@ namespace Shatterspire
             { "HIGHEST RANK REACHED", "HÖCHSTER RANG ERREICHT" },
             { "POINTS TO", "PUNKTE BIS" },
             { "SHIFT ENDS IN", "SCHICHT ENDET IN" },
+            { "ENDED", "BEENDET" },
             { "TOTAL", "GESAMT" },
             { "BEST", "BESTE" },
             { "FUSION", "FUSION" },

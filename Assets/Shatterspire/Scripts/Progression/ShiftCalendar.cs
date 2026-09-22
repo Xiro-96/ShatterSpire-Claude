@@ -45,8 +45,10 @@ namespace Shatterspire
         /// <summary>Kurzform fuer die Anzeige, etwa "4D 06H" oder "06H 12M".</summary>
         public static string Countdown(TimeSpan remaining)
         {
-            if (remaining <= TimeSpan.Zero) return "ENDED";
-            if (remaining.TotalDays >= 1d) return $"{remaining.Days}D {remaining.Hours:00}H";
+            if (remaining <= TimeSpan.Zero) return Loc.T("ENDED");
+            // Tage stehen im deutschen Ende-Bildschirm als T, nicht als D.
+            var day = Loc.Language == Language.German ? "T" : "D";
+            if (remaining.TotalDays >= 1d) return $"{remaining.Days}{day} {remaining.Hours:00}H";
             if (remaining.TotalHours >= 1d) return $"{remaining.Hours:00}H {remaining.Minutes:00}M";
             return $"{remaining.Minutes:00}M";
         }

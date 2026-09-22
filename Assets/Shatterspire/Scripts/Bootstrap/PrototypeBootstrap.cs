@@ -231,6 +231,8 @@ namespace Shatterspire
 
             build.ConfigureRun(hero, local ? config : AllyConfig(config), meta);
             if (!local) build.ScaleAsAlly();
+            // Nach der Figur, damit auch ihre Teile auf der Ebene liegen.
+            PartyMember.PassThroughEachOther(root);
             // Prestige: der Aufschlag gilt nur fuer diesen Helden und nur auf sein Grundleben,
             // nicht auf die gemeinsamen Meta-Upgrades - sonst multiplizierten sich zwei Systeme.
             var prestige = MetaSaveSystem.PrestigeStep(meta, hero);

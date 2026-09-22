@@ -94,6 +94,29 @@ namespace Shatterspire
         /// </summary>
         public Transform Target => target;
 
+        private float telegraphStartedAt = -99f;
+
+        /// <summary>
+        /// Wann die laufende Ankuendigung begann, und wie lange sie nach Tabelle dauert. Wer ausweicht,
+        /// rollt kurz vor dem Einschlag, nicht beim ersten Aufleuchten - dafuer braucht er beides. Bei
+        /// Bossen, die ihre Vorwarnung je Phase kuerzen, ist die Dauer eine obere Schaetzung.
+        /// </summary>
+        public float TelegraphStartedAt => telegraphStartedAt;
+
+        public float TelegraphSeconds => stats.TelegraphSeconds;
+
+        /// <summary>Wie weit dieser Gegner angreift.</summary>
+        public float AttackRange => attackRange;
+
+        /// <summary>Greift aus der Ferne an - vor ihm tritt man zur Seite, nicht zurueck.</summary>
+        public bool IsRanged => kind is EnemyKind.Shooter or EnemyKind.Marksman;
+
+        private void BeginTelegraph()
+        {
+            state = State.Telegraph;
+            telegraphStartedAt = Time.time;
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetRegistry() => ActiveAgents.Clear();
 
@@ -558,7 +581,7 @@ namespace Shatterspire
 
         private IEnumerator CrawlerLunge()
         {
-            state = State.Telegraph;
+            BeginTelegraph();
             var direction = FlatDirectionToTarget();
             var telegraph = PrototypeVfx.SpawnTelegraphLine(transform.position, direction, 2.8f, 0.72f);
             yield return new WaitForSeconds(stats.TelegraphSeconds);
@@ -580,7 +603,7 @@ namespace Shatterspire
 
         private IEnumerator ShooterBurst()
         {
-            state = State.Telegraph;
+            BeginTelegraph();
             var direction = FlatDirectionToTarget();
             var telegraph = PrototypeVfx.SpawnTelegraphLine(transform.position, direction, 9.5f, 0.5f);
             yield return new WaitForSeconds(stats.TelegraphSeconds);
@@ -600,7 +623,7 @@ namespace Shatterspire
 
         private IEnumerator BruteSlam()
         {
-            state = State.Telegraph;
+            BeginTelegraph();
             var telegraph = PrototypeVfx.SpawnTelegraph(transform.position, 2.45f, false);
             yield return new WaitForSeconds(stats.TelegraphSeconds);
             if (!BeginAttack(telegraph)) yield break;
@@ -615,7 +638,7 @@ namespace Shatterspire
 
         private IEnumerator EliteAttack()
         {
-            state = State.Telegraph;
+            BeginTelegraph();
             var direction = FlatDirectionToTarget();
             var telegraph = eliteExplosive
                 ? PrototypeVfx.SpawnTelegraph(transform.position, 3.25f, false)
@@ -653,7 +676,7 @@ namespace Shatterspire
         /// </summary>
         private IEnumerator ShieldBash()
         {
-            state = State.Telegraph;
+            BeginTelegraph();
             var direction = FlatDirectionToTarget();
             var telegraph = PrototypeVfx.SpawnTelegraphLine(transform.position, direction, 3.2f, 1.1f);
             yield return new WaitForSeconds(stats.TelegraphSeconds);
@@ -681,7 +704,7 @@ namespace Shatterspire
         /// </summary>
         private IEnumerator MarksmanShot()
         {
-            state = State.Telegraph;
+            BeginTelegraph();
             var direction = FlatDirectionToTarget();
             var telegraph = PrototypeVfx.SpawnTelegraphLine(transform.position, direction, attackRange + 2f, 0.55f);
             motion?.PlayMotion(AttackMotion.Draw, 0.8f);
@@ -832,7 +855,7 @@ namespace Shatterspire
         /// </summary>
         private IEnumerator TwinAttackRoutine()
         {
-            state = State.Telegraph;
+            BeginTelegraph();
             var phase = health.Normalized > 0.66f ? 1 : health.Normalized > 0.33f ? 2 : 3;
             yield return AnnouncePhase(phase, "RIFT TWIN  ·  PHASE", new Color(0.62f, 0.24f, 1f));
             if (state == State.Dead) yield break;
@@ -895,7 +918,7 @@ namespace Shatterspire
         /// </summary>
         private IEnumerator ChoirAttackRoutine()
         {
-            state = State.Telegraph;
+            BeginTelegraph();
             var phase = health.Normalized > 0.66f ? 1 : health.Normalized > 0.33f ? 2 : 3;
             yield return AnnouncePhase(phase, "CHOIR WARDEN  ·  PHASE", new Color(0.2f, 0.86f, 0.7f));
             if (state == State.Dead) yield break;
@@ -985,7 +1008,7 @@ namespace Shatterspire
 
         private IEnumerator BossAttackRoutine()
         {
-            state = State.Telegraph;
+            BeginTelegraph();
             var phase = health.Normalized > 0.66f ? 1 : health.Normalized > 0.33f ? 2 : 3;
             if (phase != announcedBossPhase)
             {

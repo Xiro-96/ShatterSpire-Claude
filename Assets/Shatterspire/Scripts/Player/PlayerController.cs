@@ -11,6 +11,9 @@ namespace Shatterspire
     {
         private const float RollSpeed = 16f;
         private const float RollDuration = 0.22f;
+
+        /// <summary>So lange ist ein Held nach Beginn der Rolle unverwundbar.</summary>
+        public const float RollInvulnerableSeconds = RollDuration + 0.05f;
         private const float ChargeCooldown = 2.4f;
         private const float ArenaRadius = 14.75f;
         // Antritt kuerzer als Auslauf: die Steuerung bleibt direkt, der Stopp
@@ -272,7 +275,7 @@ namespace Shatterspire
             var dashStart = transform.position;
             var weapon = GetComponent<WeaponSystem>();
             weapon?.OnDashStarted(dashStart, rollDirection);
-            health.SetInvulnerable(RollDuration + 0.05f);
+            health.SetInvulnerable(RollInvulnerableSeconds);
             PrototypeVfx.SpawnTrail(transform.position, new Color(0.2f, 0.9f, 1f));
             var elapsed = 0f;
             while (elapsed < RollDuration)

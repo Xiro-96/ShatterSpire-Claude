@@ -250,5 +250,51 @@ namespace Shatterspire.Tests
             Assert.IsTrue(intent.Dash, "Wenig Leben und ein Gegner auf der Haut: weg.");
             Assert.Less(intent.DashMove.y, 0f, "Vom Gegner weg, nicht auf ihn zu.");
         }
+
+        /// <summary>
+        /// Wann der Kopf rollt. Vorher im ersten Bild der Ankuendigung - die Unverwundbarkeit war vorbei,
+        /// bevor der Schlag landete, und bei einem Armbrustschuss folgte die Linie der Rolle einfach nach.
+        /// </summary>
+        [Test]
+        public void DieRolleDecktDenEinschlagJederGegnerart()
+        {
+            foreach (var stats in EnemyBalance.All)
+            {
+                var roll = CombatBrain.DodgeMoment(0f, stats.TelegraphSeconds);
+                Assert.That(roll, Is.GreaterThanOrEqualTo(CombatBrain.ReactionSeconds),
+                    $"{stats.Kind}: schneller als ein Mensch reagieren kann");
+                Assert.That(roll, Is.LessThanOrEqualTo(stats.TelegraphSeconds),
+                    $"{stats.Kind}: erst nach dem Einschlag gerollt");
+                Assert.That(roll + PlayerController.RollInvulnerableSeconds, Is.GreaterThanOrEqualTo(stats.TelegraphSeconds),
+                    $"{stats.Kind}: die Unverwundbarkeit ist vorbei, bevor die Ankuendigung endet");
+            }
+            // Die Linie des Armbrustschuetzen folgt dem Ziel auf den ersten 62 % - wer vorher rollt,
+            // wird trotzdem getroffen.
+            var marksman = EnemyBalance.For(EnemyKind.Marksman).TelegraphSeconds;
+            Assert.That(CombatBrain.DodgeMoment(0f, marksman), Is.GreaterThan(marksman * 0.62f),
+                "vor dem Einrasten der Armbrustlinie gerollt");
+            // Gegenprobe: wer wie vorher im ersten Bild rollt, ist beim Schildstoss laengst wieder verwundbar.
+            Assert.That(0f + PlayerController.RollInvulnerableSeconds,
+                Is.LessThan(EnemyBalance.For(EnemyKind.Shieldbearer).TelegraphSeconds));
+        }
+
+        [Test]
+        public void VorEinemSchussZurSeiteVorEinemSchlagZurueck()
+        {
+            var self = new Vector3(0f, 0f, -6f);
+            var enemy = Vector3.zero;
+            var line = (self - enemy).normalized;
+
+            var shot = CombatBrain.DodgeDirection(self, enemy, true, 1f);
+            Assert.That(Mathf.Abs(Vector3.Dot(shot, line)), Is.LessThan(0.01f), "aus der Schusslinie heraus, nicht in ihr zurueck");
+            Assert.That(shot.magnitude, Is.EqualTo(1f).Within(0.001f));
+
+            var blow = CombatBrain.DodgeDirection(self, enemy, false, 1f);
+            Assert.That(Vector3.Dot(blow, line), Is.GreaterThan(0.8f), "vom Schlag weg");
+            Assert.That(Mathf.Abs(Vector3.Dot(blow, Vector3.Cross(Vector3.up, line))), Is.GreaterThan(0.3f), "und ein Stueck zur Seite");
+
+            var other = CombatBrain.DodgeDirection(self, enemy, true, -1f);
+            Assert.That(Vector3.Dot(shot, other), Is.LessThan(-0.99f), "beide Seiten kommen vor");
+        }
     }
 }

@@ -162,36 +162,104 @@ namespace Shatterspire
 
         private readonly System.Collections.Generic.Dictionary<int, float> dodgeDecided = new();
 
+        /// <summary>So lange braucht ein geuebter Mensch, bis er auf eine Ankuendigung reagiert.</summary>
+        public const float ReactionSeconds = 0.25f;
+
         /// <summary>
-        /// Einem angekuendigten Schlag ausweichen, der diesem Helden gilt. Je Ankuendigung wird
-        /// einmal entschieden, nicht jedes Bild neu - sonst waere die Chance eine Gewissheit.
-        /// Der Dash geht vom Gegner weg und ein Stueck zur Seite, aus der Linie heraus.
+        /// So kurz vor dem Einschlag wird gerollt. Die Rolle ist 0,27 s unverwundbar - so deckt sie
+        /// den Moment ab, in dem der Schlag landet.
+        /// </summary>
+        public const float RollLead = 0.2f;
+
+        private EnemyAgent dodgeFrom;
+        private float dodgeAt;
+        private EnemyAgent evadeFrom;
+        private float evadeUntil;
+
+        /// <summary>
+        /// Einem angekuendigten Angriff ausweichen, der diesem Helden gilt. Je Ankuendigung wird einmal
+        /// entschieden, nicht jedes Bild neu - sonst waere die Chance eine Gewissheit.
+        ///
+        /// Vorher rollte der Kopf im ersten Bild der Ankuendigung, nur vor Nahkaempfern, und lief
+        /// danach gleich wieder hinein. Der Selbsttest zeigte es: BRAX nahm auf Etage 1 acht Schuesse
+        /// und keinen einzigen Crawler-Sprung - die Schuetzen standen weiter als die fuenf Einheiten,
+        /// auf die er ueberhaupt achtete. Jetzt wie ein Mensch: nach der Reaktionszeit, so spaet, dass
+        /// die Unverwundbarkeit den Einschlag abdeckt, vor einem Schuss zur Seite, vor einem Schlag
+        /// zurueck und zur Seite. Und danach haelt er Abstand, bis der Schlag vorbei ist
+        /// (<see cref="HoldOff"/>).
         /// </summary>
         public bool Dodge(Transform self, ref CombatIntent intent)
         {
-            if (style.DodgeChance <= 0f || Time.time < nextDash) return false;
+            if (style.DodgeChance <= 0f || !self) return false;
+            if (dodgeFrom)
+            {
+                // Schon entschieden: auf den Moment warten. Bricht der Angriff ab, war nichts.
+                if (!dodgeFrom.IsTelegraphing) dodgeFrom = null;
+                else return Time.time >= dodgeAt && Time.time >= nextDash && Roll(self, dodgeFrom, ref intent);
+            }
             var enemies = EnemyAgent.Active;
             for (var i = 0; i < enemies.Count; i++)
             {
                 var enemy = enemies[i];
                 if (!enemy || !enemy.IsTelegraphing || enemy.Target != self) continue;
-                if (FlatDistance(self.position, enemy.transform.position) > 5f) continue;
+                var reach = enemy.IsRanged ? enemy.AttackRange + 2f : 5f;
+                if (FlatDistance(self.position, enemy.transform.position) > reach) continue;
                 var id = enemy.GetInstanceID();
                 if (dodgeDecided.TryGetValue(id, out var decidedAt) && Time.time - decidedAt < 1.5f) continue;
                 dodgeDecided[id] = Time.time;
                 if (Random.value > style.DodgeChance) continue;
-                var away = self.position - enemy.transform.position;
-                away.y = 0f;
-                if (away.sqrMagnitude < 0.01f) away = -self.forward;
-                away = (away.normalized + Vector3.Cross(Vector3.up, away.normalized) * 0.6f).normalized;
-                intent.Dash = true;
-                intent.DashMove = new Vector2(away.x, away.z);
-                nextDash = Time.time + 1.2f;
-                Dodges++;
-                LastDodgeAt = Time.time;
-                return true;
+                dodgeFrom = enemy;
+                dodgeAt = DodgeMoment(enemy.TelegraphStartedAt, enemy.TelegraphSeconds);
+                return Time.time >= dodgeAt && Time.time >= nextDash && Roll(self, enemy, ref intent);
             }
             return false;
+        }
+
+        /// <summary>Wann gerollt wird: nach der Reaktionszeit, und so spaet, dass die Rolle den Einschlag deckt.</summary>
+        public static float DodgeMoment(float telegraphStartedAt, float telegraphSeconds)
+            => telegraphStartedAt + Mathf.Max(ReactionSeconds, telegraphSeconds - RollLead);
+
+        /// <summary>
+        /// Die Richtung der Rolle. Aus einer Schusslinie tritt man zur Seite - zurueck bliebe man in
+        /// ihr. Vor einem Schlag zurueck und ein Stueck zur Seite.
+        /// </summary>
+        public static Vector3 DodgeDirection(Vector3 self, Vector3 enemy, bool ranged, float side)
+        {
+            var line = self - enemy;
+            line.y = 0f;
+            line = line.sqrMagnitude < 0.01f ? Vector3.back : line.normalized;
+            var across = Vector3.Cross(Vector3.up, line) * (side < 0f ? -1f : 1f);
+            return ranged ? across : (line + across * 0.6f).normalized;
+        }
+
+        private bool Roll(Transform self, EnemyAgent enemy, ref CombatIntent intent)
+        {
+            var direction = DodgeDirection(self.position, enemy.transform.position, enemy.IsRanged,
+                Random.value < 0.5f ? -1f : 1f);
+            intent.Dash = true;
+            intent.DashMove = new Vector2(direction.x, direction.z);
+            nextDash = Time.time + 1.2f;
+            Dodges++;
+            LastDodgeAt = Time.time;
+            dodgeFrom = null;
+            evadeFrom = enemy;
+            // Bis der Schlag gelandet und vorbei ist.
+            evadeUntil = Time.time + RollLead + 0.45f;
+            return true;
+        }
+
+        /// <summary>
+        /// Nach dem Ausweichen nicht gleich wieder hinein: bis der Schlag vorbei ist, haelt der Kopf
+        /// Abstand zu dem, dem er ausgewichen ist. Liefert dann den Punkt, an dem er stehen will.
+        /// </summary>
+        public bool HoldOff(Vector3 self, out Vector3 spot)
+        {
+            spot = self;
+            if (!evadeFrom || Time.time >= evadeUntil) return false;
+            var away = self - evadeFrom.transform.position;
+            away.y = 0f;
+            if (away.sqrMagnitude > 0.01f) spot = self + away.normalized * 1.5f;
+            return true;
         }
 
         /// <summary>Wie oft dieser Kopf ausgewichen ist. Der Selbsttest schreibt es mit.</summary>
