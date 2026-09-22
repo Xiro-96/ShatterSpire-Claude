@@ -247,6 +247,7 @@ namespace Shatterspire
         private void MoveBody(Vector3 delta, MoveSource source)
         {
             if (!motor || !motor.enabled) return;
+            EnemyAgent.MakeRoomFor(transform);
             var before = transform.position;
             motor.Move(delta);
             var moved = transform.position - before;

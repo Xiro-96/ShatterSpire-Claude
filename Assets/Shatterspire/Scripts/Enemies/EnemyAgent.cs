@@ -529,17 +529,38 @@ namespace Shatterspire
             for (var i = 0; i < members.Count; i++)
             {
                 var member = members[i];
-                if (!member || !member.IsAlive) continue;
-                var offset = transform.position - member.transform.position;
-                offset.y = 0f;
-                var minimum = stats.ColliderRadius + PartyMember.BodyRadius;
-                var distance = offset.magnitude;
-                if (distance >= minimum) continue;
-                var away = distance > 0.001f ? offset / distance : -member.transform.forward;
-                transform.position += away * (minimum - distance);
-                pushed = true;
+                if (member && member.IsAlive) pushed |= StepOutOf(member.transform);
             }
             if (pushed) ClampToArena();
+        }
+
+        /// <summary>
+        /// Jeder Gegner, der in diesem Helden steht, tritt heraus - aufgerufen, kurz bevor der Held sich
+        /// bewegt. Das Heraustreten in <see cref="LateUpdate"/> kommt sonst in dem Bild zu spaet, in dem
+        /// ein Gegner vor dem Helden an der Reihe war und in ihn hineinlief: die Kollision schob den
+        /// Helden, 0,5 bis 0,9 Einheiten auf einen Ruck, etwa einmal in sieben Selbsttest-Laeufen.
+        /// </summary>
+        public static void MakeRoomFor(Transform hero)
+        {
+            if (!hero) return;
+            for (var i = 0; i < ActiveAgents.Count; i++)
+            {
+                var agent = ActiveAgents[i];
+                if (!agent || agent.state == State.Dead) continue;
+                if (agent.StepOutOf(hero)) agent.ClampToArena();
+            }
+        }
+
+        private bool StepOutOf(Transform member)
+        {
+            var offset = transform.position - member.position;
+            offset.y = 0f;
+            var minimum = stats.ColliderRadius + PartyMember.BodyRadius;
+            var distance = offset.magnitude;
+            if (distance >= minimum) return false;
+            var away = distance > 0.001f ? offset / distance : -member.forward;
+            transform.position += away * (minimum - distance);
+            return true;
         }
 
         private void ClampToArena()

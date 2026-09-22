@@ -181,6 +181,41 @@ namespace Shatterspire.Tests
             Assert.AreEqual(heroAt, hero.transform.position, "Der Held selbst darf sich nicht bewegen.");
         }
 
+        /// <summary>
+        /// Dasselbe, aber bevor der Held sich bewegt statt am Ende des Bildes. War ein Gegner im Bild vor
+        /// dem Helden an der Reihe und lief in ihn hinein, kam das Heraustreten sonst zu spaet - der
+        /// Selbsttest mass noch Stoesse von 0,5 bis 0,9 Einheiten, etwa einmal in sieben Laeufen.
+        /// </summary>
+        [Test]
+        public void BeforeTheHeroMovesEveryEnemyInsideHimStepsOut()
+        {
+            var hero = Spawn("XIRO");
+            var heroAt = hero.transform.position;
+            var brute = Spawn("Brute").AddComponent<EnemyAgent>();
+            typeof(EnemyAgent).GetField("stats", Hidden).SetValue(brute, EnemyBalance.For(EnemyKind.Brute));
+            var stateField = typeof(EnemyAgent).GetField("state", Hidden);
+            stateField.SetValue(brute, System.Enum.Parse(stateField.FieldType, "Chase"));
+            brute.transform.position = heroAt + Vector3.right * 0.3f;
+
+            // Gegenprobe: ein Gegner, der nicht angemeldet ist, bleibt, wo er ist.
+            EnemyAgent.MakeRoomFor(hero.transform);
+            Assert.AreEqual(0.3f, CombatBrain.FlatDistance(brute.transform.position, heroAt), 0.001f);
+
+            typeof(EnemyAgent).GetMethod("OnEnable", Hidden).Invoke(brute, null);
+            try
+            {
+                EnemyAgent.MakeRoomFor(hero.transform);
+                var gap = CombatBrain.FlatDistance(brute.transform.position, heroAt);
+                Assert.GreaterOrEqual(gap, EnemyBalance.For(EnemyKind.Brute).ColliderRadius + PartyMember.BodyRadius - 0.001f,
+                    $"Der Brute steckt noch {gap:0.00} tief im Helden.");
+                Assert.AreEqual(heroAt, hero.transform.position, "Der Held selbst darf sich nicht bewegen.");
+            }
+            finally
+            {
+                typeof(EnemyAgent).GetMethod("OnDisable", Hidden).Invoke(brute, null);
+            }
+        }
+
         // ── Zwei Spielweisen, eine Kampflogik ───────────────────────────────
 
         private readonly List<GameObject> spawned = new();
