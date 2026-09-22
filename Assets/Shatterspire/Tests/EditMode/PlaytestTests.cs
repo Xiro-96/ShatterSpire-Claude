@@ -407,6 +407,52 @@ namespace Shatterspire.Tests
             Assert.AreEqual(6.5f, none.z, 0.01f);
         }
 
+        /// <summary>
+        /// ORIONs perfekter Riss trifft das erfasste Ziel doppelt. Gemessen am Schaden eines Gegners,
+        /// einmal erfasst und einmal nicht - derselbe Riss, dieselbe Ladung.
+        /// </summary>
+        [Test]
+        public void APerfectRiftHitsTheLockedTargetTwice()
+        {
+            float Rift(bool locked)
+            {
+                var hero = Spawn("ORION");
+                var build = hero.AddComponent<PlayerBuild>();
+                var health = hero.AddComponent<Health>();
+                hero.AddComponent<PlayerInputRouter>();
+                var weapon = hero.AddComponent<WeaponSystem>();
+                foreach (var component in new MonoBehaviour[] { health, build, weapon })
+                    component.GetType().GetMethod("Awake", Hidden)?.Invoke(component, null);
+                health.Configure(TeamId.Player, 92f);
+                weapon.SetLocal(false);
+                weapon.ConfigureClass(HeroClassId.Arcanist);
+                // Kein Krit, damit beide Rechnungen dieselbe Zahl wuerfeln.
+                var crit = build.GetType().GetField("<CritChance>k__BackingField", Hidden);
+                crit?.SetValue(build, 0f);
+                var enemy = LoneEnemy(hero.transform.position + Vector3.forward * 5f);
+                try
+                {
+                    typeof(WeaponSystem).GetField("heavyMeter", Hidden).SetValue(weapon, 100f);
+                    typeof(WeaponSystem).GetField("heavyCharge", Hidden).SetValue(weapon,
+                        (ActionBalance.PerfectStart + ActionBalance.PerfectEnd) * 0.5f * ActionBalance.HeavyChargeSeconds);
+                    typeof(WeaponSystem).GetField("lockedTarget", Hidden).SetValue(weapon, locked ? enemy : null);
+                    var before = enemy.Current;
+                    typeof(WeaponSystem).GetMethod("ReleaseHeavyAttack", Hidden).Invoke(weapon, null);
+                    return before - enemy.Current;
+                }
+                finally
+                {
+                    typeof(Health).GetMethod("OnDisable", Hidden).Invoke(enemy, null);
+                }
+            }
+
+            var plain = Rift(false);
+            var focused = Rift(true);
+            Assert.Greater(plain, 0f, "Gegenprobe: der Riss trifft den Gegner auch ohne Erfassung.");
+            Assert.AreEqual(1f + ActionBalance.RiftFocusBonus, focused / plain, 0.05f,
+                $"Erfasst {focused:0}, nicht erfasst {plain:0}.");
+        }
+
         private Health LoneEnemy(Vector3 at)
         {
             var enemy = Spawn("Crawler").AddComponent<Health>();

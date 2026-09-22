@@ -538,7 +538,8 @@ namespace Shatterspire
             var type = ResolveDamageType(DamageType.Fire);
             var accent = HeroCatalog.Accent(heroClass);
             var reach = 6.5f + build.Pierces * 0.8f;
-            var baseFuse = (finisher ? 0.75f : 0.9f) * (build.Has(PerkId.BomberShortFuse) ? 0.5f : 1f);
+            var baseFuse = (finisher ? ActionBalance.BomberFinisherFuse : ActionBalance.BomberFuse)
+                           * (build.Has(PerkId.BomberShortFuse) ? 0.5f : 1f);
             var landing = AimedBlastPoint(direction, reach, 0.34f + baseFuse);
             var charges = finisher ? 2 : 1;
             if (build.ProjectileCount > 1) charges++;
@@ -1138,7 +1139,13 @@ namespace Shatterspire
                 var target = AimedBlastPoint(direction, perfect ? 6.5f : 5f, 0f);
                 var damage = BaseDamage * multiplier * build.DamageMultiplier;
                 var type = ResolveDamageType(DamageType.Void);
+                var focus = perfect ? lockedTarget : null;
                 Strike(target, perfect ? 4.2f : 3f, damage, type);
+                // Im goldenen Fenster trifft der Riss das erfasste Ziel ein zweites Mal - so wie REX'
+                // perfekter Schuss drei Pfeile sind. Gegen Gruppen bleibt er, wie er ist.
+                if (focus && focus.IsAlive && CombatBrain.FlatDistance(focus.transform.position, target) <= 4.2f)
+                    focus.TakeDamage(new DamageInfo(damage * ActionBalance.RiftFocusBonus, type, gameObject,
+                        focus.transform.position, Vector3.zero));
                 PrototypeVfx.SpawnShockwave(target, perfect ? 4.5f : 3.3f, HeroCatalog.Accent(heroClass));
                 if (build.Has(PerkId.ArcanistCollapse))
                     StartCoroutine(DelayedBlast(target + direction * 3.4f, 3f, damage * 0.6f, type, 0.3f));
@@ -1284,7 +1291,8 @@ namespace Shatterspire
                 motion?.PlayMotion(AttackMotion.Channel, 1.2f);
                 var lingering = build.Has(PerkId.ArcanistLingeringStar);
                 var pulses = lingering ? 7 : 4;
-                var center = transform.position + direction * 5.5f;
+                // Auf den Gegner, wie der Riss des schweren Angriffs - nicht fest 5,5 Einheiten voraus.
+                var center = AimedBlastPoint(direction, 5.5f, 0f);
                 var type = ResolveDamageType(DamageType.Void);
                 for (var pulse = 0; pulse < pulses; pulse++)
                 {

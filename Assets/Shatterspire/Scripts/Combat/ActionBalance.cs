@@ -48,6 +48,30 @@ namespace Shatterspire
         /// </summary>
         public static float MeleeLifesteal(HeroClassId hero) => HeroCatalog.IsMelee(hero) ? 0.08f : 0f;
 
+        // ── Einzelziele ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Wie viel ORIONs perfekter Riss dem erfassten Ziel zusaetzlich antut, als Anteil seines
+        /// Schadens. Der Riss trifft eine Flaeche - gegen Gruppen stark, gegen einen einzelnen
+        /// grossen Gegner schwach. Der Selbsttest fand ORION in allen acht Laeufen am Boss verloren,
+        /// mit gut der Haelfte von REX' Schaden bei gleich vielen schweren Angriffen; REX' perfekter
+        /// Schuss sind drei Pfeile. Entscheidung des Users vom 22.09.: im goldenen Fenster trifft der
+        /// Riss das Ziel doppelt.
+        /// </summary>
+        public const float RiftFocusBonus = 1f;
+
+        // ── KORRs Zuendschnur ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Zuendschnur der leichten Ladungen, in Sekunden, und die des dritten Wurfs. Vorher 0,9 und
+        /// 0,75: mit dem Flug war ein laufender Gegner nach ueber einer Sekunde nicht mehr da, und KORR
+        /// teilte auf Etage 1 23 Schaden je Kampfsekunde aus, die anderen 32 bis 47. Entscheidung des
+        /// Users vom 22.09.
+        /// </summary>
+        public const float BomberFuse = 0.6f;
+
+        public const float BomberFinisherFuse = 0.5f;
+
         // ── Der perfekte Moment ─────────────────────────────────────────────
 
         /// <summary>Wie lange sich der schwere Angriff auflaedt, bis er von selbst ausloest.</summary>
