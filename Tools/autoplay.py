@@ -57,6 +57,7 @@ def launch(hero, folder, args, seed):
                "-shatterspire-floors", str(args.floors),
                "-shatterspire-minutes", str(args.minutes),
                "-shatterspire-seed", str(seed),
+               "-shatterspire-routes", args.routes,
                "-screen-fullscreen", "0", "-screen-width", "960", "-screen-height", "540",
                "-logFile", os.path.abspath(os.path.join(folder, "player.log"))]
     return subprocess.Popen(command)
@@ -118,6 +119,8 @@ def main():
     parser.add_argument("--seed", type=int, default=424242)
     parser.add_argument("--seeds", default="", help="kommagetrennt; ersetzt --seed")
     parser.add_argument("--repeat", type=int, default=1, help="Laeufe je Held und Seed")
+    parser.add_argument("--routes", default="cycle", choices=["cycle", "safe", "risky"],
+                        help="Routenwahl: im Wechsel, vorsichtig (Schatz/Kampf) oder gierig (Elite)")
     parser.add_argument("--minutes", type=float, default=12)
     parser.add_argument("--parallel", type=int, default=3)
     args = parser.parse_args()
@@ -159,7 +162,7 @@ def main():
 
     seed_text = ", ".join(str(x) for x in seeds)
     lines = [f"SHATTERSPIRE Selbsttest {stamp} · {args.path} · {args.floors} Etagen · Seed {seed_text}"
-             + (f" · je {args.repeat}x" if args.repeat > 1 else ""), "",
+             + (f" · je {args.repeat}x" if args.repeat > 1 else "") + f" · Routen {args.routes}", "",
              "Lauf         Etage  fps Ø/5%  Zeitlupe  Schritt>Lauf  Heavy!  Fest/Dash Fehl/Ausn  Ende",
              "-" * 102]
     lines += [row(hero, folder, label) for hero, seed, folder, label in jobs]

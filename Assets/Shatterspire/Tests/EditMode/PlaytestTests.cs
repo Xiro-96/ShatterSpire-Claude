@@ -42,6 +42,20 @@ namespace Shatterspire.Tests
         }
 
         [Test]
+        public void RoutesFollowThePolicyByKindNotByPosition()
+        {
+            var offer = new[] { RoomKind.Combat, RoomKind.Elite, RoomKind.Treasure };
+            Assert.AreEqual(2, AutoPilotChoices.RouteFor(offer, 1, RoutePolicy.Safe), "Vorsichtig: der Schatz.");
+            Assert.AreEqual(1, AutoPilotChoices.RouteFor(offer, 1, RoutePolicy.Risky), "Gierig: die Elite.");
+            Assert.AreEqual(0, AutoPilotChoices.RouteFor(new[] { RoomKind.Combat, RoomKind.Elite }, 1, RoutePolicy.Safe),
+                "Ohne Schatz lieber Kampf als Elite.");
+            Assert.AreEqual(1, AutoPilotChoices.RouteFor(offer, 1, RoutePolicy.Cycle), "Im Wechsel wie bisher.");
+            Assert.AreEqual(-1, AutoPilotChoices.RouteFor(System.Array.Empty<RoomKind>(), 1, RoutePolicy.Safe));
+            // Gegenprobe: Elite an erster Stelle - vorsichtig nimmt trotzdem nicht den ersten Knopf.
+            Assert.AreEqual(1, AutoPilotChoices.RouteFor(new[] { RoomKind.Elite, RoomKind.Combat }, 0, RoutePolicy.Safe));
+        }
+
+        [Test]
         public void RoutesTakeTurnsAndStayOnTheButtons()
         {
             var picked = new HashSet<int>();

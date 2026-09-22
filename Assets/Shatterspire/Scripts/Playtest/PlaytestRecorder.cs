@@ -105,7 +105,7 @@ namespace Shatterspire
 
         private readonly Summary summary = new();
         private readonly List<float> frames = new();
-        private readonly Queue<(float Time, Vector3 Position, float[] Sources)> recent = new();
+        private readonly Queue<(float Time, Vector3 Position, float[] Sources, float Run)> recent = new();
         private readonly Queue<(float Time, Vector3 Position)> stuckSamples = new();
         private readonly StringBuilder log = new();
         private readonly HashSet<string> seenErrors = new();
@@ -239,9 +239,11 @@ namespace Shatterspire
             if (controller.Rolling || controller.IsAirborne || controller.Charging) lastExcused = now;
             var sources = new float[6];
             for (var i = 0; i < sources.Length; i++) sources[i] = controller.Travelled((MoveSource)i);
-            recent.Enqueue((now, position, sources));
+            var runNow = HeroCatalog.BaseSpeed(build ? build.HeroClass : HeroClassId.Ranger)
+                         * (build ? build.MoveSpeedMultiplier : 1f);
+            recent.Enqueue((now, position, sources, runNow));
             while (recent.Count > 1 && now - recent.Peek().Time > 0.15f) recent.Dequeue();
-            var (oldTime, oldPosition, oldSources) = recent.Peek();
+            var (oldTime, oldPosition, oldSources, _) = recent.Peek();
             var age = now - oldTime;
             if (age < 0.1f || now - lastExcused < 0.3f) return;
             var distance = Vector3.Distance(position, oldPosition);
@@ -250,9 +252,12 @@ namespace Shatterspire
                 recent.Clear();
                 return;
             }
-            var run = HeroCatalog.BaseSpeed(build ? build.HeroClass : HeroClassId.Ranger)
-                      * (build ? build.MoveSpeedMultiplier : 1f);
-            summary.runSpeed = run;
+            // Das hoechste Tempo im Fenster, nicht das jetzige: laeuft ein Tempo-Schub (Jaegerblick,
+            // Adrenalin, Vergeltung) mitten im Fenster ab, war der Schritt davor nicht zu schnell. So
+            // meldete der Selbsttest am 22.09. einen Schritt von REX, der nur aus Laufen bestand.
+            var run = runNow;
+            foreach (var sample in recent) run = Mathf.Max(run, sample.Run);
+            summary.runSpeed = runNow;
             var speed = distance / age;
             if (speed > PlaytestMath.FastStepLimit(run))
             {
@@ -291,8 +296,9 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// Festhaengen: der Autopilot hat ein Ziel, kaempft nicht, und ist in sechs Sekunden keinen
-        /// Meter weit gekommen.
+        /// Festhaengen: der Autopilot hat ein Ziel, kaempft nicht, will laufen, und ist in sechs
+        /// Sekunden keinen Meter weit gekommen. Ohne "will laufen" zaehlte jeder Kern, den er im Ring
+        /// verteidigte, und jeder Begleiter, den er aufhob - am 22.09. waren das die meisten Meldungen.
         /// </summary>
         private void WatchStuck()
         {
@@ -301,6 +307,7 @@ namespace Shatterspire
             var position = hero.transform.position;
             stuckSamples.Enqueue((Real, position));
             while (stuckSamples.Count > 7) stuckSamples.Dequeue();
+            if (!pilot.WantsToMove) stuckSamples.Clear();
             if (stuckSamples.Count < 7 || !pilot.HasGoal || pilot.Fighting) return;
             var moved = CombatBrain.FlatDistance(position, stuckSamples.Peek().Position);
             if (moved >= 1f || Real < nextStuckReport) return;

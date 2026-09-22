@@ -75,6 +75,11 @@ namespace Shatterspire
         private readonly List<Button> modalButtons = new();
         private ModalKind openModal;
         private Action<RoomKind, FloorModifierId> routeCallback;
+        private RoomKind[] routeOptions = System.Array.Empty<RoomKind>();
+
+        /// <summary>Die Raumarten im offenen Routenfenster, in der Reihenfolge der Knoepfe.</summary>
+        public System.Collections.Generic.IReadOnlyList<RoomKind> OpenRouteOptions
+            => OpenModal == ModalKind.Routes ? routeOptions : System.Array.Empty<RoomKind>();
         private Action postPerkCallback;
         private Vector3 objectiveTarget;
         private string objectiveTargetLabel;
@@ -1311,6 +1316,7 @@ namespace Shatterspire
             modal = CreateModal($"{Loc.T("TEAM VOTE")} · {Loc.T("FLOOR")} {nextRoom}",
                 Loc.T("YOUR PARTY FOLLOWS THE SELECTED ROUTE"));
             var options = PathCatalog.RoutesFor(runSeed, nextRoom);
+            routeOptions = options;
             for (var i = 0; i < options.Length; i++)
             {
                 var kind = options[i];

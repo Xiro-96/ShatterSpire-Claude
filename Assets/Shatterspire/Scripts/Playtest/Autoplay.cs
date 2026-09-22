@@ -20,6 +20,7 @@ namespace Shatterspire
     ///   -shatterspire-floors N     (wie viele Etagen, Vorgabe 5)
     ///   -shatterspire-minutes N    (Obergrenze in echter Zeit, Vorgabe 12)
     ///   -shatterspire-seed N       (fester Lauf, damit zwei Durchgaenge vergleichbar sind)
+    ///   -shatterspire-routes cycle|safe|risky   (wie er Routen waehlt, Vorgabe cycle)
     ///
     /// Der Selbsttest liest und schreibt keinen Spielstand (<see cref="MetaSaveSystem.Ephemeral"/>):
     /// jeder Lauf beginnt mit einem frischen Helden, und kein Lauf veraendert den naechsten.
@@ -44,6 +45,9 @@ namespace Shatterspire
 
         public static RunMode RunPath => Enum.TryParse<RunMode>(Arg("-shatterspire-path"), true, out var path) ? path : RunMode.Brave;
 
+        public static RoutePolicy Routes
+            => Enum.TryParse<RoutePolicy>(Arg("-shatterspire-routes"), true, out var policy) ? policy : RoutePolicy.Cycle;
+
         public static int Floors => int.TryParse(Arg("-shatterspire-floors"), out var floors) ? Mathf.Max(1, floors) : 5;
 
         public static float Minutes
@@ -66,8 +70,42 @@ namespace Shatterspire
     /// sich ohne laufendes Spiel pruefen laesst - die Fenster halten das Spiel an, und ein falscher
     /// Knopf hier hiesse ein Selbsttest, der im ersten Fenster stehen bleibt.
     /// </summary>
+    /// <summary>
+    /// Wie der Autopilot die naechste Etage waehlt. Bis zum 22.09. nur nach Knopfposition - und der
+    /// zweite Knopf war nach Etage 1 in allen vierzig Laeufen Elite. "Etage 2 ist eine Wand" hiess
+    /// damit nur: Elite auf Etage 2 ist eine Wand.
+    /// </summary>
+    public enum RoutePolicy
+    {
+        /// <summary>Im Wechsel nach Knopfposition, damit viele Raumarten vorkommen.</summary>
+        Cycle,
+        /// <summary>Wie ein vorsichtiger Spieler: Schatz, sonst Kampf oder Mysterium, Elite zuletzt.</summary>
+        Safe,
+        /// <summary>Wie ein gieriger Spieler: Elite, wo es geht.</summary>
+        Risky
+    }
+
     public static class AutoPilotChoices
     {
+        /// <summary>Der Knopf im Routenfenster fuer diese Strategie. Ohne Angebot wie <see cref="ButtonFor"/>.</summary>
+        public static int RouteFor(System.Collections.Generic.IReadOnlyList<RoomKind> options, int floor, RoutePolicy policy)
+        {
+            if (options == null || options.Count == 0) return -1;
+            if (policy == RoutePolicy.Cycle) return Mathf.Abs(floor) % options.Count;
+            var best = 0;
+            var bestRank = int.MaxValue;
+            for (var i = 0; i < options.Count; i++)
+            {
+                var rank = policy == RoutePolicy.Safe
+                    ? options[i] switch { RoomKind.Treasure => 0, RoomKind.Combat => 1, RoomKind.Mystery => 2, RoomKind.Elite => 4, _ => 3 }
+                    : options[i] switch { RoomKind.Elite => 0, RoomKind.Combat => 1, RoomKind.Mystery => 2, RoomKind.Treasure => 3, _ => 2 };
+                if (rank >= bestRank) continue;
+                bestRank = rank;
+                best = i;
+            }
+            return best;
+        }
+
         /// <summary>
         /// Der Knopf fuer dieses Fenster, oder -1 fuer "nichts druecken".
         /// </summary>

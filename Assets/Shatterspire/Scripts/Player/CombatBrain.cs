@@ -172,7 +172,6 @@ namespace Shatterspire
         public const float RollLead = 0.2f;
 
         private EnemyAgent dodgeFrom;
-        private float dodgeAt;
         private EnemyAgent evadeFrom;
         private float evadeUntil;
 
@@ -194,23 +193,28 @@ namespace Shatterspire
             if (dodgeFrom)
             {
                 // Schon entschieden: auf den Moment warten. Bricht der Angriff ab, war nichts.
+                // Der Moment wird jedes Bild neu bestimmt: ein Waechter haelt vor dem Muster noch inne
+                // und setzt seine Warnung erst danach.
                 if (!dodgeFrom.IsTelegraphing) dodgeFrom = null;
-                else return Time.time >= dodgeAt && Time.time >= nextDash && Roll(self, dodgeFrom, ref intent);
+                else return Time.time >= DodgeMoment(dodgeFrom.TelegraphStartedAt, dodgeFrom.TelegraphSeconds)
+                            && Time.time >= nextDash && Roll(self, dodgeFrom, ref intent);
             }
             var enemies = EnemyAgent.Active;
             for (var i = 0; i < enemies.Count; i++)
             {
                 var enemy = enemies[i];
                 if (!enemy || !enemy.IsTelegraphing || enemy.Target != self) continue;
-                var reach = enemy.IsRanged ? enemy.AttackRange + 2f : 5f;
+                // Nahkaempfer ab fuenf Einheiten; Schuetzen und Waechter, soweit ihre Angriffe reichen.
+                var reach = enemy.IsRanged ? enemy.AttackRange + 2f
+                    : Mathf.Max(5f, EnemyKinds.EngageReach(enemy.Kind, enemy.AttackRange) + 2f);
                 if (FlatDistance(self.position, enemy.transform.position) > reach) continue;
                 var id = enemy.GetInstanceID();
                 if (dodgeDecided.TryGetValue(id, out var decidedAt) && Time.time - decidedAt < 1.5f) continue;
                 dodgeDecided[id] = Time.time;
                 if (Random.value > style.DodgeChance) continue;
                 dodgeFrom = enemy;
-                dodgeAt = DodgeMoment(enemy.TelegraphStartedAt, enemy.TelegraphSeconds);
-                return Time.time >= dodgeAt && Time.time >= nextDash && Roll(self, enemy, ref intent);
+                return Time.time >= DodgeMoment(enemy.TelegraphStartedAt, enemy.TelegraphSeconds)
+                       && Time.time >= nextDash && Roll(self, enemy, ref intent);
             }
             return false;
         }

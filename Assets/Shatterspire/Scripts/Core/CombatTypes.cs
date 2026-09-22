@@ -27,6 +27,23 @@ namespace Shatterspire
         /// </summary>
         public static bool IsBoss(EnemyKind kind)
             => kind is EnemyKind.IronWarden or EnemyKind.RiftTwin or EnemyKind.ChoirWarden;
+
+        /// <summary>Ab diesem Abstand beginnt ein Waechter ein Muster.</summary>
+        public const float BossEngageReach = 9f;
+
+        /// <summary>
+        /// Ab welchem Abstand ein Gegner einen Angriff beginnt. Fuer die meisten die Reichweite ihres
+        /// Schlags. Die Waechter haben Muster, die weiter reichen: der Warden schlaegt auf die Stelle
+        /// des Ziels, zieht eine Linie von 10 Einheiten und wirft einen Ring aus Geschossen; der
+        /// Zwilling springt; der Chorwaechter ruft seinen Chor.
+        ///
+        /// Vorher begannen sie trotzdem erst in Nahkampfreichweite (2,2 bis 3,2). Der Selbsttest
+        /// zeigte es: REX besiegte den Warden zweimal in 17 und 24 Sekunden, ohne ein einziges Mal
+        /// getroffen zu werden - wer auf Abstand blieb, bekam keines der Muster je zu sehen, und der
+        /// Chorwaechter rief gegen eine Gruppe aus Fernkaempfern nie.
+        /// </summary>
+        public static float EngageReach(EnemyKind kind, float attackRange)
+            => IsBoss(kind) ? Math.Max(attackRange, BossEngageReach) : attackRange;
     }
     public enum RoomKind { Combat, Elite, Treasure, Mystery, Boss }
 

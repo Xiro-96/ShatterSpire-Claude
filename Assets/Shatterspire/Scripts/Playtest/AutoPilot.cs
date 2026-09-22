@@ -26,6 +26,16 @@ namespace Shatterspire
         /// <summary>So nah am Ziel gilt er als angekommen. Der Ring eines Kerns misst 3,75.</summary>
         private const float ArriveRadius = 0.9f;
 
+        /// <summary>
+        /// Wie nah er an ein Ziel der Etage geht. Kern und Aufzug wirken schon ab 3,75 bzw. 2,5
+        /// Einheiten; mit 0,9 drueckte er gegen den Kristall in der Mitte, und das Protokoll hielt
+        /// es fuer Festhaengen.
+        /// </summary>
+        private const float GoalArriveRadius = 1.6f;
+
+        /// <summary>Er will laufen - der Stick ist gedrueckt. Wer angekommen ist, will es nicht.</summary>
+        public bool WantsToMove => Move.sqrMagnitude > 0.1f;
+
         /// <summary>So kurz liest er ein Auswahlfenster, bevor er drueckt - wie ein Mensch.</summary>
         private const float ModalReadSeconds = 0.6f;
 
@@ -156,7 +166,7 @@ namespace Shatterspire
                 Doing = "EVADE";
             }
 
-            Steer(destination);
+            Steer(destination, Fighting || fallen || Doing == "EVADE" ? ArriveRadius : GoalArriveRadius);
             Aim(Fighting ? target : null);
             var dodge = new CombatIntent();
             if (brain.Dodge(transform, ref dodge))
@@ -187,7 +197,9 @@ namespace Shatterspire
             // Die Fenster halten das Spiel an - hier zaehlt die echte Zeit.
             if (Time.unscaledTime < nextModalPress) return;
             nextModalPress = Time.unscaledTime + ModalReadSeconds;
-            var index = AutoPilotChoices.ButtonFor(kind, hud.OpenModalButtons, floor);
+            var index = kind == ModalKind.Routes && hud.OpenRouteOptions.Count == hud.OpenModalButtons
+                ? AutoPilotChoices.RouteFor(hud.OpenRouteOptions, floor, Autoplay.Routes)
+                : AutoPilotChoices.ButtonFor(kind, hud.OpenModalButtons, floor);
             if (index < 0) return;
             Debug.Log($"SHATTERSPIRE Autopilot: {kind}, Knopf {index + 1} von {hud.OpenModalButtons}, Etage {floor}.");
             hud.PressModalForCapture(index);
@@ -210,7 +222,7 @@ namespace Shatterspire
         }
 
         /// <summary>Aus dem Ziel wird ein Stick - ueber das Wegenetz der Etage, wie bei den Begleitern.</summary>
-        private void Steer(Vector3? destination)
+        private void Steer(Vector3? destination, float arrive = ArriveRadius)
         {
             if (!destination.HasValue)
             {
@@ -225,7 +237,7 @@ namespace Shatterspire
             toWaypoint.y = 0f;
             var toGoal = destination.Value - transform.position;
             toGoal.y = 0f;
-            if (toGoal.magnitude <= ArriveRadius || toWaypoint.sqrMagnitude < 0.0001f)
+            if (toGoal.magnitude <= arrive || toWaypoint.sqrMagnitude < 0.0001f)
             {
                 Move = Vector2.zero;
                 return;

@@ -103,7 +103,9 @@ namespace Shatterspire
         /// </summary>
         public float TelegraphStartedAt => telegraphStartedAt;
 
-        public float TelegraphSeconds => stats.TelegraphSeconds;
+        public float TelegraphSeconds => telegraphLength > 0f ? telegraphLength : stats.TelegraphSeconds;
+
+        private float telegraphLength;
 
         /// <summary>Wie weit dieser Gegner angreift.</summary>
         public float AttackRange => attackRange;
@@ -115,6 +117,17 @@ namespace Shatterspire
         {
             state = State.Telegraph;
             telegraphStartedAt = Time.time;
+            telegraphLength = stats.TelegraphSeconds;
+        }
+
+        /// <summary>
+        /// Die sichtbare Vorwarnung beginnt erst jetzt und dauert so lange - fuer Muster, die vorher
+        /// noch innehalten oder ihre Warnung je Phase kuerzen.
+        /// </summary>
+        private void TelegraphFromNow(float seconds)
+        {
+            telegraphStartedAt = Time.time;
+            telegraphLength = seconds;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -380,7 +393,7 @@ namespace Shatterspire
                 }
                 if (offset.sqrMagnitude > 0.05f)
                     transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(offset), 10f * Time.deltaTime);
-                if (distance <= attackRange && Time.time >= attackReadyAt && HasFiringLine())
+                if (distance <= EnemyKinds.EngageReach(kind, attackRange) && Time.time >= attackReadyAt && HasFiringLine())
                     StartCoroutine(AttackRoutine());
             }
         }
@@ -1047,6 +1060,7 @@ namespace Shatterspire
             // Phase 1 kommt aus dem Statblock, die Verkürzung in Phase 2 und 3 ist
             // Verhalten und bleibt bewusst hier.
             var warning = phase == 3 ? 0.58f : phase == 2 ? 0.72f : stats.TelegraphSeconds;
+            TelegraphFromNow(warning);
             yield return new WaitForSeconds(warning);
             if (state == State.Dead)
             {

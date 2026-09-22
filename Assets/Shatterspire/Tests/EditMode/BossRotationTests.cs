@@ -106,5 +106,28 @@ namespace Shatterspire.Tests
                 names.Add(PathCatalog.BossName(PathCatalog.BossFor(floor)));
             Assert.That(names.Count, Is.EqualTo(3), "Drei Waechter, drei Namen: " + string.Join(", ", names));
         }
+
+        /// <summary>
+        /// Ein Fernkaempfer haelt rund 72 % seiner Reichweite Abstand (AutoPilot, BotInput). Ein Waechter,
+        /// der erst in Nahkampfreichweite ein Muster beginnt, greift ihn nie an.
+        /// </summary>
+        [Test]
+        public void WaechterGreifenAuchFernkaempferAn()
+        {
+            var keep = HeroCatalog.EngageRange(HeroClassId.Ranger) * 0.72f;
+            foreach (EnemyKind kind in Enum.GetValues(typeof(EnemyKind)))
+            {
+                var range = EnemyBalance.For(kind).AttackRange;
+                if (!EnemyKinds.IsBoss(kind))
+                {
+                    Assert.That(EnemyKinds.EngageReach(kind, range), Is.EqualTo(range), $"{kind} greift auf seine Schlagweite an");
+                    continue;
+                }
+                // Gegenprobe: mit der Schlagweite allein kaeme der Waechter nie an REX heran.
+                Assert.That(range, Is.LessThan(keep), $"{kind}: der Test waere sonst leer");
+                Assert.That(EnemyKinds.EngageReach(kind, range), Is.GreaterThanOrEqualTo(keep),
+                    $"{kind} beginnt erst bei {EnemyKinds.EngageReach(kind, range):0.0}, REX steht bei {keep:0.0}");
+            }
+        }
     }
 }
