@@ -19,7 +19,7 @@ MonoBehaviour:
   accent: {r: 0.72, g: 0.93, b: 0.12, a: 1}
   baseHealth: 115
   baseSpeed: 6
-  baseDamage: 10
+  baseDamage: 13
   skillCooldown: 7.5
   lightAttackName: THROWN CHARGE
   heavyAttackName: STICKY MINE

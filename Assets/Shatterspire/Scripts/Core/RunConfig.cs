@@ -130,9 +130,12 @@ namespace Shatterspire
 
         public static float BaseDamage(HeroClassId hero) => hero switch
         {
-            // Niedriger als bei den anderen: seine Bomben treffen mehrere und zuenden verzoegert,
-            // also zaehlt nicht der einzelne Schlag.
-            HeroClassId.Bomber => 10f,
+            // Seine Bomben treffen mehrere und zuenden verzoegert, also zaehlt nicht der einzelne
+            // Schlag. Aber 10 war zu wenig: im Selbsttest teilte KORR auf jeder Etage am wenigsten aus
+            // (Etage 4: 35 je Kampfsekunde, die anderen 57 bis 67) und schaffte in 40 Laeufen keinen
+            // Aufstieg - auch nach kuerzerer Zuendschnur, mehr Leben und der Haftmine fuer Einzelziele.
+            // Entscheidung des Users vom 22.09.: 13.
+            HeroClassId.Bomber => 13f,
             // Weniger als Brax: ihr Wert liegt darin, was sie der Gruppe abnimmt, nicht im Schlag.
             HeroClassId.Paladin => 14f,
             HeroClassId.Guardian => 17f,
