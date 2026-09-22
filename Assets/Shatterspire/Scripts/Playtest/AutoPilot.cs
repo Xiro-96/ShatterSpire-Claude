@@ -160,13 +160,19 @@ namespace Shatterspire
             var fallen = Fighting ? null : FallenCompanionNearby();
             var destination = Fighting ? CombatPosition(target) : fallen ? fallen.position : goal;
             Doing = Fighting ? "FIGHT" : fallen ? "REVIVE" : goal.HasValue ? "OBJECTIVE" : "IDLE";
+            var orb = OrbWorthTheWalk(health.Normalized, Fighting);
+            if (orb)
+            {
+                destination = orb.transform.position;
+                Doing = "ORB";
+            }
             if (brain.HoldOff(transform.position, out var clear))
             {
                 destination = clear;
                 Doing = "EVADE";
             }
 
-            Steer(destination, Fighting || fallen || Doing == "EVADE" ? ArriveRadius : GoalArriveRadius);
+            Steer(destination, Fighting || fallen || orb || Doing == "EVADE" ? ArriveRadius : GoalArriveRadius);
             Aim(Fighting ? target : null);
             var dodge = new CombatIntent();
             if (brain.Dodge(transform, ref dodge))
@@ -268,6 +274,31 @@ namespace Shatterspire
             }
             stuckAnchor = transform.position;
             stuckSince = Time.time;
+        }
+
+        /// <summary>
+        /// Eine Heilkugel, fuer die ein Mensch den Umweg macht: mit weniger als drei Vierteln Leben
+        /// eine in acht Einheiten, mitten im Kampf nur mit weniger als der Haelfte und keine vier
+        /// Einheiten weit. Vorher ging er nie hin - Kugeln zogen ihn nur an, wenn er zufaellig
+        /// daneben stand, und verfielen sonst nach 14 Sekunden.
+        /// </summary>
+        private HealthOrb OrbWorthTheWalk(float healthShare, bool fighting)
+        {
+            if (healthShare >= 0.75f || (fighting && healthShare >= 0.5f)) return null;
+            var reach = fighting ? 4f : 8f;
+            HealthOrb best = null;
+            var bestDistance = reach;
+            var orbs = HealthOrb.Active;
+            for (var i = 0; i < orbs.Count; i++)
+            {
+                var candidate = orbs[i];
+                if (!candidate || candidate.Owner != transform) continue;
+                var distance = CombatBrain.FlatDistance(transform.position, candidate.transform.position);
+                if (distance >= bestDistance) continue;
+                bestDistance = distance;
+                best = candidate;
+            }
+            return best;
         }
 
         private Transform FallenCompanionNearby()

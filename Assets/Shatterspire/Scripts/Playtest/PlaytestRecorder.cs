@@ -48,6 +48,9 @@ namespace Shatterspire
             public float healthAtStart = 1f;
             public float damageTaken;
             public List<HitRecord> hits = new();
+            public int orbsCollected;
+            public int orbsExpired;
+            public float orbHealing;
             public float lowestHealth = 1f;
             public int kills;
             public int heavy;
@@ -167,6 +170,7 @@ namespace Shatterspire
             GameEvents.RoomStarted += OnRoomStarted;
             GameEvents.EntityDied += OnEntityDied;
             GameEvents.RunEnded += OnRunEnded;
+            GameEvents.OrbEnded += OnOrbEnded;
             if (playerHealth) playerHealth.Damaged += OnPlayerDamaged;
             if (weapon)
             {
@@ -184,6 +188,7 @@ namespace Shatterspire
             GameEvents.RoomStarted -= OnRoomStarted;
             GameEvents.EntityDied -= OnEntityDied;
             GameEvents.RunEnded -= OnRunEnded;
+            GameEvents.OrbEnded -= OnOrbEnded;
             if (playerHealth) playerHealth.Damaged -= OnPlayerDamaged;
             if (!weapon) return;
             weapon.HeavyFired -= OnHeavyFired;
@@ -402,6 +407,18 @@ namespace Shatterspire
                 pendingAnomaly = parts[2].Trim();
         }
 
+        private void OnOrbEnded(float heal, bool collected)
+        {
+            if (floor == null) return;
+            if (!collected)
+            {
+                floor.orbsExpired++;
+                return;
+            }
+            floor.orbsCollected++;
+            floor.orbHealing += heal;
+        }
+
         private void OnHeavyFired(HeavyTiming timing)
         {
             summary.heavyFired++;
@@ -566,6 +583,11 @@ namespace Shatterspire
                     "{0,5}  {1,-9} {2,5:0}s  {3,13:0} %  {4,7:0}  {5,13:0} %  {6,5}  {7,5} ({8}/{9}){10,12}  {11,8}  {12,4}  {13,18}  {14,15}",
                     f.floor, f.kind, f.seconds, f.healthAtStart * 100f, f.damageTaken, f.lowestHealth * 100f, f.kills,
                     f.heavy, f.perfect, f.good, string.Empty, f.skills, f.ultimates, f.companionFalls, f.playerDowns));
+            text.AppendLine();
+            text.AppendLine("Heilkugeln (eingesammelt/verfallen, geheilt)");
+            foreach (var f in s.floors)
+                if (f.orbsCollected + f.orbsExpired > 0)
+                    text.AppendLine(string.Format(de, "{0,5}  {1}/{2}, {3:0}", f.floor, f.orbsCollected, f.orbsExpired, f.orbHealing));
             text.AppendLine();
             text.AppendLine("Schaden nach Quelle (Treffer, Summe, davon kurz nach dem Ausweichen)");
             foreach (var f in s.floors)

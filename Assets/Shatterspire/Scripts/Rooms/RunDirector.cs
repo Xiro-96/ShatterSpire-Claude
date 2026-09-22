@@ -306,6 +306,8 @@ namespace Shatterspire
             }
             if (ended) yield break;
             playerHealth.Revive(0.55f);
+            var cleared = EnemyAgent.ClearRoomAround(player.position);
+            Debug.Log($"SHATTERSPIRE Aufstehen: {cleared} Gegner zurueckgestossen.");
             downed = false;
             GameEvents.RaiseKnockoutChanged(knockouts, MaximumKnockouts, 0f, false);
             PrototypeVfx.SpawnExplosion(player.position + Vector3.up * 0.6f, 2.6f, new Color(0.25f, 1f, 0.55f));

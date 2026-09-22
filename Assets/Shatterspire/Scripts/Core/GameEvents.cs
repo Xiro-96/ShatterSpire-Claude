@@ -30,6 +30,8 @@ namespace Shatterspire
         public static event Action<float, float, bool, HeavyTiming> HeavyAttackChanged;
         public static event Action<int, int, float, bool> KnockoutChanged;
         public static event Action<bool, int> RunEnded;
+        /// <summary>Eine Heilkugel ist weg: eingesammelt (mit ihrer Heilung) oder verfallen.</summary>
+        public static event Action<float, bool> OrbEnded;
 
         public static void RaiseHealthChanged(Health value) => HealthChanged?.Invoke(value);
         public static void RaiseEntityDied(Health value) => EntityDied?.Invoke(value);
@@ -58,6 +60,7 @@ namespace Shatterspire
         public static void RaiseKnockoutChanged(int skulls, int maximum, float reviveProgress, bool downed)
             => KnockoutChanged?.Invoke(skulls, maximum, reviveProgress, downed);
         public static void RaiseRunEnded(bool victory, int shards) => RunEnded?.Invoke(victory, shards);
+        public static void RaiseOrbEnded(float heal, bool collected) => OrbEnded?.Invoke(heal, collected);
 
         public static void Reset()
         {
@@ -78,6 +81,7 @@ namespace Shatterspire
             HeavyAttackChanged = null;
             KnockoutChanged = null;
             RunEnded = null;
+            OrbEnded = null;
         }
     }
 }

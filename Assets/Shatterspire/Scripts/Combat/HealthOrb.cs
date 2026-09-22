@@ -18,6 +18,27 @@ namespace Shatterspire
         /// <summary>So nah gilt sie als eingesammelt.</summary>
         private const float PickupRadius = 0.8f;
 
+        private static readonly System.Collections.Generic.List<HealthOrb> ActiveOrbs = new();
+
+        /// <summary>Alle liegenden Kugeln. Wie <see cref="Health.Active"/>: melden sich selbst an und ab.</summary>
+        public static System.Collections.Generic.IReadOnlyList<HealthOrb> Active => ActiveOrbs;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetRegistry() => ActiveOrbs.Clear();
+
+        private void OnEnable()
+        {
+            if (!ActiveOrbs.Contains(this)) ActiveOrbs.Add(this);
+        }
+
+        private void OnDisable() => ActiveOrbs.Remove(this);
+
+        /// <summary>Wem sie gehoert - nur dieser Held kann sie einsammeln.</summary>
+        public Transform Owner => target;
+
+        /// <summary>Wie viel sie heilt.</summary>
+        public float Heal => amount;
+
         private Transform target;
         private float amount;
         private float expiresAt;
@@ -126,6 +147,7 @@ namespace Shatterspire
                 if (remaining < 2f) transform.localScale = Vector3.one * (0.34f * Mathf.Clamp01(remaining / 2f));
                 return;
             }
+            GameEvents.RaiseOrbEnded(amount, false);
             Destroy(gameObject);
         }
 
@@ -133,6 +155,7 @@ namespace Shatterspire
         {
             var health = target.GetComponent<Health>();
             if (health && health.IsAlive) health.Heal(amount);
+            GameEvents.RaiseOrbEnded(amount, true);
             Sfx.Play(Sound.Pickup, transform.position, 0.7f);
             PrototypeVfx.SpawnHit(transform.position, Vector3.up, DamageType.Poison, false);
             Destroy(gameObject);

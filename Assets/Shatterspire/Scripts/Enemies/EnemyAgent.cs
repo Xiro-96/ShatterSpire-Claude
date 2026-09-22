@@ -472,6 +472,41 @@ namespace Shatterspire
             motion?.PulseHit();
         }
 
+        /// <summary>Umkreis, in dem ein aufstehender Held Luft bekommt.</summary>
+        public const float RiseRadius = 4f;
+
+        /// <summary>So lange taumeln Gegner, die ein aufstehender Held zurueckstoesst.</summary>
+        public const float RiseStunSeconds = 1f;
+
+        private const float RiseShove = 14f;
+
+        /// <summary>
+        /// Wer aufsteht, bekommt Luft: Gegner im Umkreis werden zurueckgestossen, und wer kein Waechter
+        /// ist, taumelt eine Sekunde und bricht seinen Angriff ab. Vorher war der Lichtblitz beim
+        /// Aufstehen nur Grafik - der Held stand mit 55 % Leben mitten im selben Pulk wieder auf. Der
+        /// Selbsttest fand 30 von 68 Folgestuerzen weniger als 15 Sekunden nach dem Aufstehen, die
+        /// meisten nach vier bis dreizehn: eine Schleife, aus der man nicht herauskam.
+        /// </summary>
+        /// <returns>Wie viele Gegner zurueckgestossen wurden.</returns>
+        public static int ClearRoomAround(Vector3 center)
+        {
+            var pushed = 0;
+            for (var i = 0; i < ActiveAgents.Count; i++)
+            {
+                var agent = ActiveAgents[i];
+                if (!agent || agent.state is State.Dead or State.Idle) continue;
+                var away = agent.transform.position - center;
+                away.y = 0f;
+                var distance = away.magnitude;
+                if (distance > RiseRadius) continue;
+                away = distance > 0.01f ? away / distance : Vector3.forward;
+                agent.knockbackVelocity += away * (RiseShove * agent.stats.KnockbackResistance);
+                if (!EnemyKinds.IsBoss(agent.kind)) agent.Stun(RiseStunSeconds);
+                pushed++;
+            }
+            return pushed;
+        }
+
         private void OnDamaged(DamageInfo damage)
         {
             if (state == State.Dead) return;

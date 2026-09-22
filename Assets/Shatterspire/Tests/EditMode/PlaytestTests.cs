@@ -216,6 +216,85 @@ namespace Shatterspire.Tests
             }
         }
 
+        /// <summary>
+        /// Heilkugeln holt er wie ein Mensch: nur mit wenig Leben, im Kampf nur ganz nahe, und nur
+        /// seine eigenen - eine fremde kann er nicht einsammeln.
+        /// </summary>
+        [Test]
+        public void TheAutopilotWalksToAnOrbOnlyWhenItIsWorthIt()
+        {
+            var hero = Spawn("REX");
+            var pilot = hero.AddComponent<AutoPilot>();
+            var other = Spawn("BRAX");
+            var near = HealthOrb.Spawn(hero.transform.position + Vector3.right * 3f, 10f, hero.transform);
+            var far = HealthOrb.Spawn(hero.transform.position + Vector3.left * 6f, 10f, hero.transform);
+            var foreign = HealthOrb.Spawn(hero.transform.position + Vector3.forward * 1f, 10f, other.transform);
+            var orbs = new[] { near, far, foreign };
+            // Im Editor laeuft OnEnable nicht von selbst - ohne Anmeldung saehe er keine Kugel.
+            foreach (var orb in orbs)
+            {
+                spawned.Add(orb.gameObject);
+                typeof(HealthOrb).GetMethod("OnEnable", Hidden).Invoke(orb, null);
+            }
+            var choose = typeof(AutoPilot).GetMethod("OrbWorthTheWalk", Hidden);
+            HealthOrb Pick(float share, bool fighting) => (HealthOrb)choose.Invoke(pilot, new object[] { share, fighting });
+            try
+            {
+                Assert.IsNull(Pick(0.9f, false), "Mit fast vollem Leben lohnt kein Umweg.");
+                Assert.AreEqual(near, Pick(0.6f, false), "Die naechste eigene, nicht die fremde direkt daneben.");
+                Assert.IsNull(Pick(0.6f, true), "Im Kampf mit mehr als halbem Leben: weiterkaempfen.");
+                Assert.AreEqual(near, Pick(0.3f, true), "Im Kampf mit wenig Leben nur die ganz nahe.");
+                typeof(HealthOrb).GetMethod("OnDisable", Hidden).Invoke(near, null);
+                Assert.IsNull(Pick(0.3f, true), "Sechs Einheiten sind mitten im Kampf zu weit.");
+                Assert.AreEqual(far, Pick(0.3f, false), "Ausserhalb des Kampfes schon.");
+            }
+            finally
+            {
+                foreach (var orb in orbs) typeof(HealthOrb).GetMethod("OnDisable", Hidden).Invoke(orb, null);
+            }
+        }
+
+        /// <summary>
+        /// Aufstehen verschafft Luft. Vorher stand der Held im selben Pulk wieder auf, in dem er
+        /// gefallen war - 30 von 68 Folgestuerzen kamen weniger als 15 Sekunden danach.
+        /// </summary>
+        [Test]
+        public void StandingUpPushesTheCrowdBack()
+        {
+            EnemyAgent Enemy(EnemyKind kind, Vector3 at)
+            {
+                var agent = Spawn(kind.ToString()).AddComponent<EnemyAgent>();
+                typeof(EnemyAgent).GetField("stats", Hidden).SetValue(agent, EnemyBalance.For(kind));
+                typeof(EnemyAgent).GetField("kind", Hidden).SetValue(agent, kind);
+                var state = typeof(EnemyAgent).GetField("state", Hidden);
+                state.SetValue(agent, System.Enum.Parse(state.FieldType, "Chase"));
+                agent.transform.position = at;
+                typeof(EnemyAgent).GetMethod("OnEnable", Hidden).Invoke(agent, null);
+                return agent;
+            }
+            Vector3 Shove(EnemyAgent agent) => (Vector3)typeof(EnemyAgent).GetField("knockbackVelocity", Hidden).GetValue(agent);
+            float StaggeredUntil(EnemyAgent agent) => (float)typeof(EnemyAgent).GetField("hitStaggerUntil", Hidden).GetValue(agent);
+
+            var near = Enemy(EnemyKind.Crawler, new Vector3(1.5f, 0f, 0f));
+            var far = Enemy(EnemyKind.Crawler, new Vector3(EnemyAgent.RiseRadius + 1f, 0f, 0f));
+            var boss = Enemy(EnemyKind.IronWarden, new Vector3(0f, 0f, 2f));
+            try
+            {
+                Assert.AreEqual(2, EnemyAgent.ClearRoomAround(Vector3.zero), "Der nahe Crawler und der Warden.");
+                Assert.Greater(Shove(near).x, 0f, "Vom Helden weg.");
+                Assert.Greater(StaggeredUntil(near), Time.time, "Der nahe Crawler taumelt.");
+                Assert.AreEqual(Vector3.zero, Shove(far), "Ausserhalb des Umkreises bleibt alles, wie es ist.");
+                Assert.LessOrEqual(StaggeredUntil(far), Time.time);
+                Assert.Greater(Shove(boss).z, 0f, "Auch der Waechter weicht - ein Stueck.");
+                Assert.LessOrEqual(StaggeredUntil(boss), Time.time, "Aber ein Waechter taumelt nicht.");
+            }
+            finally
+            {
+                foreach (var agent in new[] { near, far, boss })
+                    typeof(EnemyAgent).GetMethod("OnDisable", Hidden).Invoke(agent, null);
+            }
+        }
+
         // ── Zwei Spielweisen, eine Kampflogik ───────────────────────────────
 
         private readonly List<GameObject> spawned = new();

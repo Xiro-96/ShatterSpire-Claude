@@ -135,6 +135,8 @@ namespace Shatterspire
             if (motor) motor.enabled = true;
             foreach (var body in GetComponentsInChildren<Collider>()) body.enabled = true;
             motion?.PlayPresence(PresenceMotion.AwakenFloor, 1.2f, 1.1f);
+            // Wie beim eigenen Helden: aufstehen verschafft Luft, sonst liegt er gleich wieder.
+            EnemyAgent.ClearRoomAround(transform.position);
             if (member) member.Status = "FOLLOWING";
             if (ring) Destroy(ring.gameObject);
         }

@@ -1028,6 +1028,11 @@ namespace Shatterspire
         private void OnRoomStarted(int index, RoomKind kind)
         {
             currentFloor = index;
+            // Die Uhr der Schatzkammer verschwand nur, wenn die Kammer versiegelte. Wer sie vorher
+            // verliess, nahm sie mit: auf den Bildern des Selbsttests stand sie auf Etage 4 und im
+            // Bosskampf mitten ueber dem Feld, eingefroren bei einem Hort von dreien. Eine neue Kammer meldet
+            // sich beim Aufbau selbst wieder an.
+            if (kind != RoomKind.Treasure && vaultPanel) vaultPanel.gameObject.SetActive(false);
             var counter = PathCatalog.FloorCounter(runConfig.Mode, index);
             roomText.text = $"{counter}  ·  {Loc.Of(kind)}";
             var anomaly = FloorModifierCatalog.For(floorAnomaly);
