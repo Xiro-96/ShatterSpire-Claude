@@ -15,6 +15,29 @@ namespace Shatterspire.Tests
     /// </summary>
     public sealed class LocalizationTests
     {
+        /// <summary>
+        /// Ein Schluessel mit angehaengter Zahl wird ueber den Teil davor uebersetzt. Die Waechter
+        /// melden ihre Phase so, und das HUD uebersetzt einmal.
+        /// </summary>
+        [Test]
+        public void EinSchluesselMitZahlWirdUebersetzt()
+        {
+            var before = Loc.Language;
+            try
+            {
+                Loc.Language = Language.German;
+                Assert.That(Loc.T("IRON WARDEN  ·  PHASE 2"), Is.EqualTo(Loc.T("IRON WARDEN  ·  PHASE") + " 2"));
+                Assert.That(Loc.T("IRON WARDEN  ·  PHASE 2"), Does.StartWith("EISEN"));
+                Assert.That(Loc.TQuiet("RIFT TWIN  ·  PHASE 3"), Does.EndWith(" 3"));
+                // Gegenprobe: ohne Zahl am Ende bleibt ein unbekannter Text, wie er ist.
+                Assert.That(Loc.TQuiet("GANZ UNBEKANNT 2X"), Is.EqualTo("GANZ UNBEKANNT 2X"));
+            }
+            finally
+            {
+                Loc.Language = before;
+            }
+        }
+
         private static void WithGerman(Action body)
         {
             var before = Loc.Language;

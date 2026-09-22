@@ -46,8 +46,26 @@ namespace Shatterspire
         {
             if (language == Language.English || string.IsNullOrEmpty(english)) return english;
             if (German.TryGetValue(english, out var translated)) return translated;
+            if (TryWithNumber(english, out translated)) return translated;
             ReportMissing(english);
             return english;
+        }
+
+        /// <summary>
+        /// Ein Schluessel mit angehaengter Zahl: "IRON WARDEN  ·  PHASE 2" uebersetzt den Teil vor
+        /// der Zahl. Vorher uebersetzten die Waechter ihre Ansage selbst und haengten die Phase an -
+        /// und das HUD uebersetzte den fertigen deutschen Text noch einmal und meldete ihn als fehlend.
+        /// </summary>
+        private static bool TryWithNumber(string text, out string translated)
+        {
+            translated = text;
+            var space = text.LastIndexOf(' ');
+            if (space <= 0 || space == text.Length - 1) return false;
+            for (var i = space + 1; i < text.Length; i++)
+                if (!char.IsDigit(text[i])) return false;
+            if (!German.TryGetValue(text.Substring(0, space), out var prefix)) return false;
+            translated = prefix + text.Substring(space);
+            return true;
         }
 
         /// <summary>
@@ -58,7 +76,8 @@ namespace Shatterspire
         public static string TQuiet(string text)
         {
             if (language == Language.English || string.IsNullOrEmpty(text)) return text;
-            return German.TryGetValue(text, out var translated) ? translated : text;
+            if (German.TryGetValue(text, out var translated)) return translated;
+            return TryWithNumber(text, out translated) ? translated : text;
         }
 
         /// <summary>

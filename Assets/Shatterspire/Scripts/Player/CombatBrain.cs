@@ -203,7 +203,12 @@ namespace Shatterspire
             for (var i = 0; i < enemies.Count; i++)
             {
                 var enemy = enemies[i];
-                if (!enemy || !enemy.IsTelegraphing || enemy.Target != self) continue;
+                // Ein Waechter schlaegt Flaechen - einen Ring aus Geschossen, einen Einschlag neben
+                // dem Ziel. Ihm weicht man aus, wenn man in Reichweite steht, egal wem das Muster gilt.
+                // Vorher nur, wenn man selbst das Ziel war: ORION nahm im Selbsttest 3 bis 8 Treffer
+                // des Wardens, keinen davon kurz nach einem Ausweichen, und fiel 5 von 6 Mal am Boss.
+                if (!enemy || !enemy.IsTelegraphing) continue;
+                if (enemy.Target != self && !EnemyKinds.IsBoss(enemy.Kind)) continue;
                 // Nahkaempfer ab fuenf Einheiten; Schuetzen und Waechter, soweit ihre Angriffe reichen.
                 var reach = enemy.IsRanged ? enemy.AttackRange + 2f
                     : Mathf.Max(5f, EnemyKinds.EngageReach(enemy.Kind, enemy.AttackRange) + 2f);
