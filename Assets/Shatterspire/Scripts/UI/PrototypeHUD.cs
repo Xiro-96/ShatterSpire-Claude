@@ -1485,8 +1485,10 @@ namespace Shatterspire
                 ? Loc.T("HIGHEST RANK REACHED")
                 : $"{toNext:N0} {Loc.T("POINTS TO")} {RankTable.Name((RankTier)((int)tier + 1))}";
             CreateText(rankPanel.transform,
-                $"{Loc.T("RANK POINTS")}  {rankPoints:N0}\n{Loc.T("FROM YOUR")} {RankTable.ClimbCount} {Loc.T("BEST CLIMBS")}\n{next}\n\n{Loc.T("SHIFT ENDS IN")}  {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}",
-                24, TextAnchor.UpperCenter, new Vector2(0, -160), new Vector2(600, 130), new Vector2(0.5f, 1));
+                // Vier Zeilen statt vier und einer Leerzeile: die fuenfte, der Countdown der Schicht,
+                // lag halb unter dem Kassenfeld - gesehen auf dem Ende-Bild des Selbsttests.
+                $"{Loc.T("RANK POINTS")}  {rankPoints:N0}\n{Loc.T("FROM YOUR")} {RankTable.ClimbCount} {Loc.T("BEST CLIMBS")}\n{next}\n{Loc.T("SHIFT ENDS IN")}  {ShiftCalendar.Countdown(ShiftCalendar.Remaining)}",
+                24, TextAnchor.UpperCenter, new Vector2(0, -158), new Vector2(600, 128), new Vector2(0.5f, 1));
 
             // Die Kasse lag mit ihrer Oberkante 16 Einheiten in der Wertung (Wertung endet bei -125).
             var walletPanel = CreateImage(modal.transform, "Wallet", new Color(0.03f, 0.06f, 0.1f, 0.96f),

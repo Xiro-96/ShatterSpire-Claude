@@ -181,6 +181,100 @@ namespace Shatterspire.Tests
             }
         }
 
+        /// <summary>Beruehrt die gerade Strecke das Rechteck, um diesen Rand vergroessert?</summary>
+        private static bool Crosses(Vector3 from, Vector3 to, Area area, float margin)
+        {
+            var length = Flat(to - from);
+            var steps = Mathf.Max(1, Mathf.CeilToInt(length / 0.05f));
+            for (var i = 1; i <= steps; i++)
+                if (area.Contains(Vector3.Lerp(from, to, (float)i / steps), -margin)) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Der Selbsttest fand XIRO sechs Sekunden an der Ecke einer Kistenreihe, das Ziel genau
+        /// dahinter. Wer an einer Deckung stand, fuer den zaehlte sie nicht mehr als Hindernis, und der
+        /// naechste Zwischenpunkt war das Ziel selbst. <see cref="Walk"/> oben sah das nicht: es
+        /// schiebt jeden Schritt aus der Deckung heraus, als wuerde die Figur immer gleiten. Ein
+        /// CharacterController tut das nicht, wenn er senkrecht auf eine Flaeche trifft.
+        /// </summary>
+        [Test]
+        public void WerAnDerDeckungStehtLaeuftNichtHineinWennDasZielDahinterLiegt()
+        {
+            const float body = 0.45f;
+            var cases = 0;
+            foreach (var layout in SampleFloors().Take(80))
+            {
+                var navigation = new FloorNavigation(layout);
+                foreach (var room in layout.Rooms)
+                foreach (var cover in room.Cover)
+                {
+                    var c = cover.Center;
+                    var touch = body + 0.02f;
+                    var sides = new[]
+                    {
+                        (new Vector3(cover.MinX - touch, 0f, c.z), new Vector3(cover.MaxX + 2f, 0f, c.z)),
+                        (new Vector3(cover.MaxX + touch, 0f, c.z), new Vector3(cover.MinX - 2f, 0f, c.z)),
+                        (new Vector3(c.x, 0f, cover.MinZ - touch), new Vector3(c.x, 0f, cover.MaxZ + 2f)),
+                        (new Vector3(c.x, 0f, cover.MaxZ + touch), new Vector3(c.x, 0f, cover.MinZ - 2f)),
+                        // Die Stelle aus dem Selbsttest: schraeg an der Ecke, das Ziel schraeg dahinter.
+                        (new Vector3(cover.MaxX + 0.32f, 0f, cover.MinZ - 0.32f), new Vector3(cover.MinX - 2f, 0f, cover.MaxZ + 2f))
+                    };
+                    foreach (var (from, to) in sides)
+                    {
+                        if (!navigation.IsWalkable(from, body - 0.2f) || !navigation.IsWalkable(to, body)) continue;
+                        if (navigation.RoomAt(from) < 0 || navigation.RoomAt(from) != navigation.RoomAt(to)) continue;
+                        cases++;
+                        var waypoint = navigation.NextWaypoint(from, to);
+                        Assert.That(Crosses(from, waypoint, cover, 0.3f), Is.False,
+                            $"Seed {layout.Seed}, Etage {layout.Floor}: von {from} nach {to} fuehrt der Zwischenpunkt "
+                            + $"{waypoint} durch die Deckung {c} ({cover.Width:0.0}x{cover.Depth:0.0})");
+                    }
+                }
+            }
+            // Gegenprobe: ohne genug Faelle waere der Test gruen, weil er nichts prueft.
+            Assert.That(cases, Is.GreaterThan(200), "zu wenige Stellen an Deckungen geprueft");
+        }
+
+        /// <summary>
+        /// Wie <see cref="NavigationFuehrtVomStartZuJedemCoreUndZumAufzug"/>, aber ohne dass die Figur
+        /// aus der Deckung geschoben wird. Jeder Schritt muss selbst schon begehbar sein - mit einem
+        /// Radius knapp unter dem Koerper, denn wer eine Ecke nur streift, gleitet an ihr vorbei.
+        /// </summary>
+        [Test]
+        public void NavigationKommtAuchOhneGleitenAnsZiel()
+        {
+            const float radius = 0.3f;
+            foreach (var layout in SampleFloors().Take(120))
+            {
+                var navigation = new FloorNavigation(layout);
+                foreach (var target in layout.CoreRooms.Select(r => r.CorePosition).Append(layout.ExitPoint))
+                {
+                    var position = navigation.ClampToWalkable(layout.SpawnPoint, 0.45f);
+                    var arrived = false;
+                    for (var i = 0; i < 3000 && !arrived; i++)
+                    {
+                        if (Flat(position - target) < 0.6f)
+                        {
+                            arrived = true;
+                            break;
+                        }
+                        var waypoint = navigation.NextWaypoint(position, target);
+                        var delta = waypoint - position;
+                        delta.y = 0f;
+                        var length = Flat(delta);
+                        Assert.That(length, Is.GreaterThan(0.0001f), $"Seed {layout.Seed}: Stillstand bei {position}");
+                        var next = position + delta / length * Mathf.Min(0.2f, length);
+                        Assert.That(navigation.IsWalkable(next, radius), Is.True,
+                            $"Seed {layout.Seed}, Etage {layout.Floor}: der Schritt von {position} Richtung {waypoint} "
+                            + $"laeuft in eine Deckung oder Wand");
+                        position = next;
+                    }
+                    Assert.That(arrived, Is.True, $"Seed {layout.Seed}, Etage {layout.Floor}: Ziel {target} nicht erreicht, zuletzt bei {position}");
+                }
+            }
+        }
+
         [Test]
         public void NavigationFindetAuchDenRueckwegVomAufzugZumStart()
         {

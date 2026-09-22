@@ -66,6 +66,9 @@ namespace Shatterspire
         /// <summary>Wie oft er einem angekuendigten Schlag ausgewichen ist.</summary>
         public int Dodges => brain.Dodges;
 
+        /// <summary>Wann er zuletzt ausgewichen ist, in Spielzeit.</summary>
+        public float LastDodgeAt => brain.LastDodgeAt;
+
         /// <summary>Wie oft er sich freidashen musste, weil er an einer Stelle hing.</summary>
         public int UnstickDashes { get; private set; }
 

@@ -467,7 +467,7 @@ namespace Shatterspire
             { "BEST CLIMBS", "BESTEN AUFSTIEGEN" },
             { "HIGHEST RANK REACHED", "HÖCHSTER RANG ERREICHT" },
             { "POINTS TO", "PUNKTE BIS" },
-            { "SHIFT ENDS IN", "SHIFT ENDET IN" },
+            { "SHIFT ENDS IN", "SCHICHT ENDET IN" },
             { "TOTAL", "GESAMT" },
             { "BEST", "BESTE" },
             { "FUSION", "FUSION" },

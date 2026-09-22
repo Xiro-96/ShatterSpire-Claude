@@ -26,13 +26,28 @@ namespace Shatterspire
     /// </summary>
     public sealed class PlaytestRecorder : MonoBehaviour
     {
+        /// <summary>Schaden von einer Quelle auf einer Etage.</summary>
+        [Serializable]
+        public sealed class HitRecord
+        {
+            public string source;
+            public int hits;
+            public float amount;
+            /// <summary>Treffer, die bis 0,6 s nach einem Ausweichen trotzdem ankamen.</summary>
+            public int afterDodge;
+        }
+
         [Serializable]
         public sealed class FloorRecord
         {
             public int floor;
             public string kind;
+            public string anomaly;
             public float seconds;
+            /// <summary>Leben beim Betreten, als Anteil. Wer mit einem Viertel ankommt, faellt anders.</summary>
+            public float healthAtStart = 1f;
             public float damageTaken;
+            public List<HitRecord> hits = new();
             public float lowestHealth = 1f;
             public int kills;
             public int heavy;
@@ -306,10 +321,16 @@ namespace Shatterspire
                 Finish($"Ziel erreicht: {summary.floorsWanted} Etagen");
                 return;
             }
-            floor = new FloorRecord { floor = index, kind = kind.ToString() };
+            floor = new FloorRecord
+            {
+                floor = index, kind = kind.ToString(), anomaly = pendingAnomaly,
+                healthAtStart = playerHealth ? playerHealth.Normalized : 1f
+            };
+            pendingAnomaly = "None";
             floorStarted = Time.time;
-            Note("ETAGE", $"{index}, {kind}");
-            StartCoroutine(Shot($"etage{index:00}_{kind}"));
+            Note("ETAGE", $"{index}, {kind}, Leben {floor.healthAtStart * 100f:0} %");
+            // Nach der Blende: das Bild im Moment des Wechsels war bei jedem Lauf schwarz.
+            StartCoroutine(Shot($"etage{index:00}_{kind}", 1.6f));
         }
 
         private void CloseFloor()
@@ -344,7 +365,34 @@ namespace Shatterspire
 
         private void OnPlayerDamaged(DamageInfo damage)
         {
-            if (floor != null) floor.damageTaken += damage.Amount;
+            if (floor == null) return;
+            floor.damageTaken += damage.Amount;
+            var source = PlaytestMath.SourceName(damage.Source);
+            var entry = floor.hits.Find(h => h.source == source);
+            if (entry == null)
+            {
+                entry = new HitRecord { source = source };
+                floor.hits.Add(entry);
+            }
+            entry.hits++;
+            entry.amount += damage.Amount;
+            if (pilot && Time.time - pilot.LastDodgeAt < 0.6f) entry.afterDodge++;
+        }
+
+        private string pendingAnomaly = "None";
+
+        private void OnLogAnomaly(string condition)
+        {
+            // "SHATTERSPIRE Anomalie: Etage 2, Elite, Swarm." - kommt vor oder mit dem Etagenstart.
+            const string marker = "SHATTERSPIRE Anomalie: ";
+            if (!condition.StartsWith(marker)) return;
+            var parts = condition.Substring(marker.Length).TrimEnd('.').Split(',');
+            if (parts.Length < 3) return;
+            var number = parts[0].Replace("Etage", string.Empty).Trim();
+            if (floor != null && number == floor.floor.ToString(CultureInfo.InvariantCulture))
+                floor.anomaly = parts[2].Trim();
+            else
+                pendingAnomaly = parts[2].Trim();
         }
 
         private void OnHeavyFired(HeavyTiming timing)
@@ -370,6 +418,7 @@ namespace Shatterspire
         {
             if (condition.StartsWith("SHATTERSPIRE") && log.Length < 400000)
                 log.Append(Real.ToString("0.0", CultureInfo.InvariantCulture)).Append("  ").AppendLine(condition);
+            OnLogAnomaly(condition);
             if (type is not (LogType.Error or LogType.Exception or LogType.Assert)) return;
             if (type == LogType.Exception) summary.exceptions++;
             else summary.errors++;
@@ -398,8 +447,9 @@ namespace Shatterspire
             StartCoroutine(Shot($"{shotName}_{Mathf.RoundToInt(Real):0000}"));
         }
 
-        private IEnumerator Shot(string name)
+        private IEnumerator Shot(string name, float delay = 0f)
         {
+            if (delay > 0f) yield return new WaitForSecondsRealtime(delay);
             yield return new WaitForEndOfFrame();
             Texture2D image = null;
             try
@@ -471,6 +521,16 @@ namespace Shatterspire
         /// </summary>
         public static float FastStepLimit(float runSpeed) => runSpeed * 1.2f;
 
+        /// <summary>Wer einen Treffer ausgeteilt hat, als kurzer Name fuer den Bericht.</summary>
+        public static string SourceName(GameObject source)
+        {
+            if (!source) return "ohne Quelle";
+            var enemy = source.GetComponent<EnemyAgent>();
+            if (enemy) return enemy.Kind.ToString();
+            var member = source.GetComponent<PartyMember>();
+            return member ? "Gruppe" : source.name;
+        }
+
         /// <summary>Wert bei diesem Anteil einer aufsteigend sortierten Liste.</summary>
         public static float Percentile(IReadOnlyList<float> sorted, float fraction)
         {
@@ -493,12 +553,25 @@ namespace Shatterspire
             text.AppendLine(string.Format(de, "Zeitlupe      {0:0.0} % der Spielzeit, {1:0} Stopps je Minute",
                 s.slowShare * 100f, s.stopsPerMinute));
             text.AppendLine();
-            text.AppendLine("Etage  Art        Dauer  Schaden  tiefstes Leben  Kills  Heavy (perfekt/gut)  Faehigk.  Ult.  Begleiter gefallen  selbst gefallen");
+            text.AppendLine("Etage  Art        Dauer  Leben zu Beginn  Schaden  tiefstes Leben  Kills  Heavy (perfekt/gut)  Faehigk.  Ult.  Begleiter gefallen  selbst gefallen");
             foreach (var f in s.floors)
                 text.AppendLine(string.Format(de,
-                    "{0,5}  {1,-9} {2,5:0}s  {3,7:0}  {4,13:0} %  {5,5}  {6,5} ({7}/{8}){9,12}  {10,8}  {11,4}  {12,18}  {13,15}",
-                    f.floor, f.kind, f.seconds, f.damageTaken, f.lowestHealth * 100f, f.kills, f.heavy, f.perfect, f.good,
-                    string.Empty, f.skills, f.ultimates, f.companionFalls, f.playerDowns));
+                    "{0,5}  {1,-9} {2,5:0}s  {3,13:0} %  {4,7:0}  {5,13:0} %  {6,5}  {7,5} ({8}/{9}){10,12}  {11,8}  {12,4}  {13,18}  {14,15}",
+                    f.floor, f.kind, f.seconds, f.healthAtStart * 100f, f.damageTaken, f.lowestHealth * 100f, f.kills,
+                    f.heavy, f.perfect, f.good, string.Empty, f.skills, f.ultimates, f.companionFalls, f.playerDowns));
+            text.AppendLine();
+            text.AppendLine("Schaden nach Quelle (Treffer, Summe, davon kurz nach dem Ausweichen)");
+            foreach (var f in s.floors)
+            {
+                if (f.hits.Count == 0) continue;
+                var line = new StringBuilder();
+                line.Append(string.Format(de, "{0,5}  {1,-8}", f.floor, string.IsNullOrEmpty(f.anomaly) ? "None" : f.anomaly));
+                f.hits.Sort((a, b) => b.amount.CompareTo(a.amount));
+                foreach (var h in f.hits)
+                    line.Append(string.Format(de, "  {0} {1}x/{2:0}{3}", h.source, h.hits, h.amount,
+                        h.afterDodge > 0 ? $" ({h.afterDodge} n.A.)" : string.Empty));
+                text.AppendLine(line.ToString());
+            }
             text.AppendLine();
             text.AppendLine("Auffaelligkeiten");
             text.AppendLine(string.Format(de, "  Schritt schneller als Laufen   {0}x (hoechstens {1:0.0} je s, Lauftempo {2:0.0}), davon {3} beim Angreifen",

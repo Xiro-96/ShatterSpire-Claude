@@ -188,6 +188,7 @@ namespace Shatterspire
                 intent.DashMove = new Vector2(away.x, away.z);
                 nextDash = Time.time + 1.2f;
                 Dodges++;
+                LastDodgeAt = Time.time;
                 return true;
             }
             return false;
@@ -195,6 +196,9 @@ namespace Shatterspire
 
         /// <summary>Wie oft dieser Kopf ausgewichen ist. Der Selbsttest schreibt es mit.</summary>
         public int Dodges { get; private set; }
+
+        /// <summary>Wann zuletzt ausgewichen wurde. Ein Treffer kurz danach heisst: der Dash hat nicht gereicht.</summary>
+        public float LastDodgeAt { get; private set; } = -99f;
 
         /// <summary>
         /// Ausweichen, wenn es eng wird: wenig Leben und ein Gegner auf der Haut. Der Dash geht vom
