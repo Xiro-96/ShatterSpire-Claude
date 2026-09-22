@@ -17,7 +17,7 @@ MonoBehaviour:
   role: BLAST ENGINEER
   kitSummary: "THROWN CHARGES  \xB7  STICKY MINE  \xB7  BLAST CORD"
   accent: {r: 0.72, g: 0.93, b: 0.12, a: 1}
-  baseHealth: 98
+  baseHealth: 115
   baseSpeed: 6
   baseDamage: 10
   skillCooldown: 7.5

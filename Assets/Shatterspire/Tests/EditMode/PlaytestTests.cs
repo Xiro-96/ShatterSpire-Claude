@@ -423,7 +423,7 @@ namespace Shatterspire.Tests
                 var weapon = hero.AddComponent<WeaponSystem>();
                 foreach (var component in new MonoBehaviour[] { health, build, weapon })
                     component.GetType().GetMethod("Awake", Hidden)?.Invoke(component, null);
-                health.Configure(TeamId.Player, 92f);
+                health.Configure(TeamId.Player, HeroCatalog.BaseHealth(HeroClassId.Arcanist));
                 weapon.SetLocal(false);
                 weapon.ConfigureClass(HeroClassId.Arcanist);
                 // Kein Krit, damit beide Rechnungen dieselbe Zahl wuerfeln.

@@ -17,7 +17,7 @@ MonoBehaviour:
   role: RIFT ARCANIST
   kitSummary: "ARC BOLTS  \xB7  GRAVITY BURST  \xB7  BLACK STAR"
   accent: {r: 0.66, g: 0.28, b: 1, a: 1}
-  baseHealth: 92
+  baseHealth: 110
   baseSpeed: 5.8
   baseDamage: 12.5
   skillCooldown: 8

@@ -101,11 +101,15 @@ namespace Shatterspire
 
         public static float BaseHealth(HeroClassId hero) => hero switch
         {
-            HeroClassId.Bomber => 98f,
+            // KORR 115 statt 98, ORION 110 statt 92: die beiden mit dem wenigsten Leben starben im
+            // Selbsttest fast immer am Boss, mit ueber zwei Stuerzen dort - zwei bis drei Treffer des
+            // Wardens, und sie lagen. REX (105) haelt Abstand aus elf Einheiten; sie muessen naeher
+            // heran. Entscheidung des Users vom 22.09.
+            HeroClassId.Bomber => 115f,
             // Mehr als Brax: sie haelt nicht nur sich, sondern stellt sich vor die Gruppe.
             HeroClassId.Paladin => 160f,
             HeroClassId.Guardian => 145f,
-            HeroClassId.Arcanist => 92f,
+            HeroClassId.Arcanist => 110f,
             _ => 105f
         };
 
