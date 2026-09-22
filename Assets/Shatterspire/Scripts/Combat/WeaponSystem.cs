@@ -539,7 +539,7 @@ namespace Shatterspire
             var accent = HeroCatalog.Accent(heroClass);
             var reach = 6.5f + build.Pierces * 0.8f;
             var baseFuse = (finisher ? 0.75f : 0.9f) * (build.Has(PerkId.BomberShortFuse) ? 0.5f : 1f);
-            var landing = BombTarget(direction, reach, 0.34f + baseFuse);
+            var landing = AimedBlastPoint(direction, reach, 0.34f + baseFuse);
             var charges = finisher ? 2 : 1;
             if (build.ProjectileCount > 1) charges++;
             for (var i = 0; i < charges; i++)
@@ -582,11 +582,12 @@ namespace Shatterspire
         }
 
         /// <summary>
-        /// Wohin eine Ladung von KORR fliegt: dorthin, wo das Ziel bei der Zuendung sein wird (siehe
-        /// <see cref="BombThrow.Landing"/>). Nur fuer Ladungen mit Zuendschnur - Faehigkeiten, die
-        /// eine Stelle oder eine Linie von Stellen treffen, bleiben bei <see cref="ThrowTarget"/>.
+        /// Wo ein Flaechenschlag auf ein Ziel einschlaegt: dort, wo das Ziel bei der Zuendung sein
+        /// wird (siehe <see cref="BombThrow.Landing"/>) - KORRs Ladungen mit Zuendschnur, ORIONs Riss
+        /// sofort. Faehigkeiten, die eine Stelle oder eine Linie von Stellen treffen, bleiben bei
+        /// <see cref="ThrowTarget"/>.
         /// </summary>
-        private Vector3 BombTarget(Vector3 direction, float maximum, float secondsToBlast)
+        private Vector3 AimedBlastPoint(Vector3 direction, float maximum, float secondsToBlast)
         {
             Vector3? target = null;
             var velocity = Vector3.zero;
@@ -612,7 +613,7 @@ namespace Shatterspire
             var type = ResolveDamageType(DamageType.Fire);
             var accent = HeroCatalog.Accent(heroClass);
             var direction = AcquireAttackDirection();
-            var landing = BombTarget(direction, 7.5f, 0.3f + (perfect ? 0.05f : 0.85f));
+            var landing = AimedBlastPoint(direction, 7.5f, 0.3f + (perfect ? 0.05f : 0.85f));
             var radius = Mathf.Lerp(2.6f, 4.4f, normalized) * (perfect ? 1.25f : 1f);
             var damage = BaseDamage * Mathf.Lerp(2.2f, 3.6f, normalized) * build.HeavyDamageMultiplier
                          * build.DamageMultiplier * (build.Has(PerkId.BomberStickyCluster) ? 1.4f : 1f);
@@ -1131,7 +1132,10 @@ namespace Shatterspire
             }
             else if (heroClass == HeroClassId.Arcanist)
             {
-                var target = transform.position + direction * (perfect ? 6.5f : 5f);
+                // Auf den Gegner, nicht in feste Entfernung. Vorher schlug der Riss immer 5 (perfekt
+                // 6,5) Einheiten voraus ein, egal wo das Ziel stand - der Selbsttest mass ORION am
+                // Boss bei der Haelfte des Schadens von REX, bei gleich vielen schweren Angriffen.
+                var target = AimedBlastPoint(direction, perfect ? 6.5f : 5f, 0f);
                 var damage = BaseDamage * multiplier * build.DamageMultiplier;
                 var type = ResolveDamageType(DamageType.Void);
                 Strike(target, perfect ? 4.2f : 3f, damage, type);

@@ -166,6 +166,14 @@ def main():
              "Lauf         Etage  fps Ø/5%  Zeitlupe  Schritt>Lauf  Heavy!  Fest/Dash Fehl/Ausn  Ende",
              "-" * 102]
     lines += [row(hero, folder, label) for hero, seed, folder, label in jobs]
+    # Welche Etagen die Seeds tatsaechlich hatten. Am 22.09. trugen drei Seeds hintereinander
+    # Overload auf Etage 4, und "Etage 4 ist die Wand" war zum Teil nur das.
+    lines += ["", "Etagen je Seed (Art/Anomalie, aus dem ersten Lauf)"]
+    for seed in seeds:
+        first = next((load(folder) for _, sd, folder, _ in jobs if sd == seed and load(folder)), None)
+        if first:
+            lines.append(f"  {seed:>8}: " + "  ".join(
+                f"E{f['floor']} {f['kind']}/{f.get('anomaly') or '-'}" for f in first.get("floors", [])))
     if not single:
         lines += ["", "Je Held"]
         for hero in heroes:
